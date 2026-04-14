@@ -44,9 +44,9 @@ class WindowMatrix:
         # Metadata: tracks how each column was created and with what fn
         self._meta: dict[str, dict] = {}
 
-    def save_window(self, filename):
+    def save_window(self, csvfilename):
         os.makedirs("MATRICES", exist_ok=True)
-        self.df.to_csv(f"MATRICES/{filename}")
+        self.df.to_csv(f"MATRICES/{csvfilename}")
 
     # ------------------------------------------------------------------ #
     #  Raw signal access                                                   #
@@ -132,11 +132,13 @@ class WindowMatrix:
         return self
 
     def add_vector_columns(self, prefix: str, fn, n: int = None,
+                           names: list = None,
                            overwrite: bool = False) -> "WindowMatrix":
         """
         Expand a vector-valued feature into one scalar column per element.
 
-        Each column is named ``{prefix}_0``, ``{prefix}_1``, …, ``{prefix}_{n-1}``.
+        By default columns are named ``{prefix}_0``, ``{prefix}_1``, …
+        Pass ``names`` to use explicit column names instead.
 
         Parameters
         ----------
@@ -147,6 +149,10 @@ class WindowMatrix:
             and returns a 1-D array of fixed length.
         n : int, optional
             Expected output length.  Inferred from the first window if omitted.
+        names : list of str, optional
+            Explicit column names, one per output element.  Length must match
+            the output of ``fn``.  When provided, ``prefix`` is still stored in
+            metadata but is not used to build column names.
         overwrite : bool
             If False (default), skip silently if the first column already exists.
 
@@ -154,7 +160,7 @@ class WindowMatrix:
         -------
         self  (for chaining)
         """
-        first_col = f"{prefix}_0"
+        first_col = names[0] if names else f"{prefix}_0"
         if first_col in self._df.columns and not overwrite:
             return self
 
@@ -169,8 +175,13 @@ class WindowMatrix:
             )
 
         n = vectors.shape[1]
+        if names is not None and len(names) != n:
+            raise ValueError(
+                f"len(names)={len(names)} does not match fn output length {n}."
+            )
+
         for i in range(n):
-            col = f"{prefix}_{i}"
+            col = names[i] if names else f"{prefix}_{i}"
             self._df[col] = vectors[:, i]
             self._meta[col] = {"type": "vector", "prefix": prefix, "fn": fn}
 
