@@ -26,11 +26,15 @@ def _load_labeled_windows(interesting_dir, notinteresting_dir):
     Load all .npy windows from two directories and return (X, y).
 
     Each .npy file is one window: shape (n_channels, n_timepoints).
+    Only channel 0 (raw signal) is used.  Channel 1 (absolute time) is dropped
+    because its values are recording-specific and do not generalise — applying
+    a model trained on one recording's time range to another gives degenerate
+    constant predictions (all 0.5).
     Label 1 = interesting, 0 = not-interesting.
 
     Returns
     -------
-    X : np.ndarray, shape (n_instances, n_channels, n_timepoints), float32
+    X : np.ndarray, shape (n_instances, 1, n_timepoints), float32
     y : np.ndarray, shape (n_instances,), int
     """
     int_files  = sorted(Path(interesting_dir).glob("*.npy"))
@@ -41,8 +45,9 @@ def _load_labeled_windows(interesting_dir, notinteresting_dir):
     if not nint_files:
         raise FileNotFoundError(f"No .npy files found in {notinteresting_dir}")
 
-    X_int  = np.stack([np.load(f) for f in int_files]).astype(np.float32)
-    X_nint = np.stack([np.load(f) for f in nint_files]).astype(np.float32)
+    # [0:1] keeps the channel axis: (2, 600) → (1, 600)
+    X_int  = np.stack([np.load(f)[0:1] for f in int_files]).astype(np.float32)
+    X_nint = np.stack([np.load(f)[0:1] for f in nint_files]).astype(np.float32)
 
     X = np.concatenate([X_int, X_nint], axis=0)
     y = np.concatenate([
@@ -296,7 +301,7 @@ def train_catch22_classifier_from_dirs(
     txt_path = Path(out_dir) / f"{model_name}_output.txt"
     with open(pkl_path, "wb") as f:
         pickle.dump(results, f)
-    with open(txt_path, "w") as f:
+    with open(txt_path, "w", encoding="utf-8") as f:
         f.write(summary)
     print(f"Results saved → {pkl_path.name}  +  {txt_path.name}")
 
@@ -331,6 +336,11 @@ class ThresholdedPipeline:
     def __repr__(self):
         return (f"ThresholdedPipeline(threshold={self.threshold}, "
                 f"pipeline={self.pipeline})")
+
+
+# Ensure joblib can deserialise this class regardless of whether
+# classification.py was run as __main__ or imported as a module.
+ThresholdedPipeline.__module__ = "aeon_analysis.classification"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -457,7 +467,7 @@ def threshold_sweep_from_results(
         for p, r, t in zip(prec_c[:-1], rec_c[:-1], thr_c):
             writer.writerow([round(float(p), 4), round(float(r), 4), round(float(t), 4)])
 
-    with open(txt_path, "w") as fh:
+    with open(txt_path, "w", encoding="utf-8") as fh:
         fh.write(summary)
 
     print(f"Sweep saved → {discrete_path.name}  +  {prcurve_path.name}  +  {txt_path.name}")
@@ -488,4 +498,4 @@ if __name__ == "__main__":
     threshold_sweep_from_results()
 
     # To retrain from scratch first, uncomment:
-    # train_catch22_classifier_from_dirs()
+    #train_catch22_classifier_from_dirs()

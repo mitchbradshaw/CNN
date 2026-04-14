@@ -1,5 +1,5 @@
-from winmatrix_funcs import *
-
+from create_matrix import *
+from plot_matrix import *
 from aeon_analysis.transformations import add_catch22_to_matrix
 
 FILENAME = "0.01_percent_M2_concat_fs1.mat"
@@ -11,7 +11,4 @@ CSVFILE = "0.01_percent_M2_concat_fs1_consecutive.csv"
 
 wm = get_wm(FS,WINSIZE,FILENAME,matname="VECTOR",csvfilename=CSVFILE)
 
-
-
-add_catch22_to_matrix(wm)
-wm.save_window(CSVFILE)
+plot_singlevalue_columns(wm,colnames=['rf_p_interesting','rf_p_notinteresting'],overlay=True)

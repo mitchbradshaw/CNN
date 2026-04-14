@@ -1,5 +1,6 @@
 from matrix_calc import *
 from analysis.freq_analysis import stft_log_spectrum
+from aeon_analysis.transformations import add_catch22_to_matrix
 from main import *
 import numpy as np
 import matplotlib.pyplot as py
@@ -43,80 +44,78 @@ def update_fusion_prediction_v1_columns(wm,modelpath,csvfilename,batchsize=64):
     wm = add_fusion_prediction_v1_scores(wm,modelpath,batch_size=batchsize)
     wm.save_window(csvfilename)
 
-def plot_cnn_columns(wm,filename,TIMESCALE,FS,matname='x'):
-    x, t = load_raw_data(filename,FS,matname)
+def update_randomforest_columns(wm, modelpath, csvfilename, overwrite=False):
+    """
+    Apply a saved Catch22 + RandomForest pipeline to every window in wm and
+    store the raw class probabilities as two new columns.
 
-    window_samples = int(TIMESCALE * 60 * FS)   # 600 samples
-    intvalues = wm.get_column("cnn_p_interesting")
+    Adds
+    ----
+    rf_p_interesting    : P(class == interesting)
+    rf_p_notinteresting : P(class == not-interesting)
 
-    # x-axis for the score: mid-point of each window in seconds
-    score_starts  = wm.df.index.to_numpy()                        # sample indices
-    score_t_mid   = (score_starts + window_samples / 2) / FS   # seconds
+    predict_proba is used directly, so threshold optimisation does not apply —
+    both a plain pipeline and a ThresholdedPipeline work here.
 
-    t_hours       = t / 3600.0
-    score_t_hours = score_t_mid / 3600.0
+    Parameters
+    ----------
+    wm          : WindowMatrix
+    modelpath   : str or Path   path to a .joblib model file
+    csvfilename : str           filename passed to wm.save_window
+    overwrite   : bool          if False (default), skip if columns already exist
 
-    fig, (ax_sig, ax_score) = py.subplots(
-        2, 1, figsize=(16, 6),
-        sharex=True,
-        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.08},
-    )
+    Returns
+    -------
+    wm  (for chaining)
 
-    # ── Top: raw signal ───────────────────────────────────────────────
-    ax_sig.plot(t_hours, x * 1000, color="steelblue", linewidth=0.4, alpha=0.8)
-    ax_sig.set_ylabel("Signal amplitude")
-    ax_sig.set_title(f"{filename} — raw signal and CNN interesting score")
+    Note
+    ----
+    Only the raw signal is used (1 channel).  The .npy training files had a
+    second channel of absolute time which is recording-specific and causes
+    constant 0.5 predictions when applied to a different recording.
+    """
+    import joblib
+    import sys
 
-    # ── Bottom: CNN score ─────────────────────────────────────────────
-    ax_score.step(score_t_hours, intvalues.to_numpy(),
-                where="mid", color="tomato", linewidth=1.0)
-    ax_score.fill_between(score_t_hours, intvalues.to_numpy(),
-                        step="mid", alpha=0.25, color="tomato")
-    ax_score.set_ylim(0, 1)
-    ax_score.set_ylabel("P(interesting)")
-    ax_score.set_xlabel("Time (hours)")
-    ax_score.axhline(0.5, color="gray", linewidth=0.7, linestyle="--")
+    # The model was saved while classification.py ran as __main__, so
+    # ThresholdedPipeline is stored as '__main__.ThresholdedPipeline'.
+    # Register it here so joblib can deserialise existing model files.
+    from aeon_analysis.classification import ThresholdedPipeline
+    sys.modules["__main__"].ThresholdedPipeline = ThresholdedPipeline
 
-    py.tight_layout()
-    py.show()
-    
-def plot_fusion_prediction_v1_error(wm, filename, TIMESCALE, FS, matname="VECTOR"):
-    x, t = load_raw_data(filename, FS, matname)
+    if not overwrite and "rf_p_interesting" in wm.columns:
+        return wm
 
-    window_samples = int(TIMESCALE * 60 * FS)
-    error_values = wm.get_column("fusion_pred_v1_error")
+    model = joblib.load(modelpath)
 
-    # x-axis: mid-point of each window in hours
-    score_starts  = wm.df.index.to_numpy()
-    score_t_mid   = (score_starts + window_samples / 2) / FS
-    t_hours       = t / 3600.0
-    score_t_hours = score_t_mid / 3600.0
+    # Build (n_valid, 1, win_len) — signal channel only.
+    # Skip any trailing windows shorter than win_len (signal runs out at the end).
+    win_len       = wm._window_samples
+    windows       = []
+    valid_indices = []
+    for idx in wm.df.index:
+        sig = wm.get_window_signal(idx)
+        if len(sig) < win_len:
+            continue                               # incomplete tail window — skip
+        windows.append(sig.reshape(1, -1))
+        valid_indices.append(idx)
+    X = np.stack(windows).astype(np.float32)       # (n_valid, 1, win_len)
 
-    error_arr = error_values.to_numpy().astype(float)
+    # predict_proba → (n_valid, 2): col 0 = P(not-interesting), col 1 = P(interesting)
+    probas = model.predict_proba(X)
 
-    fig, (ax_sig, ax_err) = py.subplots(
-        2, 1, figsize=(16, 6),
-        sharex=True,
-        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.08},
-    )
+    # Write back via index-keyed dicts — skipped rows become NaN automatically
+    p_int  = dict(zip(valid_indices, probas[:, 1]))
+    p_nint = dict(zip(valid_indices, probas[:, 0]))
+    wm.add_external_column("rf_p_interesting",    p_int,  overwrite=overwrite)
+    wm.add_external_column("rf_p_notinteresting", p_nint, overwrite=overwrite)
 
-    # ── Top: raw signal ───────────────────────────────────────────────
-    ax_sig.plot(t_hours, x * 1000, color="steelblue", linewidth=0.4, alpha=0.8)
-    ax_sig.set_ylabel("Signal amplitude")
-    ax_sig.set_title(f"{filename} — raw signal and fusion prediction v1 error")
-
-    # ── Bottom: prediction error ──────────────────────────────────────
-    ax_err.step(score_t_hours, error_arr, where="mid", color="darkorange", linewidth=1.0)
-    ax_err.fill_between(score_t_hours, error_arr, step="mid", alpha=0.25, color="darkorange")
-    ax_err.set_ylabel("Prediction error")
-    ax_err.set_xlabel("Time (hours)")
-    ax_err.axhline(0, color="gray", linewidth=0.7, linestyle="--")
-
-    py.tight_layout()
-    py.show()
+    wm.save_window(csvfilename)
+    print(f"RF probability columns added → {csvfilename}")
+    return wm
 
 
-# language encodings 
+# language encodings
 # sax - gaussian breakpoints, cSax - mean shift clustering, pSax - KDE and lloyd-max
 def encode_psax_windowed(wm, csvfilename, dim_ratio=0.1, alphabet_size=8):
     # Function to add a column of computed psax encoding per window
@@ -167,11 +166,7 @@ def encode_all_entropy_columns(wm, csvfilename):
 def encode_stft_columns(wm, csvfilename):
     return None
 
-def plot_wm_signal(wm):
-    x = wm.get_entire_signal()
-    fs = wm._fs
-    t = np.linspace(0,len(x)*fs,len(x))
-    plt.plot(t/3600,x*1000)
-    plt.xlabel("Time (hr)")
-    plt.ylabel("Signal (mV)")
-    plt.show()
+def encode_catch22(wm, csvfilename):
+    add_catch22_to_matrix(wm)
+    wm.save_window(csvfilename)
+    return wm
