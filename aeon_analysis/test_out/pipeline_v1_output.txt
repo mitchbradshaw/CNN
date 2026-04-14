@@ -1,0 +1,16 @@
+Catch22 + Balanced RandomForest pipeline
+  n_train       : 432
+  n_test        : 109
+  accuracy      : 0.9174
+  bal. accuracy : 0.6313
+  AUC-ROC       : 0.9416
+  AUC-PR        : 0.8016
+
+              precision    recall  f1-score   support
+
+           0       0.92      0.99      0.96        98
+           1       0.75      0.27      0.40        11
+
+    accuracy                           0.92       109
+   macro avg       0.84      0.63      0.68       109
+weighted avg       0.91      0.92      0.90       109

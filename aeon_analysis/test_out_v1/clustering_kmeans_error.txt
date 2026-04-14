@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 667, in run_example
+    result  = fn(ds)
+              ^^^^^^
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 479, in clustering_kmeans
+    kmeans = TimeSeriesKMeans(n_clusters=N_CLUSTERS, metric="dtw", random_state=42)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: TimeSeriesKMeans.__init__() got an unexpected keyword argument 'metric'

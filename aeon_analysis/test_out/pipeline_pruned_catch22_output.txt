@@ -1,0 +1,18 @@
+Pruned Catch22 + Balanced RandomForest
+  features kept   : 19/22  [0, 1, 2, 3, 4, 5, 7, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+  features dropped: 3/22  [6, 9, 10]
+  n_train         : 432
+  n_test          : 109
+  accuracy        : 0.9358
+  bal. accuracy   : 0.6818
+  AUC-ROC         : 0.9903
+  AUC-PR          : 0.9046
+
+              precision    recall  f1-score   support
+
+           0       0.93      1.00      0.97        98
+           1       1.00      0.36      0.53        11
+
+    accuracy                           0.94       109
+   macro avg       0.97      0.68      0.75       109
+weighted avg       0.94      0.94      0.92       109

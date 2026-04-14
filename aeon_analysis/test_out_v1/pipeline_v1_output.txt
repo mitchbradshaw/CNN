@@ -1,0 +1,13 @@
+Catch22 + RandomForest pipeline
+  n_train  : 216
+  n_test   : 55
+  accuracy : 0.9455
+
+              precision    recall  f1-score   support
+
+           0       0.94      1.00      0.97        50
+           1       1.00      0.40      0.57         5
+
+    accuracy                           0.95        55
+   macro avg       0.97      0.70      0.77        55
+weighted avg       0.95      0.95      0.93        55

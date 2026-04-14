@@ -1,0 +1,13 @@
+KNN classifier (DTW, k=1)
+  n_train  : 160
+  n_test   : 40
+  accuracy : 0.7750
+
+              precision    recall  f1-score   support
+
+           0       0.89      0.86      0.87        36
+           1       0.00      0.00      0.00         4
+
+    accuracy                           0.78        40
+   macro avg       0.44      0.43      0.44        40
+weighted avg       0.80      0.78      0.79        40

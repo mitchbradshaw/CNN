@@ -1,0 +1,6 @@
+KNN regressor (DTW, k=3)
+  target       : window mean amplitude
+  n_train      : 432
+  n_test       : 109
+  MSE          : 0.000023
+  R²           : 0.9977

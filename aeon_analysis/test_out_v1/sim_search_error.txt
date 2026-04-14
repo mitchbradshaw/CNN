@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 667, in run_example
+    result  = fn(ds)
+              ^^^^^^
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 521, in sim_search
+    f"  best distance : {float(distances.flat[0]):.6f}\n"
+                               ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'flat'

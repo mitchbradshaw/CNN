@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 887, in run_example
+    result  = fn(ds)
+              ^^^^^^
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 382, in detect_anomaly
+    raise ImportError(
+ImportError: Cannot locate STOMP in any known aeon.anomaly_detection submodule. Check your aeon version with: python -c "import aeon; print(aeon.__version__)"

@@ -1,0 +1,13 @@
+Total: 11  Succeeded: 8  Failed: 3
+
+FAIL  detect_anomaly
+OK    segmentation
+OK    classifier_KN
+OK    regression_forecast
+FAIL  clustering_kmeans
+FAIL  sim_search
+OK    transformations
+OK    pipeline_v1
+OK    grid_search_KN
+OK    pipeline_pruned_catch22
+OK    pipeline_pr_threshold_sweep

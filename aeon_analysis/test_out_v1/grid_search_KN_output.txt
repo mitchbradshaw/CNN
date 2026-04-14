@@ -1,0 +1,5 @@
+GridSearchCV – KNN
+  cv_folds     : 4
+  best_params  : {'distance': 'dtw', 'n_neighbors': 1}
+  best_cv_score: 0.8625
+  test_accuracy: 0.7750

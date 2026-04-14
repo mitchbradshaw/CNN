@@ -1,0 +1,4 @@
+ClaSP segmentation
+  signal used   : 10000 / 162712 pts  (MAX_SEG_PTS=10000)
+  change points : [2767]
+  n_segments    : 2

@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 887, in run_example
+    result  = fn(ds)
+              ^^^^^^
+  File "/home/Student/s4699158/CNN/aeon_analysis/aeon_test_pipeline.py", line 556, in sim_search
+    f"  best distance : {float(_first(distances)):.6f}\n"
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: only length-1 arrays can be converted to Python scalars
