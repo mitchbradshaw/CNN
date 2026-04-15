@@ -6,7 +6,7 @@ import os
 import re
 import json
 import random
-#import tensorflow as tf
+import tensorflow as tf
 import matplotlib.pyplot as py
 from manage_data.load_data import *
 from manage_data.peruse_data import *

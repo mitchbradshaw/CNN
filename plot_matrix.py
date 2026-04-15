@@ -1,6 +1,6 @@
 import matplotlib.pyplot as py
 from matplotlib.colors import LogNorm
-from main import *
+from manage_data.load_data import load_raw_data
 import numpy as np
 import pandas as pd
 from analysis.freq_analysis import stft_log_spectrum

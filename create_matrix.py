@@ -1,13 +1,8 @@
 from matrix_calc import *
-from analysis.freq_analysis import stft_log_spectrum
 from aeon_analysis.transformations import add_catch22_to_matrix
-from main import *
-import numpy as np
-import matplotlib.pyplot as py
-from matplotlib.colors import LogNorm
-from cnn.apply_cnn import *
-from sax.sax_encoding import *
+from manage_data.load_data import load_raw_data
 from analysis.entropy_analysis import _shannon_entropy, _svd_entropy, _sample_entropy, _spectral_entropy, _permutation_entropy, _approximate_entropy
+import numpy as np
 
 # ------------------------------------------------------------------ #
 #  Making window matrix object
@@ -37,10 +32,12 @@ def get_wm(FS,TIMESCALE,filename,stepfrac=1,matname="x", csvfilename=""):
     return load_matrix(f"MATRICES/{csvfilename}",x,TIMESCALE,FS)
 
 def update_cnn_columns(wm,modelpath,csvfilename,imgtype,batchsize=64):
+    from cnn.apply_cnn import add_cnn_scores
     wm = add_cnn_scores(wm,modelpath,image_type=imgtype,batch_size=batchsize)
     wm.save_window(csvfilename)
 
 def update_fusion_prediction_v1_columns(wm,modelpath,csvfilename,batchsize=64):
+    from cnn.apply_cnn import add_fusion_prediction_v1_scores
     wm = add_fusion_prediction_v1_scores(wm,modelpath,batch_size=batchsize)
     wm.save_window(csvfilename)
 
@@ -118,38 +115,30 @@ def update_randomforest_columns(wm, modelpath, csvfilename, overwrite=False):
 # language encodings
 # sax - gaussian breakpoints, cSax - mean shift clustering, pSax - KDE and lloyd-max
 def encode_psax_windowed(wm, csvfilename, dim_ratio=0.1, alphabet_size=8):
-    # Function to add a column of computed psax encoding per window
-    # Since encoding is window specific, paa cutlines are also window specific
-    # dim_ratio is percentage of window-size samples that are returned as values averaged under paa
+    from sax.sax_encoding import make_psax_encoder
     wm.add_computed_column("psax_windowed",make_psax_encoder(dim_ratio=dim_ratio,alphabet_size=alphabet_size))
-    wm.save_window(csvfilename) 
+    wm.save_window(csvfilename)
     print("Successfully computed psax window encoding")
     return wm
-    
+
 def encode_psax_entire(wm, csvfilename, dim_ratio=0.1, alphabet_size=8, training_frac=1):
-    # Function to add a column to the wm object of computed psax encoding
-    # psax encoding is performed on the entire dataset, then split into specified windows in wm
-    # training frac is how much of the data is used to train the paa cutlines
+    from sax.sax_encoding import encode_dataset_psax
     wm = encode_dataset_psax(wm,dim_ratio=dim_ratio,alphabet_size=alphabet_size,training_frac=training_frac,column_name="psax_entire")
-    wm.save_window(csvfilename) 
+    wm.save_window(csvfilename)
     print("Successfully computed psax entire encoding")
     return wm
 
 def encode_csax_windowed(wm, csvfilename, dim_ratio=0.1):
-    # Function to add a column of computed psax encoding per window
-    # Since encoding is window specific, paa cutlines are also window specific
-    # dim_ratio is percentage of window-size samples that are returned as values averaged under paa
+    from sax.sax_encoding import make_csax_encoder
     wm.add_computed_column("csax_windowed",make_csax_encoder(dim_ratio=dim_ratio))
-    wm.save_window(csvfilename) 
+    wm.save_window(csvfilename)
     print("Successfully computed csax window encoding")
     return wm
-    
+
 def encode_csax_entire(wm, csvfilename, dim_ratio=0.1, training_frac=1):
-    # Function to add a column to the wm object of computed psax encoding
-    # psax encoding is performed on the entire dataset, then split into specified windows in wm
-    # training frac is how much of the data is used to train the paa cutlines
+    from sax.sax_encoding import encode_dataset_csax
     wm = encode_dataset_csax(wm,dim_ratio=dim_ratio,training_frac=training_frac,column_name="csax_entire")
-    wm.save_window(csvfilename) 
+    wm.save_window(csvfilename)
     print("Successfully computed csax entire encoding")
     return wm
 

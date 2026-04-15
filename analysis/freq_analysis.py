@@ -6,7 +6,6 @@ import os
 import re
 import json
 import random
-import tensorflow as tf
 import matplotlib.pyplot as py
 
 
@@ -214,4 +213,68 @@ def plot_freq_histogram(x, categories, fs, window_samples, freq_bin_width=None, 
     ax.legend()
     py.tight_layout()
     py.show()
+
+# ── Frequency-selective filters ───────────────────────────────────────────────
+# Factory functions — each returns a fn(w) suitable for add_computed_column.
+# All use zero-phase (forward-backward) Butterworth filtering via filtfilt,
+# which avoids phase distortion that would shift spike timing.
+#
+# Example usage:
+#   wm.add_computed_column("bandpass_0.01_0.1", make_bandpass_filter(FS, 0.01, 0.1))
+#   wm.add_computed_column("lowpass_0.05",      make_lowpass_filter(FS, 0.05))
+
+
+def make_bandpass_filter(fs, low_hz, high_hz, order=4):
+    """
+    Factory: returns fn(w) that applies a zero-phase Butterworth bandpass filter.
+
+    Parameters
+    ----------
+    fs       : float  Sampling frequency (Hz).
+    low_hz   : float  Lower cutoff frequency (Hz).
+    high_hz  : float  Upper cutoff frequency (Hz).
+    order    : int    Filter order (default 4).
+    """
+    from scipy.signal import butter, filtfilt
+    nyq = fs / 2.0
+    b, a = butter(order, [low_hz / nyq, high_hz / nyq], btype="band")
+    def _bandpass(w):
+        return filtfilt(b, a, w.astype(float))
+    return _bandpass
+
+
+def make_lowpass_filter(fs, cutoff_hz, order=4):
+    """
+    Factory: returns fn(w) that applies a zero-phase Butterworth lowpass filter.
+
+    Parameters
+    ----------
+    fs         : float  Sampling frequency (Hz).
+    cutoff_hz  : float  Cutoff frequency (Hz).
+    order      : int    Filter order (default 4).
+    """
+    from scipy.signal import butter, filtfilt
+    nyq = fs / 2.0
+    b, a = butter(order, cutoff_hz / nyq, btype="low")
+    def _lowpass(w):
+        return filtfilt(b, a, w.astype(float))
+    return _lowpass
+
+
+def make_highpass_filter(fs, cutoff_hz, order=4):
+    """
+    Factory: returns fn(w) that applies a zero-phase Butterworth highpass filter.
+
+    Parameters
+    ----------
+    fs         : float  Sampling frequency (Hz).
+    cutoff_hz  : float  Cutoff frequency (Hz).
+    order      : int    Filter order (default 4).
+    """
+    from scipy.signal import butter, filtfilt
+    nyq = fs / 2.0
+    b, a = butter(order, cutoff_hz / nyq, btype="high")
+    def _highpass(w):
+        return filtfilt(b, a, w.astype(float))
+    return _highpass
 
