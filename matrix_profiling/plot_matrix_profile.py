@@ -31,7 +31,12 @@ def plot_matrix_profile(filename, fs, winsize=10, npz_path=""):
         Path to the .npz file saved by run_matrix_profile.py.
     """
     x, t = load_raw_data(filename, fs)
+
+    x = x[:10000]
+    t = t[:10000]
     t_hours = t / 3600.0
+
+
 
     if npz_path == "":
         npz_path = f"matrix_profiling/results/mp_{os.path.splitext(filename)[0]}_WIN{winsize}.npz"
@@ -413,10 +418,10 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
     return fig
 
 
-#plot_matrix_profile("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0.npz")
+plot_matrix_profile("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/0_mp_M2_concat_fs1_CH0.npz")
 #plot_matrix_discords("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0.npz")
 #plot_best_motifs("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0.npz",max_motifs=10)
 
-plot_motif_slideshow("M2_concat_fs1_CH0.npy", fs=1,
-                     npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0_WIN1.npz",
-                     max_motifs=1000, n_neighbors=10)
+#plot_motif_slideshow("M2_concat_fs1_CH0.npy", fs=1,
+ #                    npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0_WIN1.npz",
+  #                   max_motifs=1000, n_neighbors=10)
