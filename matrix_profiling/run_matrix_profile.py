@@ -20,10 +20,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from manage_data.load_data import load_raw_data
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CH         = 0
+CH         = 2
 FILE       = f"M2_concat_fs1_CH{CH}.npy"
 FS         = 1.0          # Hz
-WINDOW_MIN = 5          # minutes
+WINDOW_MIN = 50          # minutes
 OUT_DIR    = "matrix_profiling/results"
 
 # ── Load data ─────────────────────────────────────────────────────────────────

@@ -85,7 +85,7 @@ def plot_gramian_suite(x, t, m=3, tau=4):
     ax_signal.plot(t, x)
     ax_signal.set_title("Signal")
     ax_signal.set_xlabel("Time (s)")
-    ax_signal.set_ylabel("Amplitude")
+    ax_signal.set_ylabel("Amplitude (mV)")
 
     ax_fusion.imshow(fusion, aspect="auto", origin="lower")
     ax_fusion.set_title("Fusion (RGB)")

@@ -1,37 +1,40 @@
-from create_matrix import *
-from plot_matrix import *
-from aeon_analysis.transformations import add_catch22_to_matrix
-import matplotlib.pyplot as plt
-import numpy as np
 import os
-
-FILENAME = "0.01_percent_M2_concat_fs1.mat"
-WINSIZE  = 10       # minutes
-FS = 1
-STEPFRAC = 1
-winsamples = FS * WINSIZE * 60
-CSVFILE = "0.01_percent_M2_concat_fs1_consecutive.csv"
-
-wm = get_wm(FS,WINSIZE,FILENAME,matname="VECTOR",csvfilename=CSVFILE)
-
-plot_singlevalue_columns(wm,overlay=False)
-
-# --- Plot 8257200.npy --
-# 
-'''
 import numpy as np
-import matplotlib.pyplot as plt
-import os
+from manage_data.load_data import load_raw_data
+from gramian.gramian_calc import plot_gramian_suite
+from matplotlib import pyplot as py
 
-data = np.load("8257200.npy", allow_pickle=True)
-signal, timestamps = data[0]*1000, data[1]/3600
+FOLDER   = "DATA/RAW"
+FILENAME = "M2_concat_fs1_CH2.npy"
+FS       = 1.0   # Hz (matches folder name)
 
-plt.figure(figsize=(12, 4))
-plt.plot(timestamps, signal, linewidth=3)
-plt.xlabel("Time (hr)")
-plt.ylabel("Signal Amplitude (mV)")
-plt.title("Example of flagged data")
-plt.tight_layout()
-plt.show()
-'''
+# ---------------------------------------------------------------------------
+# Load
+# ---------------------------------------------------------------------------
+x, t = load_raw_data(FILENAME,FS,"VECTOR")
+x = x * 1000
+t = t / 3600
 
+full = False
+# plot channel
+
+if full:
+    py.plot(t,x)
+    py.xlabel("Time (hr)")
+    py.ylabel("Signal (mV)")
+    py.show()
+
+else:
+    # plot partial
+    sthr = 230
+    len = 50
+
+    sidx = int(sthr * 3600)
+    eidx = int(sidx + len * 60)
+    t = t[sidx:eidx]
+    x = x[sidx:eidx]
+
+    py.plot(t,x)
+    py.xlabel("Time (hr)")
+    py.ylabel("Signal (mV)")
+    py.show()

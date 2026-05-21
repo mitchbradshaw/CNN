@@ -216,7 +216,6 @@ def plot_best_motifs(filename, fs, winsize=10, npz_path="", max_motifs=3):
 
     plt.show()
 
-
 # ── Motif slideshow ────────────────────────────────────────────────────────────
 def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
                          max_motifs=20, n_neighbors=10):
@@ -315,11 +314,22 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
     ]
 
     # ── Figure ────────────────────────────────────────────────────────────────
-    fig = plt.figure(figsize=(18, 9))
-    fig.subplots_adjust(left=0.06, right=0.97, top=0.92, bottom=0.14, hspace=0.38)
+    # ax_sig spans the full width to the right figure edge;
+    # ax_wave stops at WAVE_R to leave room for the outside legend.
+    LPAD   = 0.06
+    RPAD   = 0.03
+    WAVE_R = 0.78
+    VGAP   = 0.10
+    PLOT_T = 0.92
+    PLOT_B = 0.14
 
-    ax_sig  = fig.add_subplot(2, 1, 1)
-    ax_wave = fig.add_subplot(2, 1, 2)
+    panel_h = (PLOT_T - PLOT_B - VGAP) / 2
+    sig_b   = PLOT_T - panel_h
+    wave_b  = PLOT_B
+
+    fig = plt.figure(figsize=(18, 9))
+    ax_sig  = fig.add_axes([LPAD, sig_b,  1.0 - RPAD - LPAD, panel_h])
+    ax_wave = fig.add_axes([LPAD, wave_b, WAVE_R - LPAD,      panel_h])
 
     ax_prev = fig.add_axes([0.06,  0.025, 0.12, 0.055])
     ax_next = fig.add_axes([0.82,  0.025, 0.12, 0.055])
@@ -346,7 +356,7 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
         occurrences = [seed] + [int(matches[k, 1]) for k in range(n_shown)]
 
         # ── Signal axes ───────────────────────────────────────────────────
-        ax_sig.plot(t_hours, x_mv, linewidth=0.4, color='steelblue', alpha=0.5)
+        ax_sig.plot(t_hours, x_mv, linewidth=0.55, color='steelblue', alpha=0.68)
         ax_sig.set_ylabel('Signal (mV)', fontsize=11)
         ax_sig.set_xlabel('Time (hours)', fontsize=11)
         ax_sig.set_title(
@@ -354,15 +364,24 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
             f'seed @ {seed_t:.3f} h   MP distance = {mp_val:.4f}',
             fontsize=12)
 
+        yrange  = ymax - ymin
+        arrow_y = ymax + 0.04 * yrange
+
         for k, nb_idx in enumerate(occurrences):
             color = PALETTE[k % len(PALETTE)]
             nb_t  = t_hours[min(nb_idx, len(t_hours) - 1)]
             alpha = 0.60 if k == 0 else 0.28
             lw    = 1.5  if k == 0 else 0.5
             ax_sig.add_patch(
-                Rectangle((nb_t, ymin), window_hours, ymax - ymin,
+                Rectangle((nb_t, ymin), window_hours, yrange,
                            facecolor=color, edgecolor=color,
                            linewidth=lw, alpha=alpha, zorder=2))
+            ax_sig.plot(nb_t + window_hours / 2, arrow_y,
+                        marker='v', markersize=10 if k == 0 else 7,
+                        color=color, alpha=min(alpha * 1.8, 1.0),
+                        markeredgewidth=0, zorder=5)
+
+        ax_sig.set_ylim(ymin, ymax + 0.13 * yrange)
 
         # ── Waveform overlay axes (z-normalised) ─────────────────────────
         for k, nb_idx in enumerate(occurrences):
@@ -384,8 +403,8 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
         ax_wave.set_xlabel('Time within window (s)', fontsize=11)
         ax_wave.set_ylabel('Z-score', fontsize=11)
         ax_wave.set_title('All occurrences overlaid (z-normalised)', fontsize=11)
-        ax_wave.legend(fontsize=7, loc='upper right', ncol=3,
-                        framealpha=0.6, handlelength=1.2)
+        ax_wave.legend(fontsize=7, loc='upper left', bbox_to_anchor=(1.02, 1.0),
+                        ncol=1, framealpha=0.65, handlelength=1.1, borderaxespad=0)
 
         info_txt.set_text(
             f'Slide {i + 1} / {len(slides)}   |   '
@@ -417,11 +436,335 @@ def plot_motif_slideshow(filename, fs, winsize=10, npz_path="",
     plt.show()
     return fig
 
+def plot_seed_chain(filename, fs, seed_idx, winsize=10, npz_path="",
+                    n_neighbors=10, normalize=True,
+                    max_distance=None, exclusion_zone=None,
+                    show_envelope=True, interactive=True):
+    """
+    Query-by-example motif search: given a seed window index, retrieve and
+    visualise the most similar windows across the entire signal using the
+    pre-computed matrix profile.
 
-plot_matrix_profile("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/0_mp_M2_concat_fs1_CH0.npz")
+    Layout
+    ------
+    Left           : seed window in original (mV) scale — the query motif.
+    Top-right      : full signal with seed (gold) and all neighbours highlighted.
+    Bottom-right   : all occurrences overlaid on a shared z-normalised axis with
+                     optional mean ± 1-std envelope.
+
+    Interactive controls  (interactive=True)
+    ----------------------------------------
+    ← / →           shift seed by ±1 sample and immediately recompute.
+    Shift + ← / →   shift seed by ±10 samples.
+    On-screen buttons: ◀◀ -10 | ◀ -1 | +1 ▶ | +10 ▶▶
+    Slider           drag to any position in the signal.
+
+    Parameters
+    ----------
+    filename       : str    Signal file name (passed to load_raw_data).
+    fs             : float  Sampling rate in Hz.
+    seed_idx       : int    Starting sample index of the query motif.
+    winsize        : int    Window size in minutes (for default npz_path).
+    npz_path       : str    Path to .npz produced by run_matrix_profile.py.
+    n_neighbors    : int    Nearest neighbours to retrieve (default 10).
+    normalize      : bool   Z-normalise waveforms in the overlay plot.
+    max_distance   : float  Maximum MP distance for a neighbour; None = no filter.
+    exclusion_zone : int    Samples to exclude around the seed (default m // 2).
+    show_envelope  : bool   Overlay mean ± 1-std envelope on the waveform plot.
+    interactive    : bool   Enable interactive seed-adjustment controls.
+    """
+    from matplotlib.widgets import Button, Slider
+
+    # ── Data ─────────────────────────────────────────────────────────────────────
+    x, t = load_raw_data(filename, fs)
+    t_hours = t / 3600.0
+
+    if npz_path == "":
+        npz_path = (f"matrix_profiling/results/"
+                    f"mp_{os.path.splitext(filename)[0]}_WIN{winsize}.npz")
+
+    data = np.load(npz_path)
+    mp   = data['mp'].astype(float)
+    m    = int(data['m'])
+
+    if exclusion_zone is None:
+        exclusion_zone = m // 2
+
+    x_mv         = x * 1000
+    ymin, ymax   = x_mv.min(), x_mv.max()
+    window_hours = m / fs / 3600.0
+    t_win_s      = np.arange(m) / fs          # relative x-axis in seconds
+    n_valid      = len(x) - m + 1             # valid window starts in the full signal
+
+    if seed_idx >= len(mp):
+        print(f"Note: seed_idx={seed_idx} is beyond the matrix profile length "
+              f"({len(mp)} positions). MP value will show as NaN for this seed, "
+              f"but stumpy.match will still search the full signal.")
+
+    PALETTE = [
+        'tomato', 'steelblue', 'mediumseagreen', 'darkorange', 'mediumpurple',
+        'deeppink', 'teal', 'goldenrod', 'coral', 'slategray',
+    ]
+    SEED_COLOR = 'gold'
+
+    # ── Neighbour retrieval ───────────────────────────────────────────────────────
+    def _get_neighbors(seed):
+        if seed < 0 or seed + m > len(x):
+            return np.array([]).reshape(0, 2)
+        Q     = x[seed : seed + m]
+        max_d = max_distance if max_distance is not None else np.inf
+        try:
+            matches = stumpy.match(
+                Q, x,
+                max_matches=n_neighbors,
+                max_distance=max_d,
+                query_idx=seed,
+            )
+        except Exception as e:
+            print(f"  stumpy.match failed: {e}")
+            matches = np.array([]).reshape(0, 2)
+        return matches
+
+    # ── Figure ────────────────────────────────────────────────────────────────────
+    bottom_margin = 0.18 if interactive else 0.08
+    fig = plt.figure(figsize=(20, 9))
+    fig.suptitle(f'Seed Chain Explorer — {filename}', fontsize=13, fontweight='bold')
+
+    # Layout constants — ax_sig spans full right width (to RPAD);
+    # ax_wave stops at WAVE_R to leave room for the outside legend.
+    LPAD   = 0.07
+    RPAD   = 0.03
+    SEED_W = 0.19
+    HGAP   = 0.03
+    WAVE_R = 0.78
+    VGAP   = 0.045
+    PLOT_T = 0.91
+
+    right_l = LPAD + SEED_W + HGAP                          # left edge of right panels
+    panel_h = (PLOT_T - bottom_margin - VGAP) / 2           # height of each right panel
+    sig_b   = PLOT_T - panel_h                               # bottom of top-right panel
+    wave_b  = bottom_margin                                  # bottom of bottom-right panel
+
+    ax_seed = fig.add_axes([LPAD,    bottom_margin, SEED_W,               PLOT_T - bottom_margin])
+    ax_sig  = fig.add_axes([right_l, sig_b,         1.0 - RPAD - right_l, panel_h])
+    ax_wave = fig.add_axes([right_l, wave_b,         WAVE_R - right_l,    panel_h])
+
+    # ── Widget axes (only created when interactive) ───────────────────────────────
+    state = {'seed': int(np.clip(seed_idx, 0, n_valid - 1))}
+
+    if interactive:
+        # 8 buttons of width 0.06, starting at 0.07, ending at 0.55
+        ax_slider = fig.add_axes([0.07,  0.105, 0.48,  0.025])
+        ax_m500   = fig.add_axes([0.07,  0.040, 0.06,  0.042])
+        ax_m100   = fig.add_axes([0.13,  0.040, 0.06,  0.042])
+        ax_m10    = fig.add_axes([0.19,  0.040, 0.06,  0.042])
+        ax_m1     = fig.add_axes([0.25,  0.040, 0.06,  0.042])
+        ax_p1     = fig.add_axes([0.31,  0.040, 0.06,  0.042])
+        ax_p10    = fig.add_axes([0.37,  0.040, 0.06,  0.042])
+        ax_p100   = fig.add_axes([0.43,  0.040, 0.06,  0.042])
+        ax_p500   = fig.add_axes([0.49,  0.040, 0.06,  0.042])
+        ax_info   = fig.add_axes([0.57,  0.018, 0.40,  0.075])
+        ax_info.axis('off')
+        info_txt  = ax_info.text(0.02, 0.5, '', va='center', fontsize=9.5,
+                                  transform=ax_info.transAxes)
+
+        slider   = Slider(ax_slider, 'Seed idx', 0, n_valid - 1,
+                          valinit=state['seed'], valstep=1)
+        btn_m500 = Button(ax_m500, '◀◀◀ -500')
+        btn_m100 = Button(ax_m100, '◀◀ -100')
+        btn_m10  = Button(ax_m10,  '◀◀ -10')
+        btn_m1   = Button(ax_m1,   '◀ -1')
+        btn_p1   = Button(ax_p1,   '+1 ▶')
+        btn_p10  = Button(ax_p10,  '+10 ▶▶')
+        btn_p100 = Button(ax_p100, '+100 ▶▶')
+        btn_p500 = Button(ax_p500, '+500 ▶▶▶')
+
+    # ── Draw ─────────────────────────────────────────────────────────────────────
+    def _draw(seed):
+        seed = int(np.clip(seed, 0, n_valid - 1))
+        state['seed'] = seed
+
+        matches        = _get_neighbors(seed)
+        n_shown        = len(matches)
+        neighbor_idxs  = [int(matches[k, 1]) for k in range(n_shown)]
+        neighbor_dists = [float(matches[k, 0]) for k in range(n_shown)]
+        all_idxs       = [seed] + neighbor_idxs
+
+        seed_t  = t_hours[seed]
+        mp_val  = mp[seed] if seed < len(mp) else float('nan')
+
+        # ── Left: seed window (original mV scale) ─────────────────────────
+        ax_seed.cla()
+        ax_seed.plot(t_win_s, x_mv[seed : seed + m],
+                     linewidth=1.8, color=SEED_COLOR, zorder=3)
+        ax_seed.set_title(f'Seed Window\n@ {seed_t:.5f} h  (idx {seed})',
+                          fontsize=11, fontweight='bold')
+        ax_seed.set_xlabel('Time within window (s)', fontsize=10)
+        ax_seed.set_ylabel('Signal (mV)', fontsize=10)
+        ax_seed.text(0.97, 0.97, f'MP = {mp_val:.4f}',
+                     transform=ax_seed.transAxes, ha='right', va='top',
+                     fontsize=9, color='dimgray',
+                     bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.7))
+
+        # ── Top-right: full signal + patches ─────────────────────────────
+        ax_sig.cla()
+        ax_sig.plot(t_hours, x_mv, linewidth=0.55, color='steelblue', alpha=0.68)
+
+        yrange  = ymax - ymin
+        arrow_y = ymax + 0.04 * yrange   # triangle tip sits just above signal peak
+
+        # Neighbours (draw first; seed on top)
+        for k, (nb_idx, dist) in enumerate(zip(neighbor_idxs, neighbor_dists)):
+            nb_t  = t_hours[min(nb_idx, len(t_hours) - 1)]
+            color = PALETTE[k % len(PALETTE)]
+            sim   = 1.0 / (1.0 + dist)
+            alpha = float(np.clip(0.20 + 0.40 * sim, 0.15, 0.60))
+            ax_sig.add_patch(
+                Rectangle((nb_t, ymin), window_hours, yrange,
+                           facecolor=color, edgecolor=color,
+                           linewidth=0.5, alpha=alpha, zorder=2))
+            ax_sig.plot(nb_t + window_hours / 2, arrow_y,
+                        marker='v', markersize=7, color=color,
+                        alpha=min(alpha * 1.8, 1.0), markeredgewidth=0, zorder=5)
+
+        # Seed patch + triangle (opaque gold, on top)
+        ax_sig.add_patch(
+            Rectangle((seed_t, ymin), window_hours, yrange,
+                       facecolor=SEED_COLOR, edgecolor='darkorange',
+                       linewidth=1.5, alpha=0.85, zorder=3))
+        ax_sig.plot(seed_t + window_hours / 2, arrow_y,
+                    marker='v', markersize=10, color='darkorange',
+                    markeredgewidth=0, zorder=6)
+
+        ax_sig.set_ylim(ymin, ymax + 0.13 * yrange)   # headroom for triangles
+        ax_sig.set_title(
+            f'Full Signal   seed @ {seed_t:.4f} h   '
+            f'MP = {mp_val:.4f}   neighbours = {n_shown}',
+            fontsize=11)
+        ax_sig.set_xlabel('Time (hours)', fontsize=10)
+        ax_sig.set_ylabel('Signal (mV)', fontsize=10)
+
+        # ── Bottom-right: z-normalised overlay ───────────────────────────
+        ax_wave.cla()
+        normalised_stack = []
+
+        for k, idx in enumerate(all_idxs):
+            snippet = x_mv[idx : idx + m]
+            if len(snippet) < m:
+                continue
+            if normalize:
+                std   = snippet.std()
+                norm_s = ((snippet - snippet.mean()) / std
+                          if std > 0 else snippet - snippet.mean())
+            else:
+                norm_s = snippet
+            normalised_stack.append(norm_s)
+
+            color = SEED_COLOR if k == 0 else PALETTE[(k - 1) % len(PALETTE)]
+            lw    = 2.2 if k == 0 else 0.9
+            alpha = 1.0 if k == 0 else 0.55
+            nb_t  = t_hours[min(idx, len(t_hours) - 1)]
+
+            if k == 0:
+                label = f'SEED @ {nb_t:.3f} h'
+            else:
+                dist  = neighbor_dists[k - 1]
+                sim   = 1.0 / (1.0 + dist)
+                label = f'nb{k} @ {nb_t:.3f} h  d={dist:.3f}  sim={sim:.2f}'
+
+            ax_wave.plot(t_win_s, norm_s, linewidth=lw, color=color,
+                         alpha=alpha, label=label,
+                         zorder=4 if k == 0 else 2)
+
+        # Mean ± 1-std envelope across neighbours (not the seed)
+        if show_envelope and len(normalised_stack) > 2:
+            stack = np.array(normalised_stack[1:])
+            mu    = stack.mean(axis=0)
+            sigma = stack.std(axis=0)
+            ax_wave.plot(t_win_s, mu, color='black', linewidth=1.6,
+                         linestyle='--', zorder=5, label='neighbour mean')
+            ax_wave.fill_between(t_win_s, mu - sigma, mu + sigma,
+                                  alpha=0.12, color='black', zorder=1,
+                                  label='±1 std')
+
+        y_label = 'Z-score' if normalize else 'Signal (mV)'
+        ax_wave.set_xlabel('Time within window (s)', fontsize=10)
+        ax_wave.set_ylabel(y_label, fontsize=10)
+        ax_wave.set_title('Nearest-neighbour overlay (z-normalised)', fontsize=11)
+        ax_wave.legend(fontsize=7, loc='upper left', bbox_to_anchor=(1.02, 1.0),
+                        ncol=1, framealpha=0.65, handlelength=1.1, borderaxespad=0)
+
+        # ── Info bar & console summary ────────────────────────────────────
+        if interactive:
+            slider.set_val(seed)
+            info_txt.set_text(
+                f'Seed idx: {seed}   |   {seed_t:.5f} h   |   '
+                f'{n_shown} neighbour(s)   |   MP = {mp_val:.4f}\n'
+                f'← →: ±1  |  Shift+←→: ±10  |  Ctrl+←→: ±100  |  Ctrl+Shift+←→: ±500'
+            )
+
+        print(f"\nSeed idx={seed}  @ {seed_t:.5f} h  MP={mp_val:.4f}")
+        for k, (nb_idx, dist) in enumerate(zip(neighbor_idxs, neighbor_dists)):
+            nb_t = t_hours[min(nb_idx, len(t_hours) - 1)]
+            sim  = 1.0 / (1.0 + dist)
+            print(f"  nb{k+1:2d}  idx={nb_idx:<8d} @ {nb_t:.5f} h  "
+                  f"dist={dist:.4f}  sim={sim:.4f}")
+
+        fig.canvas.draw_idle()
+
+    _draw(state['seed'])
+
+    if not interactive:
+        plt.show()
+        return fig
+
+    # ── Widget callbacks ──────────────────────────────────────────────────────────
+    def _shift(delta):
+        _draw(state['seed'] + delta)
+
+    def _on_slider(val):
+        s = int(round(slider.val))
+        if s != state['seed']:
+            _draw(s)
+
+    btn_m500.on_clicked(lambda _: _shift(-500))
+    btn_m100.on_clicked(lambda _: _shift(-100))
+    btn_m10.on_clicked(lambda _:  _shift(-10))
+    btn_m1.on_clicked(lambda _:   _shift(-1))
+    btn_p1.on_clicked(lambda _:   _shift(+1))
+    btn_p10.on_clicked(lambda _:  _shift(+10))
+    btn_p100.on_clicked(lambda _: _shift(+100))
+    btn_p500.on_clicked(lambda _: _shift(+500))
+    slider.on_changed(_on_slider)
+
+    def _on_key(event):
+        if   event.key == 'left':               _shift(-1)
+        elif event.key == 'right':              _shift(+1)
+        elif event.key == 'shift+left':         _shift(-10)
+        elif event.key == 'shift+right':        _shift(+10)
+        elif event.key == 'ctrl+left':          _shift(-100)
+        elif event.key == 'ctrl+right':         _shift(+100)
+        elif event.key == 'ctrl+shift+left':    _shift(-500)
+        elif event.key == 'ctrl+shift+right':   _shift(+500)
+
+    fig.canvas.mpl_connect('key_press_event', _on_key)
+
+    plt.show()
+    return fig
+
+if False:
+    print("")
+
+
+
+#plot_matrix_profile("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/0_mp_M2_concat_fs1_CH0.npz")
 #plot_matrix_discords("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0.npz")
 #plot_best_motifs("M2_concat_fs1_CH0.npy",1,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0.npz",max_motifs=10)
 
 #plot_motif_slideshow("M2_concat_fs1_CH0.npy", fs=1,
  #                    npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH0_WIN1.npz",
-  #                   max_motifs=1000, n_neighbors=10)
+ #                   max_motifs=1000, n_neighbors=10)
+
+plot_seed_chain(
+    "M2_concat_fs1_CH2.npy",fs=1,seed_idx=104078,npz_path="matrix_profiling/results/1_mp_M2_concat_fs1_CH2_WIN50.npz",
+    n_neighbors=10,max_distance=None,show_envelope=True,interactive=True)
