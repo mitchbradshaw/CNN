@@ -11,11 +11,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # ── Default paths ─────────────────────────────────────────────────────────────
-_DATA        = PROJECT_ROOT / "DATA" / "10_MINUTES"
-TRAIN_INT    = _DATA / "10min_fs1.0_interesting_rawdata"
-TRAIN_NINT   = _DATA / "10min_fs1.0_notinteresting_rawdata"
-TEST_INT     = _DATA / "10min_fs1.0_interesting_rawdata_test"
-TEST_NINT    = _DATA / "10min_fs1.0_notinteresting_rawdata_test"
+_DATA        = PROJECT_ROOT / "DATA" / "derived" / "windows" / "10min_fs1.0"
+TRAIN_INT    = _DATA / "rawdata"      / "interesting"
+TRAIN_NINT   = _DATA / "rawdata"      / "notinteresting"
+TEST_INT     = _DATA / "rawdata_test" / "interesting"
+TEST_NINT    = _DATA / "rawdata_test" / "notinteresting"
 MODELS_DIR   = PROJECT_ROOT / "MODELS"
 OUT_DIR      = PROJECT_ROOT / "Results" / "Catalogue" / "aeon" / "current"
 

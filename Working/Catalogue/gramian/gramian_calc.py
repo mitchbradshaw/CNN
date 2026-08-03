@@ -107,10 +107,12 @@ def save_gramian_windows(x, start_indexes, timescale, fs, label, window_samples,
     import os
     names = ["GASF", "GADF", "recurrence", "fusion"]
     folders = {}
-    minutes_folder = os.path.join("DATA", f"{timescale:g}_MINUTES")
+    from Working.Preprocessing.manage_data.load_data import window_root
+    win_root = window_root(timescale, fs)
     suffix_part = f"_{suffix}" if suffix else ""
     for name in names:
-        folder = os.path.join(minutes_folder, f"{timescale:g}min_fs{fs}_{label}_{name}{suffix_part}")
+        # encoding as parent, class as child -> each encoding dir is a valid ImageFolder root
+        folder = os.path.join(win_root, f"{name}{suffix_part}", label)
         os.makedirs(folder, exist_ok=True)
         folders[name] = folder
 

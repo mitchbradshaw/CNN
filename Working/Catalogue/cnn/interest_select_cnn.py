@@ -30,7 +30,7 @@ Usage
     from interest_select_cnn import interest_select_cnn
     import scipy.io
 
-    mat = scipy.io.loadmat("DATA/RAW/M2_aug_concat_fs1.mat")
+    mat = scipy.io.loadmat("DATA/raw/M2_aug_concat_fs1.mat")
     x   = mat["x"].ravel()
 
     interest_select_cnn(
@@ -209,8 +209,9 @@ def interest_select_cnn(
     # ── Path setup ────────────────────────────────────────────────────────
     fs_str      = f"{fs:.2f}"
     win_tag     = f"{window_min:g}min"
-    minutes_dir = os.path.join("DATA", f"{window_min:g}_MINUTES")
-    index_dir   = os.path.join(minutes_dir, win_tag)
+    from Working.Preprocessing.manage_data.load_data import window_root
+    minutes_dir = window_root(window_min, fs)
+    index_dir   = os.path.join(minutes_dir, "labels")
     os.makedirs(index_dir, exist_ok=True)
 
     # Shared session file with interest_select_windows so progress is continuous

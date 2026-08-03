@@ -55,14 +55,13 @@ def subcategorize_interesting_windows(timescale, fs):
     """
 
     # ── Source folders ────────────────────────────────────────────────────
-    prefix = f"{timescale:g}min_fs{fs}_interesting"
-    minutes_folder = os.path.join("DATA", f"{timescale:g}_MINUTES")
+    # Layout is <window root>/<encoding>/<class>/, so each encoding directory
+    # is a valid torchvision ImageFolder root.
+    from Working.Preprocessing.manage_data.load_data import window_root
+    minutes_folder = window_root(timescale, fs)
     src = {
-        "rawdata":    os.path.join(minutes_folder, f"{prefix}_rawdata"),
-        "GADF":       os.path.join(minutes_folder, f"{prefix}_GADF"),
-        "GASF":       os.path.join(minutes_folder, f"{prefix}_GASF"),
-        "recurrence": os.path.join(minutes_folder, f"{prefix}_recurrence"),
-        "fusion":     os.path.join(minutes_folder, f"{prefix}_fusion"),
+        name: os.path.join(minutes_folder, name, "interesting")
+        for name in ("rawdata", "GADF", "GASF", "recurrence", "fusion")
     }
     for name, folder in src.items():
         if not os.path.isdir(folder):

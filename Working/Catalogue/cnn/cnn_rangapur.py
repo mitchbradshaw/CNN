@@ -15,7 +15,7 @@ Usage:
 #  CONFIG  — change these without touching the rest of the code
 # ============================================================
 CFG = {
-    "data_root":    "DATA/10_MINUTES",
+    "data_root":    "DATA/derived/windows",
     "timescale":    "10min",
     "fs":           "1.0",
     "image_types":  ["fusion", "recurrence", "GADF", "GASF"],
@@ -92,65 +92,58 @@ def get_transforms(img_size: int, is_train: bool, is_rgb: bool):
 
 
 def build_dataset_path(data_root: str, timescale: str, fs: str,
-                       image_type: str) -> dict[str, Path]:
+                       image_type: str) -> Path:
     """
-    Scans data_root for folders matching:
-        {timescale}_fs{fs}_{category}_{image_type}
-    Returns {category: folder_path}.
-    """
-    root = Path(data_root)
-    pattern = re.compile(
-        rf"^{re.escape(timescale)}_fs{re.escape(fs)}_(.+?)_{re.escape(image_type)}$"
-    )
-    found = {}
-    for folder in sorted(root.iterdir()):
-        m = pattern.match(folder.name)
-        if m and folder.is_dir():
-            found[m.group(1)] = folder
+    Return the ImageFolder root for one image type:
+        {data_root}/{timescale}_fs{fs}/{image_type}/
 
-    if not found:
+    e.g. DATA/derived/windows/10min_fs1.0/GASF/
+
+    That directory contains one subdirectory per class
+    (interesting/, notinteresting/), which is exactly the layout
+    torchvision's ImageFolder expects.
+    """
+    root = Path(data_root) / f"{timescale}_fs{fs}" / image_type
+    if not root.is_dir():
         raise FileNotFoundError(
-            f"No folders found in '{root}' matching pattern "
-            f"'{timescale}_fs{fs}_*_{image_type}'"
+            f"Dataset root '{root}' not found. Expected "
+            f"<data_root>/<timescale>_fs<fs>/<image_type>/<class>/*.png"
         )
-    return found
+
+    classes = sorted(d.name for d in root.iterdir() if d.is_dir())
+    if not classes:
+        raise FileNotFoundError(f"No class subdirectories found under '{root}'")
+    return root
 
 
 def make_image_folder_dataset(data_root: str, timescale: str, fs: str,
                                image_type: str, img_size: int):
     """
-    Build a torchvision ImageFolder-compatible dataset from the scattered
-    per-category folders by creating a temporary unified view using symlinks
-    (Linux/HPC) or direct ImageFolder with a custom structure.
+    Build train/val ImageFolder datasets for one image type.
 
-    On HPC (Linux) we symlink; on Windows we fall back to a manual dataset.
+    The on-disk layout puts encoding as parent and class as child, so each
+    encoding directory is directly a valid ImageFolder root — no symlink
+    staging needed. (An earlier layout stored class and encoding fused into a
+    single flat folder name, which required staging symlinks to synthesise the
+    nested structure; that indirection is gone, along with the Windows
+    incompatibility it caused.)
+
+    Class indices remain alphabetical — interesting=0, notinteresting=1 —
+    matching every trained model and the hardcoded ordering in apply_cnn.py.
     """
-    category_paths = build_dataset_path(data_root, timescale, fs, image_type)
+    root = build_dataset_path(data_root, timescale, fs, image_type)
     is_rgb = (image_type == "fusion")
 
-    # Use a staging directory so ImageFolder works cleanly
-    staging = Path(f"_staging_{image_type}")
-    staging.mkdir(exist_ok=True)
-
-    for cat, src in category_paths.items():
-        dst = staging / cat
-        if not dst.exists():
-            try:
-                os.symlink(src.resolve(), dst)
-            except (OSError, NotImplementedError):
-                # Windows fallback: create the dir and copy references via a
-                # custom dataset instead (see _ManualDataset below)
-                dst.symlink_to(src.resolve())
-
+    # Two instances so train and val each get their own transform
     train_ds = datasets.ImageFolder(
-        str(staging),
+        str(root),
         transform=get_transforms(img_size, is_train=True,  is_rgb=is_rgb),
     )
     val_ds = datasets.ImageFolder(
-        str(staging),
+        str(root),
         transform=get_transforms(img_size, is_train=False, is_rgb=is_rgb),
     )
-    return train_ds, val_ds, staging
+    return train_ds, val_ds, root
 
 
 def split_dataset(dataset, val_fraction: float, seed: int):
@@ -280,11 +273,12 @@ def train_image_type(image_type: str, cfg: dict, device: torch.device,
     metrics_path = os.path.join(cfg["metrics_dir"], f"{image_type}_metrics.json")
 
     # ── Dataset ──────────────────────────────────────────────────────────
-    train_full, val_full, staging = make_image_folder_dataset(
+    train_full, val_full, data_dir = make_image_folder_dataset(
         cfg["data_root"], cfg["timescale"], cfg["fs"],
         image_type, cfg["img_size"],
     )
     num_classes = len(train_full.classes)
+    print(f"  Dataset root: {data_dir}")
     print(f"  Classes ({num_classes}): {train_full.classes}")
     print(f"  Total images: {len(train_full)}")
 
@@ -355,11 +349,7 @@ def train_image_type(image_type: str, cfg: dict, device: torch.device,
         json.dump(history, f, indent=2)
     print(f"  Saved metrics   → {metrics_path}")
 
-    # Clean up staging symlinks
-    for link in staging.iterdir():
-        if link.is_symlink():
-            link.unlink()
-    staging.rmdir()
+    # (No staging cleanup needed — ImageFolder reads the dataset directly.)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────

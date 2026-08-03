@@ -16,7 +16,7 @@ from Working.Preprocessing.manage_data.load_data import load_raw_data
 from Working.Catalogue.gramian.gramian_calc import plot_gramian_suite
 from matplotlib import pyplot as py
 
-FOLDER   = "DATA/RAW"
+FOLDER   = "DATA/derived/channels"
 FILENAME = "M2_concat_fs1_CH2.npy"
 FS       = 1.0   # Hz (matches folder name)
 

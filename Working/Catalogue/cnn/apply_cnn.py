@@ -20,13 +20,13 @@ Usage
 
   # Custom
   python cnn/apply_cnn.py \\
-      --mat   DATA/RAW/M2_aug_concat_fs2.mat \\
+      --mat   DATA/raw/M2_aug_concat_fs2.mat \\
       --model MODELS/fusion_cnn_3.pth        \\
       --fs_raw 2 --fs_target 1               \\
       --window_min 10 --step_min 3           \\
       --img_size 224                         \\
       --batch_size 32                        \\
-      --out_dir DATA/10_MINUTES/10min_fs1_cnnscores
+      --out_dir DATA/derived/windows/10min_fs1.0/cnnscores
 
 Assumptions
 -----------
@@ -71,7 +71,7 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 
 DEFAULTS = dict(
-    mat        = "DATA/RAW/M2_aug_concat_fs2.mat",
+    mat        = "DATA/raw/M2_aug_concat_fs2.mat",
     model      = "MODELS/fusion_cnn_3.pth",
     fs_raw     = 2.0,
     fs_target  = 1.0,
@@ -79,7 +79,7 @@ DEFAULTS = dict(
     step_min   = 3,
     img_size   = 224,
     batch_size = 32,
-    out_dir    = "DATA/10_MINUTES/10min_fs1_cnnscores",
+    out_dir    = "DATA/derived/windows/10min_fs1.0/cnnscores",
 )
 
 

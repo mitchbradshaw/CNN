@@ -35,7 +35,7 @@ from PIL import Image
 
 
 HELP_TEXT = """\
-usage: python main.py [options]
+usage: python Pipelines/dataset_build/main.py [options]
 
   --timescale=10          Window size in minutes (default: 10)
   --file=M2_aug_...mat    Input .mat file (default: M2_aug_concat_fs1.mat)
@@ -66,7 +66,8 @@ examples:
   python main.py --timescale=5 -gram -cat=interesting
   python main.py -load 130201 -cat=notinteresting
   python main.py -freq -entropy -stats
-  python main.py --cnn --image "10min_fs1.0_interesting_GASF\\GASF_149801.png"
+  python Pipelines/dataset_build/main.py --cnn \\
+      --image DATA/derived/windows/10min_fs1.0/GASF/interesting/GASF_149801.png
 """
 
 parser = argparse.ArgumentParser(description='EEG CNN analysis pipeline', add_help=False)
@@ -158,7 +159,7 @@ if args.cnn:
         image_path = args.image
     else:
         cat = args.cat or 'interesting'
-        image_path = os.path.join("DATA", f"{timescale:g}_MINUTES", f"{timescale:g}min_fs1.0_{cat}_GASF", "GASF_149801.png")
+        image_path = os.path.join(window_root(timescale, 1.0), "GASF", cat, "GASF_149801.png")
     print(get_dense_output(image_path, True))
 
 # --sort

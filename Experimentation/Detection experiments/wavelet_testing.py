@@ -26,7 +26,7 @@ from Working.Detection.analysis.wavelet_analysis import (
 
 # 328001.npy -- good window for spike detection testing
 
-FOLDER   = "DATA/RAW"
+FOLDER   = "DATA/derived/channels"
 FILENAME = "M2_concat_fs1_CH2.npy"
 FS       = 1.0   # Hz (matches folder name)
 

@@ -183,7 +183,10 @@ cython_debug/
 
 # ── Data (see DATA/README.md) ────────────────────────────────────────────────
 # Source recordings + everything derived from them. ~2.3 GB, never tracked.
-DATA/
+# DATA/* rather than DATA/ so the negation below can re-include the README —
+# git does not descend into a fully-excluded directory.
+DATA/*
+!DATA/README.md
 
 # ── Run outputs that deliberately stayed at the repo root ────────────────────
 # Results/ IS tracked; these three are not (large binaries / regenerable).

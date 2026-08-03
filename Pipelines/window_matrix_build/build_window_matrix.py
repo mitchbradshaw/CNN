@@ -64,7 +64,7 @@ from Working.Detection.aeon_features.transformations import catch22_features, CA
 # ===========================================================================
 
 CH       = 2
-FILENAME = f"M2_concat_fs1_CH{CH}.npy"   # must be in DATA/RAW/
+FILENAME = f"M2_concat_fs1_CH{CH}.npy"   # resolved under DATA/derived/channels/
 WINSIZE  = 10     # window length in minutes
 FS       = 1.0    # sample rate (Hz)
 STEPFRAC = 1.0    # 1.0 = non-overlapping windows; 0.5 = 50 % overlap

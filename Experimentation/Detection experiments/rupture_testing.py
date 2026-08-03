@@ -13,7 +13,7 @@ if str(_REPO_ROOT) not in _sys.path:
 from Working.Preprocessing.manage_data.load_data import load_raw_data
 from Working.Detection.rupture.rupture_detect import detect_change_points, plot_change_points
 
-FOLDER   = "DATA/RAW"
+FOLDER   = "DATA/derived/channels"
 FILENAME = "M2_concat_fs1_CH2.npy"
 FS       = 1.0   # Hz (matches folder name)
 

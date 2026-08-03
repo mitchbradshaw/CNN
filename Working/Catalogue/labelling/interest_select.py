@@ -8,24 +8,24 @@ Browse randomised time-series windows and label each as:
     interesting  /  not interesting  /  flag
 
 On finish (or window close), saves for each labelled category:
-    - raw data (.npy)          → DATA/{N}_MINUTES/{N}min_fs{fs}_{label}_rawdata{_suffix}/
-    - GASF image (.png)        → DATA/{N}_MINUTES/{N}min_fs{fs}_{label}_GASF{_suffix}/
-    - GADF image (.png)        → DATA/{N}_MINUTES/{N}min_fs{fs}_{label}_GADF{_suffix}/
-    - recurrence image (.png)  → DATA/{N}_MINUTES/{N}min_fs{fs}_{label}_recurrence{_suffix}/
-    - fusion image (.png)      → DATA/{N}_MINUTES/{N}min_fs{fs}_{label}_fusion{_suffix}/
+    - raw data (.npy)          → DATA/derived/windows/{N}min_fs{fs}/rawdata{_suffix}/{label}/
+    - GASF image (.png)        → DATA/derived/windows/{N}min_fs{fs}/GASF{_suffix}/{label}/
+    - GADF image (.png)        → DATA/derived/windows/{N}min_fs{fs}/GADF{_suffix}/{label}/
+    - recurrence image (.png)  → DATA/derived/windows/{N}min_fs{fs}/recurrence{_suffix}/{label}/
+    - fusion image (.png)      → DATA/derived/windows/{N}min_fs{fs}/fusion{_suffix}/{label}/
 
 Session (window order + progress) is persisted to:
-    DATA/{N}_MINUTES/{N}min/{N}min_session_fs_{fs:.2f}.json
+    DATA/derived/windows/{N}min_fs{fs}/labels/{N}min_session_fs_{fs:.2f}.json
 
 Label index files (start-sample lists) are persisted to:
-    DATA/{N}_MINUTES/{N}min/{N}min_{label}_fs_{fs:.2f}.json
+    DATA/derived/windows/{N}min_fs{fs}/labels/{N}min_{label}_fs_{fs:.2f}.json
 
 Usage
 -----
     from interest_select import interest_select_windows
     import scipy.io, numpy as np
 
-    mat = scipy.io.loadmat("DATA/RAW/M2_aug_concat_fs1.mat")
+    mat = scipy.io.loadmat("DATA/raw/M2_aug_concat_fs1.mat")
     x   = mat["x"].ravel()
     interest_select_windows(x, fs=1.0, window_min=10, suffix="v1")
 
@@ -78,8 +78,9 @@ def interest_select_windows(x, fs, window_min, t=None, suffix=""):
     # ── Path setup ───────────────────────────────────────────────────────
     fs_str      = f"{fs:.2f}"
     win_tag     = f"{window_min:g}min"
-    minutes_dir = os.path.join("DATA", f"{window_min:g}_MINUTES")
-    index_dir   = os.path.join(minutes_dir, win_tag)
+    from Working.Preprocessing.manage_data.load_data import window_root
+    minutes_dir = window_root(window_min, fs)
+    index_dir   = os.path.join(minutes_dir, "labels")
     os.makedirs(index_dir, exist_ok=True)
 
     session_file = os.path.join(index_dir, f"{win_tag}_session_fs_{fs_str}.json")

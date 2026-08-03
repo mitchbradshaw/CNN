@@ -59,7 +59,7 @@ from Working.Detection.analysis.dehshibi_detection_analysis import (
 # Configuration -- edit these
 # =============================================================================
 
-FILENAME = "0.01_percent_M2_concat_fs1.mat"   # any .mat or .npy in DATA/RAW/
+FILENAME = "0.01_percent_M2_concat_fs1.mat"   # any .mat or .npy under DATA/
 MATNAME  = "VECTOR"                            # variable name inside the .mat file
 FS       = 1.0                                 # sampling frequency (Hz)
 
