@@ -192,7 +192,9 @@ DATA/*
 # Results/ IS tracked; these three are not (large binaries / regenerable).
 MATRICES/
 MODELS/
-Plots/
+# Plots/* rather than Plots/ so the README stays tracked (see DATA/ above)
+Plots/*
+!Plots/README.md
 
 # HPC-side output dirs created by job scripts and CFG defaults
 logs/
