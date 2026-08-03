@@ -26,6 +26,9 @@ or technique you used.
 Preprocessing/
   manage_data/     load_raw_data, window save/load, interactive window browser
   window_matrix/   WindowMatrix class, feature-column builders, WM plotting
+  database/        SQLite schema + plain-function queries for recordings,
+                    annotations and reviewed spans (see DATA/README.md's
+                    `db/` entry) — the only DB access point, UI or headless
 Detection/
   analysis/        Dehshibi spike detection, wavelet, entropy, frequency, stats
   matrix_profiling/ stumpy motif/discord/chain plotting

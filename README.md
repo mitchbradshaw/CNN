@@ -23,6 +23,7 @@ four subfolders, reflecting **pipeline stage** rather than technique:
 | [`Pipelines/`](Pipelines/README.md) | End-to-end workflows composing several `Working/` components. Organised by workflow, not stage. |
 | [`Experimentation/`](Experimentation/README.md) | Exploratory and one-off analysis. Not guaranteed to work. Never imported. |
 | [`HPC/`](HPC/README.md) | Thin SLURM job scripts that invoke a `Pipelines/` entry point. |
+| [`UI/`](UI/README.md) | Panel/HoloViews signal viewer and annotation tool. The only place that imports a UI library. |
 | [`DATA/`](DATA/README.md) | Recordings and derived datasets (~2.3 GB, gitignored). |
 | [`Results/`](Results/README.md) | Run outputs, by stage. |
 | [`Plots/`](Plots/README.md) | Saved figures, by stage (gitignored). |
@@ -51,6 +52,9 @@ pip install torch torchvision scikit-image pillow joblib
 
 # only Working/Catalogue/cnn/cnn_gfg.py needs this
 pip install tensorflow
+
+# UI/ — signal viewer and annotation tool (never needed by Working/ or Pipelines/)
+pip install panel holoviews datashader bokeh h5py
 ```
 
 ### 2. Data
@@ -95,6 +99,30 @@ python Pipelines/dataset_build/main.py -freq -entropy -stats
 # build a full feature matrix over a recording (resumable; designed for HPC)
 python Pipelines/window_matrix_build/build_window_matrix.py --status
 ```
+
+### 5. Database / annotation UI
+
+Per-channel `.npy` splits and manually-sorted labels also live in a SQLite
+database (`DATA/db/annotations.sqlite`, gitignored), queried through plain
+functions in [`Working/Preprocessing/database/`](Working/Preprocessing/database)
+so both the UI and headless scripts share one API:
+
+```bash
+# one-time: extract DATA/raw/*.mat into per-channel .npy + `recordings` rows
+python Pipelines/materialize_channels/materialize_channels.py
+
+# import the ~11k manually-sorted 10-minute windows as annotations
+python Pipelines/import_labels/import_10min_labels.py
+
+# browse a channel, see existing labels, and add new ones
+panel serve UI/app.py --show
+```
+
+See [`UI/README.md`](UI/README.md) for the viewer, and the `database`
+module's docstrings for the schema (`recordings`, `reviewed_spans`,
+`annotations` are populated now; `configs`, `runs`, `detections`,
+`encodings`, `motifs` exist for the next phase — algorithm runs, cached
+encodings — so it needs no migration).
 
 The **`WindowMatrix`** ([`Working/Preprocessing/window_matrix/matrix_calc.py`](Working/Preprocessing/window_matrix/matrix_calc.py))
 is the object most analysis flows through: rows are windows keyed by start

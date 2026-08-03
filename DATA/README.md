@@ -14,6 +14,9 @@ DATA/
     M2_aug_concat_fs2.mat                 498 MB
     M4_aug_concat_fs1.mat                 180 MB
 
+  db/                                      annotation database — NOT regenerable
+    annotations.sqlite                     recordings, labels, run/detection tables
+
   derived/                                everything regenerable from raw/ + code
     channels/<recording>/CH<n>.npy          per-channel splits (16 per recording)
     subsamples/                             cut-down .mat subsamples
@@ -45,6 +48,15 @@ DATA/derived/windows/10min_fs1.0/labels/10min_interesting_fs_1.00.mat
 regenerated from `raw/` plus code. Anything under `raw/` cannot be regenerated
 at all — treat it as read-only. `cut_raw_data()` writes subsamples to
 `derived/subsamples/`, never back into `raw/`.
+
+**`db/` is a third category, not a variant of either.** It's not raw (not an
+original recording) and — for the `recordings` table, which just mirrors
+`derived/channels/`, that's fine — but the `annotations` table holds hours of
+manual labelling work that cannot be regenerated from `raw/` + code the way
+everything else under `derived/` can. It's gitignored like the rest of
+`DATA/` (covered by the blanket `DATA/*` rule already), so back it up
+separately if you're not relying on this whole tree being inside a synced
+Drive folder to do that for you.
 
 **2. Provenance is legible in the path.** Recording, window scale, sample rate,
 encoding and class are directory levels, not substrings fused into a filename.
@@ -95,3 +107,5 @@ Keep new recordings uppercase.
   clear what produced it.
 - **Model weights, feature CSVs, figures** -> not here. Those live in
   `MODELS/`, `MATRICES/` and `Plots/` at the repo root (see `Results/README.md`).
+- **Annotations, run/detection records** -> `db/annotations.sqlite`, via
+  `Working/Preprocessing/database/queries.py`. Never written to directly.

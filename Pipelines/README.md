@@ -16,6 +16,8 @@ split into the four stage subfolders. It is organised by workflow instead.
 | `cnn_scoring/` | `score_windows.py` | Scores every consecutive window with a trained fusion CNN, writes a WindowMatrix CSV | `HPC/Catalogue/score_job.sh` |
 | `fusion_prediction/` | `cnn_prediction.py` | Bins the post-window signal change and builds the `fusion_prediction/` image dataset for the prediction CNN | `HPC/Preprocessing/sort_fusion_job.sh` |
 | `matrix_profile/` | `run_matrix_profile.py` | Computes the stumpy matrix profile (GPU `gpu_stump`, CPU fallback) and saves `.npz` to `Results/` | `HPC/Detection/mp_job.sh` |
+| `materialize_channels/` | `materialize_channels.py` | One-time, resumable: splits every `DATA/raw/*.mat` into per-channel `.npy` and records each in the `recordings` table | run by hand |
+| `import_labels/` | `import_10min_labels.py` | Idempotent import of the manually-sorted 10-minute windows into `annotations` + `reviewed_spans` | run by hand |
 
 ## Rules
 
