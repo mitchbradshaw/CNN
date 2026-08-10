@@ -28,6 +28,16 @@ chain would build two half-matrices instead of one whole one.
 
 `execute_recipe` short-circuits on a completed run for the same recipe and
 span, so a resuming job must pass `--force`; the generated chain script does.
+
+Progress
+--------
+`on_progress`/`should_cancel` are plain keyword args on `_run`, not
+`ParamSpec` params — they're execution-time callables, not recipe state, so
+they must never enter the config hash. `Working.execution.execute_recipe`
+forwards them from its own `run_kwargs=` argument (checked against `_run`'s
+signature, so every other adapter is unaffected) — see that function's
+docstring for why this is a second, finer-grained progress channel from its
+own per-STEP `on_progress`, not the same one reused.
 """
 
 import os
@@ -66,7 +76,7 @@ def _selected_stages(catch22, fast_entropy, slow_entropy, cnn, rf):
 def _run(x, t, fs, window_min=10.0, step_frac=1.0, catch22=True,
          fast_entropy=True, slow_entropy=True, cnn=False, rf=False,
          timeout_s=0.0, resume_path="", cnn_model_dir=DEFAULT_CNN_MODEL_DIR,
-         rf_model_path="", partial_tail=False):
+         rf_model_path="", partial_tail=False, on_progress=None, should_cancel=None):
     m = int(round(window_min * 60 * fs))
     if m < WM_MIN_WINDOW_SAMPLES:
         raise ValueError(
@@ -104,6 +114,7 @@ def _run(x, t, fs, window_min=10.0, step_frac=1.0, catch22=True,
         span_start=span_start, timeout_s=(timeout_s or None),
         resume_path=(resume_path or None), cnn_model_dir=cnn_model_dir,
         rf_model_path=(rf_model_path or None), partial_tail=partial_tail,
+        on_progress=on_progress, should_cancel=should_cancel,
     )
 
     return AdapterResult(

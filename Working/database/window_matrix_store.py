@@ -576,20 +576,67 @@ def coverage_for_span(conn, recording_id, span=None, *, step_frac=1.0,
 
     coverage = {}
     for window_min in WM_SCALE_LADDER_MIN:
-        spans = []
-        for r in runs:
-            if not np.isclose(r["window_min"], window_min, rtol=_ISCLOSE_RTOL):
-                continue
-            if not np.isclose(r["step_frac"], step_frac, rtol=_ISCLOSE_RTOL):
-                continue
-            if r["stale"] and not include_stale:
-                continue
-            start, end = r["span"]
-            if clip is not None:
-                start, end = max(start, clip[0]), min(end, clip[1])
-                if end <= start:
-                    continue
-            spans.append((start, end))
+        matches = _matching_wm_spans(runs, window_min, step_frac,
+                                     include_stale=include_stale, clip=clip)
+        spans = [(s, e) for _r, s, e in matches]
         if spans:
             coverage[window_min] = merge_intervals(spans)
+    return coverage
+
+
+def _matching_wm_spans(runs, window_min, step_frac, *, include_stale, clip):
+    """`(run, clipped_start, clipped_end)` for every run in `runs` that
+    matches `(window_min, step_frac)`, isn't stale (unless `include_stale`),
+    and still has positive length after clipping to `clip`. Shared by
+    `coverage_for_span` and `coverage_by_completeness` so the matching rules
+    can't drift apart between the two."""
+    out = []
+    for r in runs:
+        if not np.isclose(r["window_min"], window_min, rtol=_ISCLOSE_RTOL):
+            continue
+        if not np.isclose(r["step_frac"], step_frac, rtol=_ISCLOSE_RTOL):
+            continue
+        if r["stale"] and not include_stale:
+            continue
+        start, end = r["span"]
+        if clip is not None:
+            start, end = max(start, clip[0]), min(end, clip[1])
+            if end <= start:
+                continue
+        out.append((r, start, end))
+    return out
+
+
+def coverage_by_completeness(conn, recording_id, span=None, *, step_frac=1.0,
+                             include_stale=False):
+    """Like `coverage_for_span`, but splits each scale's coverage into
+    `{"complete": [...], "partial": [...]}` merged-interval lists.
+
+    A window matrix's `complete` flag (WINDOW_MATRIX_UI_PROMPT.md §3.4) means
+    every cell was attempted — not that the run is somehow "more present"
+    spatially. So a bucket covered by a `complete` run and one covered by a
+    `partial` run are both genuinely covered; the coverage RIBBON just needs
+    to render them in different colours (§4, §8.3), the same full/partial/gap
+    treatment `UI.plots.build_reviewed_ribbon` already gives reviewed
+    coverage. This is a separate function rather than a parameter on
+    `coverage_for_span` because most callers (e.g. "is there anything at
+    this scale at all") don't care about the split and shouldn't have to
+    unpack a nested dict to find out.
+    """
+    runs = list_wm_runs(conn, recording_id, include_partial=True)
+    clip = None if span is None else (int(span[0]), int(span[1]))
+
+    coverage = {}
+    for window_min in WM_SCALE_LADDER_MIN:
+        matches = _matching_wm_spans(runs, window_min, step_frac,
+                                     include_stale=include_stale, clip=clip)
+        complete = [(s, e) for r, s, e in matches if r["complete"]]
+        partial = [(s, e) for r, s, e in matches if not r["complete"]]
+        entry = {}
+        if complete:
+            entry["complete"] = merge_intervals(complete)
+        if partial:
+            entry["partial"] = merge_intervals(partial)
+        if entry:
+            coverage[window_min] = entry
     return coverage

@@ -351,6 +351,21 @@ WM_INTERACTIVE_BUDGET_S = 60    # <= this: run inline, blocking, progress bar
 WM_BACKGROUND_BUDGET_S = 900    # <= this: background thread + cancel;
                                 #  > this: HPC export only
 
+# ── Window matrix coverage ribbon (UI/plots.py, UI/window_matrix_panel.py)
+#
+# One `hv.Rectangles`-bucketed ribbon pane per ladder scale that has any
+# stored coverage, same bucketing machinery as the reviewed-coverage ribbon
+# (`build_reviewed_ribbon`) applied to `window_matrix_store.
+# coverage_by_completeness` instead of reviewed spans. Defaulted to
+# REVIEWED_COVERAGE_BUCKETS's value rather than a new number: both ribbons
+# bucket the SAME x-range (the current viewport) for the SAME reason
+# (per-bucket fractional coverage, not a raw per-row rectangle), so there is
+# no basis yet for a different resolution — kept as its own constant (not a
+# reused import of REVIEWED_COVERAGE_BUCKETS) because the two ribbons answer
+# unrelated questions and must be free to diverge later without one edit
+# silently retuning the other.
+WM_COVERAGE_RIBBON_BUCKETS = 300
+
 # ── Near-duplicate similarity (Working/database/similarity.py) ────────────
 #
 # Two spans count as near-duplicates when their interval IoU exceeds
