@@ -36,6 +36,39 @@ sbatch HPC/Catalogue/train_job.sh
 `wm_job.sh` resubmits itself until every stage of the window matrix is complete;
 cancel the chain with `scancel <job-id>`.
 
+> **`wm_job.sh` can resubmit forever.** It decides whether to requeue by grepping
+> `build_window_matrix.py --status` for `"not started"` or an `"N / M"` fraction.
+> That script marks a window whose feature function raised with NaN, and treats
+> NaN as "not yet computed" — so one reliably-failing window is never finished,
+> the status string never says DONE, and the chain requeues until someone
+> notices. See `WINDOW_MATRIX_UI_PROMPT.md` §0.2.
+>
+> Generated window-matrix jobs (below) do not have this behaviour: they resubmit
+> on `Pipelines/window_matrix_build/wm_status.py`'s **exit code**, derived from
+> the artifact's own per-cell `computed` mask, and they carry a hard chain cap.
+
+## Generated jobs
+
+`Working/hpc/job_export.py` writes job scripts + recipe JSONs for spans too large
+to run in the UI. They are **generated into the working tree only** — like the
+hand-written scripts, they still have to reach rangpur before `sbatch` can run
+them.
+
+| Function | Output directory | Invokes |
+|---|---|---|
+| `export_mp_job` | `Detection/generated/` | `Pipelines/run_recipe/run_recipe.py --config …` |
+| `export_wm_job` | `Preprocessing/generated/` | `Pipelines/run_recipe/run_recipe.py --config … --force` |
+
+Both go through `run_recipe.py` rather than a stage-specific script, so the
+cluster run registers its own `runs`/`artifacts` rows and the returned artifact
+appears in the UI with no separate import step.
+
+Generated window-matrix jobs take a chain position as `$1` (defaulting to 1) and
+pass `--force`, because `execute_recipe` short-circuits on a completed run for
+the same recipe and span — without it a resuming job would "reuse" the partial
+matrix instead of continuing it. The resume path is baked into the recipe from
+the first export, deliberately, so every job in the chain shares one config hash.
+
 ## Cluster-specific settings you will need to change
 
 These are hardcoded to one account and cluster and are **not** portable:

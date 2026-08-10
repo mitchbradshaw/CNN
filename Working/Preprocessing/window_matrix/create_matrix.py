@@ -87,7 +87,7 @@ def update_randomforest_columns(wm, modelpath, csvfilename, overwrite=False):
 
     # Build (n_valid, 1, win_len) — signal channel only.
     # Skip any trailing windows shorter than win_len (signal runs out at the end).
-    win_len       = wm._window_samples
+    win_len       = wm.window_samples
     windows       = []
     valid_indices = []
     for idx in wm.df.index:

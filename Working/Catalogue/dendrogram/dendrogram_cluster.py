@@ -148,7 +148,9 @@ def preprocess_window_matrix(
     source: Union[pd.DataFrame, str],
     metadata_cols: list[str] | None = None,
     drop_near_constant: bool = True,
-    near_constant_threshold: float = 0.01,
+    near_constant_threshold: float | None = None,
+    near_constant_mode: str = "absolute",
+    correlation_threshold: float | None = 0.99,
     nan_col_threshold: float = 0.5,
     impute_strategy: str = "median",
     warn_high_dim: int = 100,
@@ -166,12 +168,32 @@ def preprocess_window_matrix(
         Defaults to ``_DEFAULT_METADATA_COLS``.  These columns are preserved
         in the returned ``df_metadata`` but excluded from clustering.
     drop_near_constant : bool
-        If True, also remove columns whose normalised standard deviation
-        (std / |mean|) is below ``near_constant_threshold``.  Near-constant
-        features add almost no discriminative signal but inflate distances.
-    near_constant_threshold : float
-        Coefficient-of-variation threshold below which a column is considered
-        near-constant.  Default 0.01 (1 % relative variation).
+        If True, also remove columns whose spread is negligible — see
+        ``near_constant_mode`` for what "negligible" means.
+    near_constant_threshold : float, optional
+        Threshold for the near-constant filter.  ``None`` (default) resolves
+        per mode: ``1e-8`` for ``"absolute"``, ``0.01`` for ``"cv"``.
+    near_constant_mode : {"absolute", "cv"}
+        ``"absolute"`` (default) drops a column whose std is below
+        ``near_constant_threshold`` times its own magnitude scale — i.e.
+        variation at the level of float noise, where StandardScaler's divide
+        by std is numerically meaningless.
+        ``"cv"`` is the original coefficient-of-variation filter, now
+        opt-in: it selects on relative spread, which the StandardScaler step
+        immediately afterwards makes irrelevant, and so was dropping
+        legitimately discriminative features whose mean happened to be large.
+        See ``_remove_near_constant_columns`` for the worked example.
+    correlation_threshold : float, optional
+        Drop one column from any pair whose absolute Pearson correlation
+        exceeds this (default 0.99); ``None`` disables the filter.
+        This is not optional housekeeping on this dataset: every window
+        matrix built so far carries ``cnn_p_*_interesting`` alongside
+        ``cnn_p_*_notinteresting``, which are ``1 - p`` of each other and
+        therefore sit at ``r = -1.0``.  A perfectly anti-correlated pair
+        double-weights that direction in every Euclidean distance, silently
+        biasing the clustering towards the CNN's opinion.  The column that
+        survives is the earlier one in DataFrame order, so the choice is
+        deterministic and the recipe hash keeps describing what ran.
     nan_col_threshold : float
         Columns with a NaN fraction above this value are dropped entirely.
         Default 0.5 — drop columns that are more than 50 % missing.
@@ -289,17 +311,41 @@ def preprocess_window_matrix(
     #    anchor clusters artificially around their single dominant value.
     # ------------------------------------------------------------------
     if drop_near_constant:
+        if near_constant_threshold is None:
+            near_constant_threshold = 1e-8 if near_constant_mode == "absolute" else 0.01
         df_features, dropped_near_constant = _remove_near_constant_columns(
-            df_features, near_constant_threshold
+            df_features, near_constant_threshold, mode=near_constant_mode
         )
         removed_summary["near_constant"] = dropped_near_constant
         if dropped_near_constant:
             log.info(
-                "Dropped %d near-constant column(s) (CV < %.3f): %s",
+                "Dropped %d near-constant column(s) (%s < %g): %s",
                 len(dropped_near_constant),
+                "std/scale" if near_constant_mode == "absolute" else "CV",
                 near_constant_threshold,
                 dropped_near_constant,
             )
+
+    # ------------------------------------------------------------------
+    # 7b. Drop near-duplicate columns
+    #     Why: two columns at |r| ~ 1 contribute the same direction twice to
+    #     every Euclidean distance.  On this dataset that is not a
+    #     hypothetical — cnn_p_X_interesting and cnn_p_X_notinteresting are
+    #     1 - p of each other and sit at r = -1.0 in every existing matrix.
+    # ------------------------------------------------------------------
+    if correlation_threshold is not None:
+        df_features, dropped_correlated = _remove_correlated_columns(
+            df_features, correlation_threshold
+        )
+        removed_summary["correlated"] = dropped_correlated
+        if dropped_correlated:
+            log.info(
+                "Dropped %d column(s) correlated above |r| > %.3f with an earlier "
+                "column: %s",
+                len(dropped_correlated), correlation_threshold,
+                [f"{col} (~{partner})" for col, partner in dropped_correlated],
+            )
+        removed_summary["correlated"] = [col for col, _ in dropped_correlated]
 
     # ------------------------------------------------------------------
     # 8. Handle remaining NaNs
@@ -446,33 +492,139 @@ def _remove_constant_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
 
 
 def _remove_near_constant_columns(
-    df: pd.DataFrame, threshold: float
+    df: pd.DataFrame, threshold: float, mode: str = "absolute",
 ) -> tuple[pd.DataFrame, list[str]]:
     """
-    Drop columns whose coefficient of variation (CV = std / |mean|) is below
-    `threshold`, indicating negligible relative spread.
+    Drop columns with negligible spread.  Two criteria, and which one you
+    want depends on what happens next.
 
-    CV is undefined when the mean is zero.  For zero-mean columns we fall back
-    to comparing the plain std against `threshold * global_scale`, where
-    `global_scale` is the median absolute value across all numeric cells.
-    This avoids both false positives and false negatives near zero.
+    mode="absolute" (default)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    Drop columns whose standard deviation is below `threshold` times the
+    column's own magnitude scale (median |value|, or 1.0 for an all-zero
+    column).  This catches exactly what the constant-column filter is for —
+    a column whose variation is at the level of float noise, where
+    StandardScaler's divide by std is numerically meaningless — and nothing
+    else.
+
+    mode="cv"  (the original behaviour, now opt-in)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Drop columns whose coefficient of variation (std / |mean|) is below
+    `threshold`.
+
+    Why the default changed
+    ~~~~~~~~~~~~~~~~~~~~~~~
+    The step immediately after this one is StandardScaler, which z-scores
+    every surviving column to mean 0, std 1 — so RELATIVE spread has no
+    bearing on how much a column contributes to the distance.  A Catch22
+    feature centred at 100 with std 0.9 has CV 0.009 and was being dropped
+    under the old default, despite being perfectly discriminative once
+    scaled.  Conversely a column centred near zero survived on CV grounds
+    however tiny its absolute variation.  The filter was selecting on a
+    quantity the pipeline then makes irrelevant.
+
+    "cv" remains available for a caller who genuinely wants a
+    relative-spread filter (e.g. reporting on unscaled features), but it
+    must be asked for.
     """
-    means = df.mean()
-    stds = df.std(ddof=0)
-    global_scale = df.abs().values.flatten()
-    global_scale = float(np.nanmedian(global_scale[global_scale > 0])) or 1.0
+    if mode not in ("absolute", "cv"):
+        raise ValueError(f"mode must be 'absolute' or 'cv', got {mode!r}")
 
+    stds = df.std(ddof=0)
     near_constant: list[str] = []
+
+    if mode == "cv":
+        means = df.mean()
+        # Median over a subsample rather than df.abs().values.flatten(),
+        # which materialised a full copy of the matrix (27k x 33 here, and
+        # far worse with vector columns) to compute one scalar.
+        global_scale = _magnitude_scale(df.values)
+        for col in df.columns:
+            m, s = means[col], stds[col]
+            cv = s / abs(m) if abs(m) > 1e-12 else s / global_scale
+            if cv < threshold:
+                near_constant.append(col)
+        return df.drop(columns=near_constant), near_constant
+
     for col in df.columns:
-        m, s = means[col], stds[col]
-        if abs(m) > 1e-12:
-            cv = s / abs(m)
-        else:
-            cv = s / global_scale
-        if cv < threshold:
+        scale = _magnitude_scale(df[col].values)
+        if stds[col] < threshold * scale:
             near_constant.append(col)
 
     return df.drop(columns=near_constant), near_constant
+
+
+def _fmt_cophenetic(value: float | None) -> str:
+    """Format a cophenetic correlation for a title/report line.
+
+    `cluster_window_matrix` returns None when the coefficient was not
+    computed (it needs the full pairwise distance array, which ward-linkage
+    runs on a large matrix deliberately never allocate).  Every display site
+    goes through here so a skipped diagnostic reads as "not computed"
+    rather than raising a TypeError inside an f-string, or — worse — being
+    coerced to 0.000 and read as a terrible fit.
+    """
+    return "not computed" if value is None else f"{value:.3f}"
+
+
+def _remove_correlated_columns(
+    df: pd.DataFrame, threshold: float
+) -> tuple[pd.DataFrame, list[tuple[str, str]]]:
+    """
+    Drop the later column of any pair whose absolute Pearson correlation
+    exceeds `threshold`.
+
+    Returns the reduced frame and a list of `(dropped_column, kept_partner)`
+    pairs, so the audit trail says WHICH column each drop was redundant with
+    rather than only that something was dropped.
+
+    Column order decides which of a pair survives — deterministic on purpose.
+    A "keep the one with higher variance" rule would be defensible but makes
+    the surviving column set depend on the data, which means two runs over
+    overlapping spans could disagree about which columns exist.
+
+    NaNs are handled by pandas' pairwise-complete `corr()`.  A pair with
+    fewer than two jointly-present observations yields NaN and is never
+    dropped — an unknown correlation is not a high one.
+    """
+    if df.shape[1] < 2:
+        return df, []
+
+    corr = df.corr().abs()
+    columns = list(df.columns)
+    dropped: list[tuple[str, str]] = []
+    kept: list[str] = []
+
+    for col in columns:
+        partner = None
+        for earlier in kept:
+            r = corr.at[earlier, col]
+            if pd.notna(r) and r > threshold:
+                partner = earlier
+                break
+        if partner is None:
+            kept.append(col)
+        else:
+            dropped.append((col, partner))
+
+    return df[kept], dropped
+
+
+def _magnitude_scale(values: np.ndarray, max_cells: int = 200_000) -> float:
+    """Median absolute non-zero magnitude of `values`, over a subsample when
+    the array is large.  Returns 1.0 for an all-zero / all-NaN input so
+    callers can divide by it unconditionally."""
+    flat = np.asarray(values, dtype=float).ravel()
+    if flat.size > max_cells:
+        # Deterministic stride rather than a random sample — the same input
+        # must give the same dropped-column list on every run, or a recipe
+        # hash stops describing what actually ran.
+        flat = flat[:: int(np.ceil(flat.size / max_cells))]
+    flat = np.abs(flat)
+    flat = flat[np.isfinite(flat) & (flat > 0)]
+    if flat.size == 0:
+        return 1.0
+    return float(np.median(flat)) or 1.0
 
 
 def _handle_nans(
@@ -525,6 +677,7 @@ def _print_summary(
         "nan_heavy":          "NaN-heavy dropped",
         "constant":           "Constant dropped",
         "near_constant":      "Near-constant dropped",
+        "correlated":         "Correlated dropped",
     }
     for key, label in stage_labels.items():
         cols = removed_summary.get(key, [])
@@ -866,6 +1019,21 @@ _EUCLIDEAN_ONLY_METHODS: frozenset[str] = frozenset({"ward", "centroid", "median
 # memory-intensive (1 k windows → ~4 MB, 10 k → ~400 MB, 30 k → ~3.6 GB).
 _PDIST_MEMORY_WARN_MB: float = 400.0
 
+# Hard ceiling: above this, refuse rather than warn-and-proceed. The real
+# window matrix in this repo is 27,118 windows, whose condensed distance
+# array is 3.7e8 float64 = 2.9 GB — allocated BEFORE linkage starts, and
+# previously allocated unconditionally even for ward (which scipy computes
+# from X directly and does not need it). A warning followed by a MemoryError
+# a minute later is not a useful diagnostic; refusing up front with the
+# alternatives named is.
+_PDIST_MEMORY_MAX_MB: float = 2048.0
+
+# Above this many windows, silhouette is computed on a random subsample
+# rather than every point. The exact score needs all n(n-1)/2 distances;
+# the subsampled estimate needs n*k and is well within noise for cluster
+# QC purposes at k in the thousands.
+_SILHOUETTE_SAMPLE_MAX_N: int = 5000
+
 # Above this, skip optimal_leaf_ordering (O(n² log n) time).
 _OPTIMAL_ORDER_MAX_N: int = 2000
 
@@ -896,14 +1064,17 @@ class ClusterResult:
         that similar windows are adjacent.
     cluster_counts : dict[int, int]
         Mapping cluster_id → number of windows.  Empty if labels is None.
-    cophenetic_r : float
+    cophenetic_r : float or None
         Cophenetic correlation coefficient — how well the dendrogram
         preserves the original pairwise distances.  Values above 0.75
-        are acceptable; above 0.85 is good.
+        are acceptable; above 0.85 is good.  None when it was not computed
+        (see `compute_cophenetic`) — distinct from a low value.
     silhouette : float or None
         Mean silhouette score across all windows (sklearn).  Ranges from
         -1 (wrong cluster) to +1 (dense, well-separated clusters).
-        None if labels is None or n is too large for efficient computation.
+        None if labels is None.  Estimated on a random subsample of
+        `_SILHOUETTE_SAMPLE_MAX_N` windows above that size; the
+        `silhouette_sample_size` diagnostic records which.
     n_windows : int
         Number of original windows (leaves in the dendrogram).
     n_features : int
@@ -923,7 +1094,7 @@ class ClusterResult:
     df_membership: pd.DataFrame | None
     leaf_order: np.ndarray
     cluster_counts: dict[int, int]
-    cophenetic_r: float
+    cophenetic_r: float | None
     silhouette: float | None
     n_windows: int
     n_features: int
@@ -944,6 +1115,7 @@ def cluster_window_matrix(
     n_clusters: int | None = None,
     distance_cutoff: float | None = None,
     optimal_ordering: bool = True,
+    compute_cophenetic: bool | None = None,
 ) -> ClusterResult:
     """
     Perform hierarchical agglomerative clustering on a preprocessed window matrix.
@@ -975,10 +1147,26 @@ def cluster_window_matrix(
         If True, reorder leaves to minimise the sum of adjacent-leaf distances.
         Makes dendrograms and heatmaps much more interpretable.
         Automatically disabled for n > 2000 with a warning (O(n² log n) cost).
+    compute_cophenetic : bool, optional
+        Whether to compute the cophenetic correlation.  It requires the full
+        pairwise distance array, which ``method="ward"`` otherwise never
+        needs — so on a large matrix asking for this diagnostic is what
+        decides whether the run fits in memory at all.  ``None`` (default)
+        computes it only when that array is affordable
+        (``_PDIST_MEMORY_WARN_MB``); ``True`` forces it; ``False`` skips it.
+        When skipped, ``ClusterResult.cophenetic_r`` is ``None`` — not 0.0,
+        which would read as "the tree is a terrible fit" rather than
+        "nobody measured".
 
     Returns
     -------
     ClusterResult
+
+    Raises
+    ------
+    MemoryError
+        When the requested combination needs a pairwise distance array above
+        ``_PDIST_MEMORY_MAX_MB``.  The message names the cheaper options.
     """
     X = result.X_scaled
     n, p = X.shape
@@ -1003,22 +1191,71 @@ def cluster_window_matrix(
         raise ValueError("Provide at most one of n_clusters or distance_cutoff, not both.")
 
     # ------------------------------------------------------------------
-    # Memory estimate for pairwise distance matrix
+    # Decide whether the condensed distance matrix is needed AT ALL, before
+    # allocating it.
+    #
+    # It was previously computed unconditionally — including for ward, which
+    # scipy computes from X directly via the Lance-Williams update and never
+    # touches an explicit distance array for. On the real 27,118-window
+    # matrix that is a 2.9 GB allocation to feed a linkage call that does not
+    # want it, and the run dies before producing anything.
+    #
+    # Three consumers, each optional:
+    #   - non-ward linkage        (required)
+    #   - optimal leaf ordering   (only attempted below _OPTIMAL_ORDER_MAX_N)
+    #   - cophenetic correlation  (diagnostic; skipped when unaffordable)
     # ------------------------------------------------------------------
     memory_mb = n * (n - 1) / 2 * 8 / (1024 ** 2)
-    if memory_mb > _PDIST_MEMORY_WARN_MB:
+
+    needs_pdist_for_linkage = method != "ward"
+    do_optimal = optimal_ordering and n <= _OPTIMAL_ORDER_MAX_N
+    if optimal_ordering and not do_optimal:
         log.warning(
-            "Computing pairwise distances for %d windows requires ~%.0f MB. "
-            "Consider applying PCA first to reduce dimensionality, or subsample.",
-            n, memory_mb,
+            "Skipping optimal leaf ordering: n=%d exceeds threshold %d (O(n² log n) cost). "
+            "Pass optimal_ordering=False to silence this warning.",
+            n, _OPTIMAL_ORDER_MAX_N,
         )
 
-    # ------------------------------------------------------------------
-    # Pairwise condensed distance matrix
-    # Computed once; reused for cophenet, optimal ordering, and non-ward linkage.
-    # ------------------------------------------------------------------
-    log.info("Computing pairwise %s distances for %d windows × %d features …", metric, n, p)
-    dist_condensed = ssd.pdist(X, metric=metric)
+    if compute_cophenetic is None:
+        want_cophenetic = memory_mb <= _PDIST_MEMORY_WARN_MB
+        if not want_cophenetic:
+            log.info(
+                "Skipping cophenetic correlation: it needs the full pairwise "
+                "distance array (~%.0f MB at n=%d). Pass compute_cophenetic=True "
+                "to force it.", memory_mb, n,
+            )
+    else:
+        want_cophenetic = bool(compute_cophenetic)
+
+    needs_pdist = needs_pdist_for_linkage or do_optimal or want_cophenetic
+
+    if needs_pdist and memory_mb > _PDIST_MEMORY_MAX_MB:
+        reasons = []
+        if needs_pdist_for_linkage:
+            reasons.append(f"linkage method '{method}' requires explicit distances")
+        if do_optimal:
+            reasons.append("optimal_ordering=True")
+        if want_cophenetic:
+            reasons.append("compute_cophenetic=True")
+        raise MemoryError(
+            f"Clustering {n} windows this way needs a pairwise distance array of "
+            f"~{memory_mb:.0f} MB, above the {_PDIST_MEMORY_MAX_MB:.0f} MB ceiling "
+            f"({'; '.join(reasons)}). Options, cheapest first: "
+            "method='ward' with optimal_ordering=False and compute_cophenetic=False "
+            "(needs no distance array at all); reduce dimensionality with PCA "
+            "(does not help here — the cost is in n, not p); or subsample the "
+            "windows before clustering."
+        )
+    if needs_pdist and memory_mb > _PDIST_MEMORY_WARN_MB:
+        log.warning(
+            "Pairwise distances for %d windows require ~%.0f MB.", n, memory_mb,
+        )
+
+    dist_condensed = None
+    if needs_pdist:
+        log.info("Computing pairwise %s distances for %d windows × %d features …",
+                 metric, n, p)
+        dist_condensed = ssd.pdist(X, metric=metric)
 
     # ------------------------------------------------------------------
     # Linkage matrix
@@ -1036,30 +1273,26 @@ def cluster_window_matrix(
     # Cophenetic correlation
     # Measures how well the dendrogram preserves pairwise distances.
     # c close to 1 means the tree is a faithful representation of the data.
+    # None when it was skipped — NOT 0.0, which would read as "the tree is
+    # a terrible representation" rather than "nobody measured".
     # ------------------------------------------------------------------
-    c, _ = sch.cophenet(Z, dist_condensed)
-    log.info("Cophenetic correlation: %.4f", c)
-    if c < 0.75:
-        log.warning(
-            "Low cophenetic correlation (%.3f). The dendrogram may not faithfully "
-            "represent the pairwise distances.  Consider a different linkage method "
-            "or applying PCA before clustering.", c,
-        )
+    c = None
+    if want_cophenetic and dist_condensed is not None:
+        c, _ = sch.cophenet(Z, dist_condensed)
+        c = float(c)
+        log.info("Cophenetic correlation: %.4f", c)
+        if c < 0.75:
+            log.warning(
+                "Low cophenetic correlation (%.3f). The dendrogram may not faithfully "
+                "represent the pairwise distances.  Consider a different linkage method "
+                "or applying PCA before clustering.", c,
+            )
 
     # ------------------------------------------------------------------
     # Optimal leaf ordering
     # Reorders leaves to minimise the sum of adjacent-leaf distances, making
     # the dendrogram and any heatmap reordering visually coherent.
     # ------------------------------------------------------------------
-    do_optimal = optimal_ordering
-    if do_optimal and n > _OPTIMAL_ORDER_MAX_N:
-        log.warning(
-            "Skipping optimal leaf ordering: n=%d exceeds threshold %d (O(n² log n) cost). "
-            "Pass optimal_ordering=False to silence this warning.",
-            n, _OPTIMAL_ORDER_MAX_N,
-        )
-        do_optimal = False
-
     if do_optimal:
         log.info("Computing optimal leaf ordering …")
         Z_ordered = sch.optimal_leaf_ordering(Z, dist_condensed)
@@ -1099,15 +1332,28 @@ def cluster_window_matrix(
         # This is the expected symptom when outliers dominate the merge order.
         _check_cluster_imbalance(cluster_counts, n, method)
 
-        # Silhouette score — skip for very large n (O(n²) memory)
-        if memory_mb <= _PDIST_MEMORY_WARN_MB and n_found > 1:
-            dist_sq = ssd.squareform(dist_condensed)
-            sil = float(silhouette_score(dist_sq, labels, metric="precomputed"))
-            log.info("Mean silhouette score: %.4f", sil)
-        elif n_found <= 1:
+        # Silhouette score.
+        #
+        # Previously this called ssd.squareform(dist_condensed) and passed
+        # metric="precomputed" — a SECOND n² allocation, at double the size
+        # of the condensed one it was built from, on top of a distance array
+        # that (see above) may not even exist any more. sklearn computes
+        # silhouette from raw features in chunks, so passing X directly is
+        # O(n·chunk) rather than O(n²), and subsampling caps it outright.
+        if n_found <= 1:
             log.info("Silhouette score not computed: only 1 cluster.")
         else:
-            log.info("Silhouette score skipped: distance matrix too large (%.0f MB).", memory_mb)
+            sample_size = None if n <= _SILHOUETTE_SAMPLE_MAX_N else _SILHOUETTE_SAMPLE_MAX_N
+            sil = float(silhouette_score(
+                X, labels, metric=metric,
+                sample_size=sample_size,
+                random_state=0 if sample_size else None,
+            ))
+            if sample_size:
+                log.info("Mean silhouette score: %.4f (estimated on %d of %d windows)",
+                         sil, sample_size, n)
+            else:
+                log.info("Mean silhouette score: %.4f", sil)
 
         # Membership table: start_idx -> cluster [+ metadata]
         df_membership = pd.DataFrame(
@@ -1143,6 +1389,11 @@ def cluster_window_matrix(
     diagnostics = {
         "n_duplicate_rows": n_dupes,
         "memory_mb": round(memory_mb, 2),
+        "pdist_computed": dist_condensed is not None,
+        "cophenetic_computed": c is not None,
+        "silhouette_sample_size": (
+            None if n <= _SILHOUETTE_SAMPLE_MAX_N else _SILHOUETTE_SAMPLE_MAX_N
+        ),
         "optimal_ordering_performed": do_optimal,
         "merge_distances_min": float(merge_distances.min()),
         "merge_distances_max": float(merge_distances.max()),
@@ -1164,7 +1415,7 @@ def cluster_window_matrix(
         df_membership=df_membership,
         leaf_order=leaf_order,
         cluster_counts=cluster_counts,
-        cophenetic_r=float(c),
+        cophenetic_r=c,
         silhouette=sil,
         n_windows=n,
         n_features=p,
@@ -1310,6 +1561,17 @@ def find_outliers(
     -------
     pd.DataFrame indexed by start_idx, sorted by distance descending.
     Columns: norm_distance, z_score, is_outlier.
+
+    A caveat on the threshold
+    -------------------------
+    ``z_score`` here is ``(d - mean(d)) / std(d)`` over distances from the
+    centroid.  That distribution is right-skewed BY CONSTRUCTION — it is a
+    norm of squared terms, bounded below by zero and unbounded above — so a
+    symmetric ``z > z_threshold`` cut is not the "0.1 % of a normal
+    distribution" it looks like, and systematically over-flags the upper
+    tail.  For a defensible false-positive rate, prefer a quantile of
+    ``norm_distance`` directly.  The z-score column is kept because it is
+    what the existing analysis scripts compare against.
     """
     X = preprocess_result.X_scaled
     p = X.shape[1]
@@ -1495,7 +1757,7 @@ def cluster_summary(cluster_result: ClusterResult) -> None:
     print(f"  Linkage method   : {cr.linkage_method}")
     print(f"  Distance metric  : {cr.distance_metric}")
     print(line)
-    print(f"  Cophenetic r     : {cr.cophenetic_r:.4f}   (>0.75 acceptable, >0.85 good)")
+    print(f"  Cophenetic r     : {_fmt_cophenetic(cr.cophenetic_r)}   (>0.75 acceptable, >0.85 good)")
     if cr.silhouette is not None:
         print(f"  Silhouette score : {cr.silhouette:.4f}   (>0.5 reasonable, >0.7 strong)")
     else:
@@ -1862,7 +2124,7 @@ def plot_dendrogram(
         n_shown = n if n <= n_leaves else n_leaves
         title = (f"Dendrogram  |  {n} windows  |  "
                  f"{cluster_result.linkage_method} linkage  |  "
-                 f"coph. r={cluster_result.cophenetic_r:.3f}  |  "
+                 f"coph. r={_fmt_cophenetic(cluster_result.cophenetic_r)}  |  "
                  f"showing last {n_shown} merges")
     ax.set_title(title, color=fg, fontsize=12, pad=12)
 
@@ -2237,7 +2499,7 @@ def plot_cluster_heatmap(
     ax_heat.set_title(
         f"Clustered feature heatmap  |  "
         f"{cluster_result.linkage_method} linkage, "
-        f"coph.r={cluster_result.cophenetic_r:.3f}  |  "
+        f"coph.r={_fmt_cophenetic(cluster_result.cophenetic_r)}  |  "
         f"clipped +/-{clip_sigma:.0f}s",
         color="#eeeeee", fontsize=10, pad=8,
     )
@@ -2446,7 +2708,7 @@ def interactive_cluster_browser(
             f"k = {k_now} clusters   |   "
             f"Cluster {cid}/{k_now}   |   "
             f"{count} windows  ({pct:.1f}%)   |   "
-            f"cophenetic r = {cluster_result.cophenetic_r:.3f}"
+            f"cophenetic r = {_fmt_cophenetic(cluster_result.cophenetic_r)}"
         )
 
     # ---- Full redraw ------------------------------------------------------

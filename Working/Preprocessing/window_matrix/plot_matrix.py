@@ -80,8 +80,11 @@ def plot_fusion_prediction_v1_error(wm, filename, TIMESCALE, FS, matname="VECTOR
 
 def plot_wm_signal(wm):
     x = wm.get_entire_signal()
-    fs = wm._fs
-    t = np.linspace(0,len(x)*fs,len(x))
+    fs = wm.fs
+    # Duration is len(x) / fs, NOT len(x) * fs. The original multiplied,
+    # which is accidentally correct at fs=1 (the sample rate this repo
+    # mostly runs at) and 4x wrong at the fs=0.25 outputs.
+    t = np.arange(len(x)) / fs
     py.plot(t/3600,x*1000)
     py.xlabel("Time (hr)")
     py.ylabel("Signal (mV)")
@@ -163,9 +166,9 @@ def plot_singlevalue_columns(wm, colnames=None, overlay=False, figsize=None):
     if not cols:
         raise ValueError("No scalar numeric columns found in WindowMatrix.")
 
-    x           = wm._x
-    fs          = wm._fs
-    win_samples = wm._window_samples
+    x           = wm.get_entire_signal()
+    fs          = wm.fs
+    win_samples = wm.window_samples
     t_sig       = np.arange(len(x)) / fs / 3600.0          # hours
     starts      = wm.df.index.to_numpy()
     t_mid       = (starts + win_samples / 2) / fs / 3600.0  # window mid-points, hours
