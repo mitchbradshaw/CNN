@@ -1,35 +1,54 @@
 """
-wm_testing.py
-=============
-HPC-ready window-matrix builder with checkpoint / resume support.
+build_window_matrix.py
+========================
+DEPRECATED thin shim over `Working.Preprocessing.window_matrix.build.
+build_window_matrix` + `Working.database.window_matrix_store.save_wm`.
 
-Computes on M2_concat_fs1_CH{CH}.npy (250+ hours at 1 Hz):
-  Stage 1  — 22 Catch22 summary statistics
-  Stage 2  — 4 fast entropy measures (Shannon, SVD, spectral, permutation)
-  Stage 3  — 2 slow entropy measures (sample, approximate)  [O(n²) per window]
-  Stage 4  — CNN confidence scores for all 4 gramian image types
-  Stage 5  — Random-forest class probabilities (optional)
+This used to be the whole builder: a standalone script with `CH`/
+`FILENAME`/`WINSIZE`/`FS`/`STEPFRAC` as module-level constants edited per
+job, checkpointing to a `MATRICES/*.csv` file, and deciding what still
+needed computing by looking for NaN in the first column of each stage.
 
-Checkpoint / resume
--------------------
-Progress is flushed to MATRICES/<CSVFILE> after every BATCH_SIZE windows.
-If elapsed time exceeds TIMEOUT_MIN the script saves and exits cleanly so a
-subsequent HPC job can resume by running the same command again — any column
-with no NaN values is considered done and will be skipped automatically.
+That NaN check is WINDOW_MATRIX_UI_PROMPT.md §0.2's bug: `compute_incremental`
+also WROTE NaN when a feature function raised, so "not yet computed" and
+"computed, and the answer is NaN" were the same value, and a window that
+reliably raised (a flat segment with no matching template for sample
+entropy, a channel gap, ...) was retried on every resumed job forever. Never
+marked done, so `--status` never reported DONE for that stage, so
+`HPC/Preprocessing/wm_job.sh` — which decided whether to resubmit by
+grepping `--status` output for "not started" or a partial fraction — kept
+resubmitting the chain indefinitely. See WINDOW_MATRIX_UI_PROMPT.md §0.2 and
+§5 for the full account; the fix lives in the storage format
+(`window_matrix_store`'s explicit `computed` boolean mask, distinct from the
+values) and in `wm_status.py` (an EXIT CODE derived from that mask, not a
+grepped string), not in this script — leaving the old NaN-sentinel logic
+here next to the fixed implementation is how the bug comes back, so it has
+been deleted rather than patched.
+
+This file now only:
+  - parses the same CLI flags real jobs already invoke it with, so nothing
+    that calls it breaks;
+  - resolves the (recording, geometry) they describe;
+  - calls the real builder and the real storage writer;
+  - registers a `configs`/`runs`/`artifacts` row the same way a
+    `run_recipe.py`/UI run would, so a build kicked off from here is visible
+    in the ladder and coverage ribbons exactly like any other run.
+
+Prefer `Pipelines/run_recipe/run_recipe.py` directly (or the UI's Run panel)
+for anything new — this script exists for backward compatibility with
+existing job scripts/muscle memory only.
 
 Usage
 -----
-  python wm_testing.py                       # first run or resume from checkpoint
-  python wm_testing.py --reset               # delete checkpoint and start fresh
-  python wm_testing.py --status              # print completion report and exit
-  python wm_testing.py --timeout 90          # override timeout (minutes)
-  python wm_testing.py --no-cnn              # skip all CNN stages
-  python wm_testing.py --no-slow-entropy     # skip sample / approximate entropy
+  python Pipelines/window_matrix_build/build_window_matrix.py                # build/resume
+  python Pipelines/window_matrix_build/build_window_matrix.py --status       # report and exit
+  python Pipelines/window_matrix_build/build_window_matrix.py --reset        # delete the artifact, start fresh
+  python Pipelines/window_matrix_build/build_window_matrix.py --timeout 90
+  python Pipelines/window_matrix_build/build_window_matrix.py --ch 5 --winsize 60 --fs 1.0
+  python Pipelines/window_matrix_build/build_window_matrix.py --no-cnn --no-slow-entropy --no-rf
 """
 
 # ── Repo-root bootstrap ───────────────────────────────────────────────────────
-# Makes `Working.*` / `Pipelines.*` importable when this file is run directly.
-# Walks up to the directory containing Working/, so it survives future moves.
 import sys as _sys
 from pathlib import Path as _Path
 _REPO_ROOT = _Path(__file__).resolve().parent
@@ -40,486 +59,214 @@ if str(_REPO_ROOT) not in _sys.path:
 
 
 import argparse
-import logging
 import os
 import sys
-import time
 
 import numpy as np
 
-from Working.Preprocessing.window_matrix.matrix_calc import WindowMatrix, create_matrix_at_timescale, load_matrix
-from Working.Preprocessing.manage_data.load_data import load_raw_data
-from Working.Detection.analysis.entropy_analysis import (
-    _shannon_entropy,
-    _svd_entropy,
-    _sample_entropy,
-    _spectral_entropy,
-    _permutation_entropy,
-    _approximate_entropy,
+from Working.database import queries as q
+from Working.database import window_matrix_store as store
+from Working.database.matrix_profile_store import compute_data_sha1
+from Working.database.runs import get_or_create_config, insert_artifact, insert_run, update_run
+from Working.database.schema import init_db
+from Working.Preprocessing.window_matrix.build import build_window_matrix as _build_wm
+from Working.recipes import make_recipe
+
+# Defaults only now, not the whole job's identity — every one of these is a
+# CLI flag (`--ch`/`--winsize`/`--fs`/`--stepfrac`) so a job no longer needs
+# a source edit, which is exactly what `HPC/README.md` says a generated job
+# must not require.
+CH = 2
+WINSIZE = 10.0
+FS = 1.0
+STEPFRAC = 1.0
+DEFAULT_TIMEOUT_MIN = 19.0
+DEFAULT_CNN_MODEL_DIR = "models"
+
+_DEPRECATION_NOTICE = (
+    "[build_window_matrix.py] DEPRECATED: this is a thin compatibility shim. "
+    "Prefer `Pipelines/run_recipe/run_recipe.py --config <recipe.json>` "
+    "(what `Working.hpc.job_export.export_wm_job` generates) or the UI's Run "
+    "panel — WINDOW_MATRIX_UI_PROMPT.md §0.2 / §5."
 )
-from Working.Detection.aeon_features.transformations import catch22_features, CATCH22_FEATURE_NAMES
-
-# ===========================================================================
-# Config — edit these to match your dataset and HPC environment
-# ===========================================================================
-
-CH       = 2
-FILENAME = f"M2_concat_fs1_CH{CH}.npy"   # resolved under DATA/derived/channels/
-WINSIZE  = 10     # window length in minutes
-FS       = 1.0    # sample rate (Hz)
-STEPFRAC = 1.0    # 1.0 = non-overlapping windows; 0.5 = 50 % overlap
-
-CSVFILE  = f"M2_concat_fs1_CH{CH}_WIN{WINSIZE}min_STEP{int(STEPFRAC * 100)}pct.csv"
-
-# Stop computing and save if this many minutes have elapsed.
-# Set a few minutes below your HPC job time-limit to leave cleanup headroom.
-TIMEOUT_MIN = 19
-
-# Windows processed between each CSV save (larger = fewer I/O writes but
-# more re-work if the job is killed mid-batch)
-BATCH_SIZE     = 50
-CNN_BATCH_SIZE = 32   # windows per GPU forward pass
-
-# CNN model paths — set any entry to None to skip that image type
-CNN_MODELS = {
-    "fusion":     "models/fusion_cnn.pth",
-    "GASF":       "models/GASF_cnn.pth",
-    "GADF":       "models/GADF_cnn.pth",
-    "recurrence": "models/recurrence_cnn.pth",
-}
-
-# Path to a saved Random-Forest joblib pipeline, or None to skip
-RF_MODEL_PATH: str | None = None   # e.g. "models/rf_pipeline.joblib"
-
-# ===========================================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)s  %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-log = logging.getLogger("wm_builder")
-
-CSV_PATH = os.path.join("MATRICES", CSVFILE)
 
 
-# ---------------------------------------------------------------------------
-# Timeout manager
-# ---------------------------------------------------------------------------
+def _resolve_recording(conn, args):
+    """This script's own historical `FILENAME = f"M2_concat_fs1_CH{CH}.npy"`
+    was a bare file path (`load_raw_data` never touched the DB); the
+    `recordings` table `Pipelines.materialize_channels` actually populates
+    keys on `source_file` as the ORIGINAL shared .mat basename (e.g.
+    `M2_concat_fs1.mat`, no channel in the name) with `channel` as its own
+    column — so a per-channel-styled filename's `_CH{ch}` suffix has to be
+    stripped before it means anything as a DB lookup. Tries both spellings
+    (with and without the suffix) rather than assuming either convention."""
+    filename = args.filename or f"M2_concat_fs1_CH{args.ch}.npy"
+    stem = os.path.splitext(filename)[0]
+    suffix = f"_CH{args.ch}"
+    stems = [stem, stem[: -len(suffix)]] if stem.endswith(suffix) else [stem]
 
-class TimeoutManager:
-    def __init__(self, timeout_minutes: float):
-        self._start    = time.time()
-        self._deadline = self._start + timeout_minutes * 60
-
-    def elapsed_min(self) -> float:
-        return (time.time() - self._start) / 60
-
-    def remaining_min(self) -> float:
-        return max(0.0, (self._deadline - time.time()) / 60)
-
-    def is_expired(self) -> bool:
-        return time.time() >= self._deadline
-
-
-# ---------------------------------------------------------------------------
-# Load or create window matrix
-# ---------------------------------------------------------------------------
-
-def load_or_create_wm() -> WindowMatrix:
-    log.info("Loading signal: %s", FILENAME)
-    x, _ = load_raw_data(FILENAME, FS)
-    n_hours = len(x) / FS / 3600
-    log.info("  %d samples  |  %.1f h  |  fs=%.1f Hz", len(x), n_hours, FS)
-
-    if os.path.exists(CSV_PATH):
-        log.info("Checkpoint found: %s", CSV_PATH)
-        wm = load_matrix(CSV_PATH, x, WINSIZE, FS)
-    else:
-        log.info("No checkpoint — creating fresh window matrix")
-        wm = create_matrix_at_timescale(STEPFRAC, x, WINSIZE, FS)
-        wm.save_window(CSVFILE)
-
-    log.info("  %d windows  |  %d columns already present", len(wm), len(wm.columns))
-    return wm
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _pending(wm: WindowMatrix, first_col: str) -> list[int]:
-    """Windows that still need computing (NaN in first_col, or col absent)."""
-    if first_col not in wm.df.columns:
-        return list(wm.df.index)
-    return wm.df.index[wm.df[first_col].isna()].tolist()
-
-
-def _is_complete(wm: WindowMatrix, col_names: list[str]) -> bool:
-    return (
-        all(c in wm.df.columns for c in col_names)
-        and not wm.df[col_names].isna().any().any()
+    for candidate in stems:
+        recording = q.get_recording(conn, f"{candidate}.mat", args.ch) or q.get_recording(conn, candidate, args.ch)
+        if recording is not None:
+            return recording
+    raise SystemExit(
+        f"No recording registered for channel {args.ch} matching '{filename}'. "
+        "Materialise it first (Pipelines/materialize_channels) or use "
+        "run_recipe.py / the UI directly."
     )
 
 
-def _ensure_cols(wm: WindowMatrix, col_names: list[str]) -> None:
-    for c in col_names:
-        if c not in wm.df.columns:
-            wm.df[c] = np.nan
+def _artifact_path(recording, args):
+    stem = os.path.splitext(recording["source_file"])[0]
+    name = store.artifact_name(stem, recording["channel"], args.winsize, args.stepfrac)
+    return os.path.join(store.DEFAULT_RESULTS_DIR, f"{name}.npz")
 
 
-# ---------------------------------------------------------------------------
-# Generic incremental computation (scalar or fixed-length vector)
-# ---------------------------------------------------------------------------
-
-def compute_incremental(
-    wm:         WindowMatrix,
-    stage_name: str,
-    col_names:  list[str],
-    fn,                         # fn(signal_1d) → scalar  or  ndarray aligned with col_names
-    timeout:    TimeoutManager,
-) -> bool:
-    """
-    Compute missing values window-by-window, saving a checkpoint after every
-    BATCH_SIZE windows.
-
-    Returns True if the stage is fully complete, False if timeout stopped it.
-    """
-    _ensure_cols(wm, col_names)
-    todo = _pending(wm, col_names[0])
-
-    if not todo:
-        log.info("[%s] complete — skipping", stage_name)
-        return True
-
-    scalar   = len(col_names) == 1
-    n_total  = len(wm.df)
-    n_before = n_total - len(todo)
-    log.info("[%s] %d / %d windows pending", stage_name, len(todo), n_total)
-
-    for batch_start in range(0, len(todo), BATCH_SIZE):
-        if timeout.is_expired():
-            wm.save_window(CSVFILE)
-            log.warning(
-                "[%s] TIMEOUT — saved checkpoint (%d / %d done)  exiting",
-                stage_name, n_before + batch_start, n_total,
-            )
-            return False
-
-        batch = todo[batch_start : batch_start + BATCH_SIZE]
-        for idx in batch:
-            sig = wm.get_window_signal(idx)
-            try:
-                out = fn(sig)
-            except Exception as exc:
-                log.warning("[%s] window %d raised %s — storing NaN", stage_name, idx, exc)
-                out = np.nan if scalar else [np.nan] * len(col_names)
-
-            if scalar:
-                wm.df.at[idx, col_names[0]] = float(out)
-            else:
-                arr = np.asarray(out, dtype=float)
-                for col, val in zip(col_names, arr):
-                    wm.df.at[idx, col] = float(val)
-
-        wm.save_window(CSVFILE)
-        n_done = n_before + min(batch_start + BATCH_SIZE, len(todo))
-        log.info(
-            "[%s] %d / %d  |  %.1f min elapsed  |  %.1f min left",
-            stage_name, n_done, n_total,
-            timeout.elapsed_min(), timeout.remaining_min(),
-        )
-
-    return True
+def _selected_stages(args):
+    stages = ["catch22", "fast_entropy"]
+    if not args.no_slow_entropy:
+        stages.append("slow_entropy")
+    if not args.no_cnn:
+        stages.append("cnn")
+    if not args.no_rf:
+        stages.append("rf")
+    return tuple(stages)
 
 
-# ---------------------------------------------------------------------------
-# CNN incremental (GPU-batched gramian image inference)
-# ---------------------------------------------------------------------------
-
-def compute_cnn_incremental(
-    wm:         WindowMatrix,
-    image_type: str,
-    model_path: str,
-    timeout:    TimeoutManager,
-) -> bool:
-    """
-    Batch CNN inference for one gramian image type with checkpointing.
-    Returns True if complete, False if timeout.
-    """
-    import torch
-    import torch.nn.functional as F
-    from Working.Catalogue.cnn.apply_cnn import load_model, window_to_tensor
-    from Working.Catalogue.cnn.cnn_rangapur import get_transforms
-
-    col_int  = f"cnn_p_{image_type}_interesting"
-    col_nint = f"cnn_p_{image_type}_notinteresting"
-    stage    = f"CNN:{image_type}"
-
-    if not os.path.isfile(model_path):
-        log.warning("[%s] model not found at '%s' — skipping", stage, model_path)
-        return True
-
-    _ensure_cols(wm, [col_int, col_nint])
-    todo = _pending(wm, col_int)
-
-    if not todo:
-        log.info("[%s] complete — skipping", stage)
-        return True
-
-    device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model     = load_model(model_path, device)
-    transform = get_transforms(224, is_train=False, is_rgb=(image_type == "fusion"))
-
-    x              = wm._x
-    window_samples = wm._window_samples
-    n_total        = len(wm.df)
-    n_before       = n_total - len(todo)
-    log.info("[%s] device=%s  %d / %d windows pending", stage, device, len(todo), n_total)
-
-    for batch_start in range(0, len(todo), CNN_BATCH_SIZE):
-        if timeout.is_expired():
-            wm.save_window(CSVFILE)
-            log.warning("[%s] TIMEOUT — saved checkpoint  exiting", stage)
-            return False
-
-        batch = todo[batch_start : batch_start + CNN_BATCH_SIZE]
-        tensors: list = []
-        valid:   list = []
-        for idx in batch:
-            try:
-                t = window_to_tensor(x, idx, window_samples, transform, image_type)
-                tensors.append(t)
-                valid.append(idx)
-            except Exception as exc:
-                log.warning("[%s] image gen failed at window %d: %s", stage, idx, exc)
-
-        if tensors:
-            with torch.no_grad():
-                batch_t = torch.cat(tensors, dim=0).to(device)
-                probs   = F.softmax(model(batch_t), dim=1).cpu().numpy()
-            for idx, row in zip(valid, probs):
-                wm.df.at[idx, col_int]  = float(row[0])
-                wm.df.at[idx, col_nint] = float(row[1])
-
-        wm.save_window(CSVFILE)
-        n_done = n_before + min(batch_start + CNN_BATCH_SIZE, len(todo))
-        log.info(
-            "[%s] %d / %d  |  %.1f min elapsed  |  %.1f min left",
-            stage, n_done, n_total,
-            timeout.elapsed_min(), timeout.remaining_min(),
-        )
-
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Random-forest incremental
-# ---------------------------------------------------------------------------
-
-def compute_rf_incremental(
-    wm:         WindowMatrix,
-    model_path: str,
-    timeout:    TimeoutManager,
-) -> bool:
-    """
-    sklearn/joblib pipeline inference with checkpointing.
-    Returns True if complete, False if timeout.
-    """
-    import joblib
-    from Working.Catalogue.aeon_classification.classification import ThresholdedPipeline
-    sys.modules["__main__"].ThresholdedPipeline = ThresholdedPipeline  # type: ignore[attr-defined]
-
-    stage    = "RF"
-    col_int  = "rf_p_interesting"
-    col_nint = "rf_p_notinteresting"
-
-    if not os.path.isfile(model_path):
-        log.warning("[%s] model not found at '%s' — skipping", stage, model_path)
-        return True
-
-    _ensure_cols(wm, [col_int, col_nint])
-    todo = _pending(wm, col_int)
-
-    if not todo:
-        log.info("[%s] complete — skipping", stage)
-        return True
-
-    model   = joblib.load(model_path)
-    win_len = wm._window_samples
-    n_total = len(wm.df)
-    n_before = n_total - len(todo)
-    log.info("[%s] %d / %d windows pending", stage, len(todo), n_total)
-
-    for batch_start in range(0, len(todo), BATCH_SIZE):
-        if timeout.is_expired():
-            wm.save_window(CSVFILE)
-            log.warning("[%s] TIMEOUT — saved checkpoint  exiting", stage)
-            return False
-
-        batch = todo[batch_start : batch_start + BATCH_SIZE]
-        sigs:  list = []
-        valid: list = []
-        for idx in batch:
-            sig = wm.get_window_signal(idx)
-            if len(sig) < win_len:
-                continue
-            sigs.append(sig.reshape(1, -1))
-            valid.append(idx)
-
-        if sigs:
-            X      = np.stack(sigs).astype(np.float32)   # (B, 1, win_len)
-            probas = model.predict_proba(X)               # (B, 2): col0=not-int, col1=int
-            for idx, row in zip(valid, probas):
-                wm.df.at[idx, col_int]  = float(row[1])
-                wm.df.at[idx, col_nint] = float(row[0])
-
-        wm.save_window(CSVFILE)
-        n_done = n_before + min(batch_start + BATCH_SIZE, len(todo))
-        log.info(
-            "[%s] %d / %d  |  %.1f min elapsed  |  %.1f min left",
-            stage, n_done, n_total,
-            timeout.elapsed_min(), timeout.remaining_min(),
-        )
-
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Status report
-# ---------------------------------------------------------------------------
-
-def print_status(wm: WindowMatrix) -> None:
-    catch22_cols  = [f"catch22_{n}" for n in CATCH22_FEATURE_NAMES]
-    fast_entropy  = [
-        "shannon entropy", "svd entropy",
-        "spectral entropy", "permutation entropy",
-    ]
-    slow_entropy  = ["sample entropy", "approximate entropy"]
-    cnn_col_groups = {
-        img: [f"cnn_p_{img}_interesting", f"cnn_p_{img}_notinteresting"]
-        for img in CNN_MODELS
-    }
-    rf_cols = ["rf_p_interesting", "rf_p_notinteresting"]
-
-    def _status(cols: list[str]) -> str:
-        if not all(c in wm.df.columns for c in cols):
-            return "not started"
-        pending = wm.df[cols].isna().any(axis=1).sum()
-        if pending == 0:
-            return "DONE"
-        return f"{len(wm.df) - pending} / {len(wm.df)}"
-
+def _print_status(path):
     print("\n" + "=" * 56)
     print("  Window Matrix Status")
     print("=" * 56)
-    print(f"  File      : {CSV_PATH}")
-    print(f"  Windows   : {len(wm)}")
-    print(f"  Columns   : {len(wm.columns)}")
-    print(f"  Catch22   : {_status(catch22_cols)}")
-    print(f"  Entropy   : {_status(fast_entropy)}  (fast)")
-    print(f"  Entropy   : {_status(slow_entropy)}  (slow — sample + approx)")
-    for img, cols in cnn_col_groups.items():
-        print(f"  CNN {img:>12s}: {_status(cols)}")
-    print(f"  RF probs  : {_status(rf_cols)}")
+    print(f"  Artifact  : {path}")
+    if not os.path.isfile(path):
+        print("  (no artifact yet — nothing computed)")
+        print("=" * 56 + "\n")
+        return
+    loaded = store.load_wm(path, mmap=True)
+    computed = np.asarray(loaded["computed"], dtype=bool)
+    columns = [str(c) for c in loaded["columns"]]
+    print(f"  Windows   : {computed.shape[0]:,}")
+    print(f"  Columns   : {computed.shape[1]}")
+    print(f"  Complete  : {bool(loaded['complete'])}")
+    for stage, col_fn in store.STAGE_COLUMNS.items():
+        cols = [c for c in col_fn() if c in columns]
+        if not cols:
+            continue
+        idx = [columns.index(c) for c in cols]
+        sub = computed[:, idx]
+        done = int(sub.all(axis=1).sum())
+        total = sub.shape[0]
+        label = "DONE" if done == total else f"{done:,} / {total:,}"
+        print(f"  {stage:<13s}: {label}")
     print("=" * 56 + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main() -> None:
+def main():
     p = argparse.ArgumentParser(
-        description="HPC window-matrix builder with checkpoint / resume",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument(
-        "--reset", action="store_true",
-        help="Delete the existing checkpoint CSV and start fresh",
-    )
-    p.add_argument(
-        "--status", action="store_true",
-        help="Print completion status and exit without computing",
-    )
-    p.add_argument(
-        "--timeout", type=float, default=TIMEOUT_MIN,
-        metavar="MIN",
-        help=f"Timeout in minutes (default {TIMEOUT_MIN})",
-    )
-    p.add_argument(
-        "--no-cnn", action="store_true",
-        help="Skip all CNN inference stages",
-    )
-    p.add_argument(
-        "--no-slow-entropy", action="store_true",
-        help="Skip sample entropy and approximate entropy (O(n²) per window)",
-    )
-    p.add_argument(
-        "--no-rf", action="store_true",
-        help="Skip the random-forest stage",
-    )
+    p.add_argument("--ch", type=int, default=CH, help=f"Channel (default {CH})")
+    p.add_argument("--winsize", type=float, default=WINSIZE, help=f"Window length, minutes (default {WINSIZE})")
+    p.add_argument("--fs", type=float, default=None, help="Sample rate override, Hz (default: the recording's own fs)")
+    p.add_argument("--stepfrac", type=float, default=STEPFRAC, help=f"Step as a fraction of window (default {STEPFRAC})")
+    p.add_argument("--filename", default=None, help="Source .npy filename (default M2_concat_fs1_CH<ch>.npy)")
+    p.add_argument("--reset", action="store_true", help="Delete the existing artifact and start fresh")
+    p.add_argument("--status", action="store_true", help="Print completion status and exit without computing")
+    p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_MIN, metavar="MIN",
+                   help=f"Timeout in minutes (default {DEFAULT_TIMEOUT_MIN})")
+    p.add_argument("--no-cnn", action="store_true", help="Skip the CNN stage")
+    p.add_argument("--no-slow-entropy", action="store_true", help="Skip sample/approximate entropy")
+    p.add_argument("--no-rf", action="store_true", help="Skip the random-forest stage")
+    p.add_argument("--cnn-model-dir", default=DEFAULT_CNN_MODEL_DIR)
+    p.add_argument("--rf-model-path", default="")
+    p.add_argument("--db", default=None, help="Database path (default: the repo default)")
+    p.add_argument("--print-artifact-path", action="store_true",
+                   help="Print ONLY the resolved artifact path to stdout and exit — "
+                        "lets a caller (e.g. wm_job.sh, to feed wm_status.py) resolve "
+                        "the same deterministic path this script itself computes, "
+                        "without re-deriving the naming convention independently.")
     args = p.parse_args()
 
-    if args.reset and os.path.exists(CSV_PATH):
-        os.remove(CSV_PATH)
-        log.info("Checkpoint removed: %s", CSV_PATH)
+    print(_DEPRECATION_NOTICE, file=sys.stderr)
 
-    wm = load_or_create_wm()
+    conn = init_db(args.db)
+    recording = _resolve_recording(conn, args)
+    fs = args.fs if args.fs else recording["fs"]
+    artifact_path = _artifact_path(recording, args)
 
-    if args.status:
-        print_status(wm)
+    if args.print_artifact_path:
+        print(artifact_path)
         return
 
-    timeout = TimeoutManager(args.timeout)
-    log.info("Timeout: %.1f minutes", args.timeout)
+    if args.reset and os.path.isfile(artifact_path):
+        os.remove(artifact_path)
+        print(f"Artifact removed: {artifact_path}")
 
-    # ── Stage 1: Catch22 (22-element vector, ~0.1 s/window) ─────────────────
-    catch22_cols = [f"catch22_{n}" for n in CATCH22_FEATURE_NAMES]
-    if not compute_incremental(wm, "Catch22", catch22_cols, catch22_features, timeout):
-        sys.exit(0)
+    if args.status:
+        _print_status(artifact_path)
+        return
 
-    # ── Stage 2: Fast entropy measures (~0.01–0.05 s/window each) ───────────
-    fast_entropy_stages = [
-        ("shannon entropy",     _shannon_entropy),
-        ("spectral entropy",    _spectral_entropy),
-        ("svd entropy",         _svd_entropy),
-        ("permutation entropy", _permutation_entropy),
-    ]
-    for col, fn in fast_entropy_stages:
-        if not compute_incremental(wm, col, [col], fn, timeout):
-            sys.exit(0)
+    stages = _selected_stages(args)
+    resume_path = artifact_path if os.path.isfile(artifact_path) else None
 
-    # ── Stage 3: Slow entropy measures (O(n²) per window, ~0.5–5 s/window) ──
-    if not args.no_slow_entropy:
-        slow_entropy_stages = [
-            ("sample entropy",      _sample_entropy),
-            ("approximate entropy", _approximate_entropy),
-        ]
-        for col, fn in slow_entropy_stages:
-            if not compute_incremental(wm, col, [col], fn, timeout):
-                sys.exit(0)
+    x_full = np.load(recording["npy_path"], mmap_mode="r")
+    x = np.asarray(x_full)
+
+    built = _build_wm(
+        x, fs, args.winsize, step_frac=args.stepfrac, stages=stages,
+        span_start=0, timeout_s=(args.timeout * 60.0 if args.timeout else None),
+        resume_path=resume_path, cnn_model_dir=args.cnn_model_dir,
+        rf_model_path=(args.rf_model_path or None),
+    )
+
+    recipe = make_recipe(recording["id"], [
+        {"stage": "preprocessing", "algorithm": "window_matrix",
+         "params": {
+             "window_min": float(args.winsize), "step_frac": float(args.stepfrac),
+             "catch22": "catch22" in stages, "fast_entropy": "fast_entropy" in stages,
+             "slow_entropy": "slow_entropy" in stages, "cnn": "cnn" in stages,
+             "rf": "rf" in stages, "timeout_s": float(args.timeout * 60.0),
+             "resume_path": artifact_path.replace(os.sep, "/"),
+             "cnn_model_dir": args.cnn_model_dir, "rf_model_path": args.rf_model_path,
+             "partial_tail": False,
+         }},
+    ], span=None)
+    config_id, config_hash = get_or_create_config(conn, recipe)
+    # Always a NEW run row per invocation (never reused/short-circuited) —
+    # this script is invoked once per HPC chain link specifically BECAUSE
+    # the previous invocation timed out, so silently treating an earlier
+    # "completed" run as done-and-reusable would be exactly the §0.2
+    # conflation this shim exists to avoid. `execute_recipe` handles the
+    # analogous case with `force=True`; this path never goes through
+    # `execute_recipe`, so it simply never consults the reuse check at all.
+    run_id = insert_run(conn, config_id, recording["id"], 0, recording["n_samples"], status="running")
+
+    sha1 = compute_data_sha1(recording["npy_path"]) if os.path.isfile(recording["npy_path"]) else ""
+    path = store.save_wm(
+        built["values"], built["computed"], built["columns"], built["start_idx"],
+        m=built["m"], step=built["step"], fs=fs, window_min=args.winsize, step_frac=args.stepfrac,
+        span_start=0, span_end=recording["n_samples"], n_samples=recording["n_samples"],
+        source_file=recording["source_file"], channel=recording["channel"],
+        recording_id=recording["id"], data_sha1=sha1, config_hash=config_hash,
+        elapsed_s=built["elapsed_s"],
+    )
+    insert_artifact(conn, run_id, kind="encoding", path=path)
+    # The RUN is genuinely completed (this invocation ran to its declared
+    # timeout/finished and produced a valid artifact) even when the ARTIFACT
+    # is only partial — that partiality lives in the artifact's own
+    # `complete` flag, not in the run's status (WINDOW_MATRIX_UI_PROMPT.md
+    # §6.3). Marking the run 'failed' on a timeout would be exactly the
+    # thing that makes a resumable build look broken.
+    update_run(conn, run_id, status="completed", duration_s=built["elapsed_s"])
+
+    _print_status(path)
+    if built["timed_out"]:
+        print(f"TIMEOUT — partial artifact saved at {path}. Re-run this command to resume.")
+    elif built["cancelled"]:
+        print(f"CANCELLED — partial artifact saved at {path}.")
     else:
-        log.info("Skipping slow entropy stages (--no-slow-entropy)")
-
-    # ── Stage 4: CNN confidence scores (4 image types) ──────────────────────
-    if not args.no_cnn:
-        for image_type, model_path in CNN_MODELS.items():
-            if model_path is None:
-                continue
-            if not compute_cnn_incremental(wm, image_type, model_path, timeout):
-                sys.exit(0)
-    else:
-        log.info("Skipping CNN stages (--no-cnn)")
-
-    # ── Stage 5: Random-forest probabilities ────────────────────────────────
-    if not args.no_rf and RF_MODEL_PATH is not None:
-        if not compute_rf_incremental(wm, RF_MODEL_PATH, timeout):
-            sys.exit(0)
-
-    log.info("All stages complete!")
-    print_status(wm)
+        print("All requested stages complete." if built["complete"] else
+              f"Stopped, but not all cells are computed — re-run to continue: {path}")
 
 
 if __name__ == "__main__":
