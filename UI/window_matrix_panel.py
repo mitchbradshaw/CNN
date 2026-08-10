@@ -590,8 +590,18 @@ class WindowMatrixPanel:
             return
 
         step_frac = self._current_step_frac()
+        # WHOLE-CHANNEL coverage (span=None), not `self._span` — which scale
+        # gets a pane at all is a question about the recording as a whole
+        # ("has any coverage" per §4), separate from what that pane's
+        # bucketing shows for the current viewport. Clipping this to
+        # `self._span` first would drop a scale's pane entirely the moment
+        # its coverage doesn't overlap the current viewport — exactly the
+        # "scale with no coverage [in view] must still show the lane
+        # background, not a blank/missing pane" case §8 verifies, since
+        # `build_window_matrix_ribbon` already does its own per-viewport
+        # clipping below.
         coverage = store.coverage_by_completeness(
-            self.conn, self._recording["id"], span=self._span, step_frac=step_frac,
+            self.conn, self._recording["id"], span=None, step_frac=step_frac,
         )
         if not coverage:
             self.ribbon_column.visible = False

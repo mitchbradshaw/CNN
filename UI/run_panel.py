@@ -47,9 +47,10 @@ from Working.Detection.sax.dsax_python.dsax import (
 from Working.Detection.sax.dsax_python.trend_estimators import surrogate_same_halfwidth
 from UI.plots import (
     build_encoding_panels, build_peek_curve, compute_display_y_range, cutline_domain,
-    format_scale_viewed, same_symbol_index, segment_time_edges, symbol_cmap_name, symbol_colors,
-    symbol_label, symbol_letters, symbol_names, symbols_to_rle, symbols_to_string,
-    value_axis_label, CURVE_COLOR, ENCODING_HIGHLIGHT_CAP, HighlightStream, PLOT_FONTSIZE,
+    format_scale_viewed, same_symbol_index, segment_time_edges, style_main_plot_frame,
+    symbol_cmap_name, symbol_colors, symbol_label, symbol_letters, symbol_names,
+    symbols_to_rle, symbols_to_string, value_axis_label,
+    CURVE_COLOR, ENCODING_HIGHLIGHT_CAP, HighlightStream, PLOT_FONTSIZE,
 )
 from UI.window_matrix_panel import WindowMatrixPanel
 
@@ -967,6 +968,17 @@ class RunPanel:
         curve = build_peek_curve(
             recording["npy_path"], recording["fs"], (start, end), height=RUN_PREVIEW_HEIGHT,
         ).opts(color=CURVE_COLOR, title="Staged span — not yet processed")
+        if self.window_matrix_panel.visible:
+            # The coverage ribbons (§4) sit directly under this preview and
+            # share its x-range only, the same relationship the Viewer's own
+            # ribbon panes have to its main curve — which requires matching
+            # `min_border_left`/`right` (`style_main_plot_frame`, the same
+            # hook the Viewer curve uses), or a wider/narrower left margin
+            # here shifts every ribbon bucket sideways relative to what it's
+            # meant to annotate. Scoped to when the window-matrix panel is
+            # actually visible so every other algorithm's preview (nothing
+            # stacks ribbons under those) keeps its default framing.
+            curve = style_main_plot_frame(curve)
         self.result_pane.object = curve
         self._last_before_after = None  # this preview IS "before" now; no stale pair left to re-toggle
 
