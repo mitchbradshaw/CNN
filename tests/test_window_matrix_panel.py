@@ -129,6 +129,41 @@ def test_visible_for_window_matrix_algorithm():
         _close(app, db_path, npy_dir)
 
 
+def test_auto_preview_does_not_crash_for_window_matrix():
+    """Regression test: `preprocessing.window_matrix` is `output_kind ==
+    "encoding"` (like SAX), but its `result.meta` has none of SAX's
+    `x`/`t`/`details` shape — `_run_auto_preview` used to call
+    `_show_encoding(..., result.meta["details"], ...)` unconditionally for
+    any 'encoding'-kind adapter, which raised `KeyError('details')` live
+    the moment auto-preview fired for window_matrix (real traceback landed
+    in Working.execution._execute_recipe_with_conn via
+    UI/run_panel.py's `_run_auto_preview`). Fixed by gating both
+    `_schedule_auto_preview` and `_run_auto_preview` on
+    `_is_sax_shaped_encoding`, since matrix profile and the window matrix
+    are both 'encoding'-kind but neither is SAX-shaped."""
+    with _IsolatedCalibration():
+        cost.calibrate()
+        app, db_path, npy_dir = _fresh_app_with_recording()
+        try:
+            rp = _select_window_matrix(app)
+            rp.auto_preview_checkbox.value = True
+            rp._run_auto_preview()  # must not raise
+            assert rp.encoding_section.visible is False
+        finally:
+            _close(app, db_path, npy_dir)
+
+
+def test_schedule_auto_preview_is_a_noop_for_window_matrix():
+    app, db_path, npy_dir = _fresh_app_with_recording()
+    try:
+        rp = _select_window_matrix(app)
+        rp.auto_preview_checkbox.value = True
+        rp._schedule_auto_preview()
+        assert rp._auto_preview_timer is None
+    finally:
+        _close(app, db_path, npy_dir)
+
+
 def test_switching_away_hides_it_again():
     app, db_path, npy_dir = _fresh_app_with_recording()
     try:

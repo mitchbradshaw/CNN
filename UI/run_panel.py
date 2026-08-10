@@ -786,19 +786,40 @@ class RunPanel:
 
     # ── Part 6, 4c: auto-preview on parameter change ─────────────────────
 
+    @staticmethod
+    def _is_sax_shaped_encoding(name):
+        """Whether `name` ("stage.algorithm") is a SAX-family adapter — the
+        only "encoding"-output-kind shape `_show_encoding` (the 4-panel
+        PAA/quantisation/string view) knows how to render: an x/t pair plus
+        a discrete symbol array plus a `meta["details"]` dict. Several other
+        adapters are ALSO `output_kind == "encoding"` (matrix profile, the
+        window matrix) but are structurally nothing like that — matrix
+        profile is a continuous distance array with its own Motif browser
+        tab, and the window matrix is a whole feature table with its own
+        Run-panel section (`window_matrix_panel.py`). `_gather_display_data`
+        already draws this exact line via
+        `last_step["algorithm"].startswith("sax_")` for the post-run path;
+        this is the same test, reused for the pre-run auto-preview path."""
+        if "." not in name:
+            return False
+        return name.split(".", 1)[1].startswith("sax_")
+
     def _schedule_auto_preview(self):
         """Debounce `AUTO_PREVIEW_DEBOUNCE_MS`, then recompute an encoding
         PREVIEW — no DB writes, no `runs`/`configs` rows; the explicit Run
         button remains the only thing that records a run. No-op unless
-        auto-preview is on and the selected algorithm produces an
-        encoding (the only output kind this preview knows how to show)."""
+        auto-preview is on and the selected algorithm is a SAX-family
+        encoding — the only shape `_run_auto_preview`/`_show_encoding` know
+        how to render, and (unlike SAX) neither matrix profile nor the
+        window matrix are cheap enough to recompute on every keystroke
+        anyway (see `_is_sax_shaped_encoding`)."""
         if self._auto_preview_timer is not None:
             self._auto_preview_timer.cancel()
         if not self.auto_preview_checkbox.value:
             return
         name = self.algorithm_select.value
         spec = get_adapter(name) if name else None
-        if spec is None or spec.output_kind != "encoding":
+        if spec is None or spec.output_kind != "encoding" or not self._is_sax_shaped_encoding(name):
             return
         doc = pn.state.curdoc
         if doc is None:
@@ -821,13 +842,25 @@ class RunPanel:
         """The debounced preview recompute itself — mirrors `_build_steps`
         exactly (same helper `_on_run` uses) so a preview can never show
         something a real Run wouldn't, but bypasses `execute_recipe`/the
-        database entirely: encodings are cheap enough (well under a
-        second at the span sizes auto-preview defaults on for) to just
-        run inline on the UI thread rather than spinning up a worker."""
+        database entirely: SAX-family encodings are cheap enough (well
+        under a second at the span sizes auto-preview defaults on for) to
+        just run inline on the UI thread rather than spinning up a worker.
+
+        Guarded here too, not just in `_schedule_auto_preview`'s caller —
+        this is called directly by tests (and could be called directly by
+        anything else) bypassing that gate. Calling `_show_encoding` for a
+        non-SAX "encoding" adapter (matrix profile, the window matrix) is a
+        real crash, not a cosmetic mismatch: their `result.meta` has no
+        `"details"` key at all, so `result.meta["details"]` below raises
+        `KeyError('details')` — confirmed live against
+        `preprocessing.window_matrix` with auto-preview left on.
+        """
         if self._thread is not None and self._thread.is_alive():
             return  # a real run is in progress -- don't fight it
         app = self.app
         if app._recording_id is None:
+            return
+        if not self._is_sax_shaped_encoding(self.algorithm_select.value):
             return
         try:
             span = self._current_span()
