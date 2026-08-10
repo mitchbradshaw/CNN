@@ -40,8 +40,16 @@ from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.recipes import make_recipe
 from Working.execution import execute_recipe
+import Adapters.preprocessing_window_matrix as wm_adapter
 from Adapters.preprocessing_window_matrix import default_artifact_path
 import UI.app as appmod
+
+# `execute_recipe`'s persist hook writes through this module-level default
+# (see its docstring: "Overridable so a test can redirect a real
+# execute_recipe run's disk output without touching the real Results/
+# tree") -- MUST be redirected before any `_compute()` call, or a run here
+# writes a real .npz into the actual repo's Results/Preprocessing/window_matrix/.
+wm_adapter.RESULTS_DIR = os.path.join(_TMPDIR, "wm_results")
 
 from bokeh.io import save as bokeh_save
 from bokeh.resources import INLINE
