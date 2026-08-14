@@ -1,0 +1,616 @@
+{
+  "generated_at": "2026-08-10T05:46:08",
+  "elapsed_s": 30.84,
+  "estimators_available": [
+    "endpoints",
+    "robust_endpoints",
+    "ols_slope",
+    "theil_sen"
+  ],
+  "datasets": {
+    "ramp_up": {
+      "id": 1,
+      "expectation": "UUUUUUUUUU",
+      "n_samples": 1000,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 10,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "UUUUUUUUUU",
+      "histogram": [
+        0,
+        0,
+        10
+      ],
+      "occupancy_entropy_bits": 0.0,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.0,
+      "self_transition_rate": 1.0,
+      "same_fraction_observed": 0.0,
+      "delta_mean_raw": 0.9909909909909909,
+      "cutlines_raw": [
+        -0.1,
+        0.1
+      ],
+      "cutlines_degenerate": false,
+      "figure": "01_ramp_up.png"
+    },
+    "ramp_down": {
+      "id": 2,
+      "expectation": "DDDDDDDDDD",
+      "n_samples": 1000,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 10,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "DDDDDDDDDD",
+      "histogram": [
+        10,
+        0,
+        0
+      ],
+      "occupancy_entropy_bits": 0.0,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.0,
+      "self_transition_rate": 1.0,
+      "same_fraction_observed": 0.0,
+      "delta_mean_raw": -0.9909909909909909,
+      "cutlines_raw": [
+        -0.1,
+        0.1
+      ],
+      "cutlines_degenerate": false,
+      "figure": "02_ramp_down.png"
+    },
+    "constant": {
+      "id": 3,
+      "expectation": "all SAME, cutlines_degenerate=True",
+      "n_samples": 1000,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 10,
+      "alphabet_size": 3,
+      "threshold_mode": "learned",
+      "trend_estimator": "ols_slope",
+      "string": "SSSSSSSSSS",
+      "histogram": [
+        0,
+        10,
+        0
+      ],
+      "occupancy_entropy_bits": 0.0,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.0,
+      "self_transition_rate": 1.0,
+      "same_fraction_observed": 1.0,
+      "delta_mean_raw": 0.0,
+      "cutlines_raw": [
+        -2e-09,
+        2e-09
+      ],
+      "cutlines_degenerate": true,
+      "figure": "03_constant.png"
+    },
+    "triangle": {
+      "id": 4,
+      "expectation": "UDUDUDUDUD",
+      "n_samples": 1000,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 10,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "UDUDUDUDUD",
+      "histogram": [
+        5,
+        0,
+        5
+      ],
+      "occupancy_entropy_bits": 1.0,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.6309297535714575,
+      "self_transition_rate": 0.0,
+      "same_fraction_observed": 0.0,
+      "delta_mean_raw": 4.4408920985006264e-17,
+      "cutlines_raw": [
+        -0.2,
+        0.2
+      ],
+      "cutlines_degenerate": false,
+      "figure": "04_triangle.png"
+    },
+    "step": {
+      "id": 5,
+      "expectation": "one UP at segment 5, rest SAME",
+      "n_samples": 1000,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 10,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "SSSSSUSSSS",
+      "histogram": [
+        0,
+        9,
+        1
+      ],
+      "occupancy_entropy_bits": 0.4689955935892812,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.2959032742893846,
+      "self_transition_rate": 0.7777777777777778,
+      "same_fraction_observed": 0.9,
+      "delta_mean_raw": 0.1485148514851485,
+      "cutlines_raw": [
+        -0.2,
+        0.2
+      ],
+      "cutlines_degenerate": false,
+      "figure": "05_step.png"
+    },
+    "staircase_k5": {
+      "id": 6,
+      "expectation": "symbols [0, 1, 2, 3, 4]",
+      "n_samples": 500,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 5,
+      "alphabet_size": 5,
+      "threshold_mode": "quantile",
+      "trend_estimator": "ols_slope",
+      "string": "dDSUu",
+      "histogram": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "occupancy_entropy_bits": 2.321928094887362,
+      "occupancy_entropy_ceiling_bits": 2.321928094887362,
+      "occupancy_entropy_fraction": 1.0,
+      "self_transition_rate": 0.0,
+      "same_fraction_observed": 0.2,
+      "delta_mean_raw": 8.881784197001253e-17,
+      "cutlines_raw": [
+        -1.2000000000000002,
+        -0.4,
+        0.4,
+        1.2000000000000002
+      ],
+      "cutlines_degenerate": false,
+      "figure": "06_staircase_k5.png"
+    },
+    "sharkfin": {
+      "id": 7,
+      "expectation": "U then D+ after stripping S",
+      "n_samples": 600,
+      "fs": 1.0,
+      "samples_per_symbol": 100,
+      "n_symbols": 6,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "UDDDDD",
+      "histogram": [
+        5,
+        0,
+        1
+      ],
+      "occupancy_entropy_bits": 0.6500224216483541,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.4101184863065181,
+      "self_transition_rate": 0.8,
+      "same_fraction_observed": 0.0,
+      "delta_mean_raw": 0.15460702044229746,
+      "cutlines_raw": [
+        -0.25,
+        0.25
+      ],
+      "cutlines_degenerate": false,
+      "figure": "07_sharkfin.png"
+    },
+    "white_noise": {
+      "id": 8,
+      "expectation": "UP/DOWN balanced, cutlines symmetric",
+      "n_samples": 120000,
+      "fs": 1.0,
+      "samples_per_symbol": 40,
+      "n_symbols": 3000,
+      "alphabet_size": 3,
+      "threshold_mode": "learned",
+      "trend_estimator": "ols_slope",
+      "string": "USDSSUSDUSSUUUDDUSUUSDUSUUDUSDSSSDSSSSDSUUSSUSUDSDSDUUUUDSSSSUSSSDUDDSSSUSUSUSUDSSDSUUSSUSUSSUSSDUUUSUUSDSSUSDSUSSUSSDSDSDUSSUSSDUSSDSSSSSSDUSUSUSUDUSUSSDSSDSDSUSDSUDSSDSSDUDSUSUUDUDUUSSUUDDSSUSDDUDUU...",
+      "histogram": [
+        783,
+        1395,
+        822
+      ],
+      "occupancy_entropy_bits": 1.5312346175383045,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.9661014799035273,
+      "self_transition_rate": 0.3547849283094365,
+      "same_fraction_observed": 0.465,
+      "delta_mean_raw": 0.004197054268342598,
+      "cutlines_raw": [
+        -0.33652286810377796,
+        0.33652286810377796
+      ],
+      "cutlines_degenerate": false,
+      "figure": "08_white_noise.png"
+    },
+    "noise_plus_drift": {
+      "id": 9,
+      "expectation": "UP fraction > 0.8 (drift dominance)",
+      "n_samples": 120000,
+      "fs": 1.0,
+      "samples_per_symbol": 40,
+      "n_symbols": 3000,
+      "alphabet_size": 3,
+      "threshold_mode": "learned",
+      "trend_estimator": "ols_slope",
+      "string": "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU...",
+      "histogram": [
+        0,
+        0,
+        3000
+      ],
+      "occupancy_entropy_bits": 0.0,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.0,
+      "self_transition_rate": 1.0,
+      "same_fraction_observed": 0.0,
+      "delta_mean_raw": 2.9291970542683297,
+      "cutlines_raw": [
+        -0.33652286810378296,
+        0.33652286810378296
+      ],
+      "cutlines_degenerate": false,
+      "figure": "09_noise_plus_drift.png"
+    },
+    "mixed_sine_noise": {
+      "id": 10,
+      "expectation": "identical under a 1000x rescale",
+      "n_samples": 6000,
+      "fs": 1.0,
+      "samples_per_symbol": 40,
+      "n_symbols": 150,
+      "alphabet_size": 3,
+      "threshold_mode": "learned",
+      "trend_estimator": "ols_slope",
+      "string": "USSSSSDDDSDDDSSUUSUUSUSDDDDDDSSUSSUSUSSDSSSDDDSSSSUUSUSSUSSDSDSDSSSUUSUUUSSSDDDSDDDUSUUUUUUSSDDDDDDSDUUUUUUUUSDSDDDDDDSSSUUUSSSSDSDDDSSSUUUUUUUSSSDDDS",
+      "histogram": [
+        46,
+        61,
+        43
+      ],
+      "occupancy_entropy_bits": 1.567563943681555,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.9890227326945055,
+      "self_transition_rate": 0.5637583892617449,
+      "same_fraction_observed": 0.4066666666666667,
+      "delta_mean_raw": 0.0099936662165947,
+      "cutlines_raw": [
+        -0.36024768275225527,
+        0.36024768275225527
+      ],
+      "cutlines_degenerate": false,
+      "figure": "10_mixed_sine_noise.png"
+    },
+    "smooth_fs10": {
+      "id": 11,
+      "expectation": ">= 95% agreement with the same function at 2x fs",
+      "n_samples": 6000,
+      "fs": 10.0,
+      "samples_per_symbol": 40,
+      "n_symbols": 150,
+      "alphabet_size": 3,
+      "threshold_mode": "learned",
+      "trend_estimator": "ols_slope",
+      "string": "UDUSDSSSUSSUDSSDUUSUSDSDDUSSUDSSDSSDUSSUDDSDSUSUUDSSDUSSUSDSDSUDUUDUSDUSSUSSUDSSDUUSUSDSDDUSSUDSSDSSDUSSUDDUDSUSUSDSSDUSSUDDSDSUDUUDUDDUSSUSSUDSSDUUSU",
+      "histogram": [
+        42,
+        63,
+        45
+      ],
+      "occupancy_entropy_bits": 1.5609563153489607,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.98485378337893,
+      "self_transition_rate": 0.22818791946308725,
+      "same_fraction_observed": 0.42,
+      "delta_mean_raw": 0.008917155638058526,
+      "cutlines_raw": [
+        -0.5945159144449277,
+        0.5945159144449277
+      ],
+      "cutlines_degenerate": false,
+      "figure": "11_smooth_fs10.png"
+    },
+    "noisy_sine_borderline": {
+      "id": 12,
+      "expectation": "noiseless ground truth for the estimator comparison",
+      "n_samples": 2000,
+      "fs": 1.0,
+      "samples_per_symbol": 50,
+      "n_symbols": 40,
+      "alphabet_size": 3,
+      "threshold_mode": "absolute",
+      "trend_estimator": "ols_slope",
+      "string": "UUUSSSSDDDDDDSSSSUUUUUUSSSSDDDDDDSSSSUUU",
+      "histogram": [
+        12,
+        16,
+        12
+      ],
+      "occupancy_entropy_bits": 1.5709505944546684,
+      "occupancy_entropy_ceiling_bits": 1.584962500721156,
+      "occupancy_entropy_fraction": 0.9911594714322186,
+      "self_transition_rate": 0.7948717948717948,
+      "same_fraction_observed": 0.4,
+      "delta_mean_raw": -4.302114220422482e-17,
+      "cutlines_raw": [
+        -0.5,
+        0.5
+      ],
+      "cutlines_degenerate": false,
+      "figure": "12_noisy_sine_borderline.png"
+    }
+  },
+  "offset_sensitivity": {
+    "per_dataset": {
+      "ramp_up": {
+        "id": 1,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 1.0,
+        "min_agreement": 1.0,
+        "max_agreement": 1.0
+      },
+      "ramp_down": {
+        "id": 2,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 1.0,
+        "min_agreement": 1.0,
+        "max_agreement": 1.0
+      },
+      "constant": {
+        "id": 3,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 1.0,
+        "min_agreement": 1.0,
+        "max_agreement": 1.0
+      },
+      "triangle": {
+        "id": 4,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 0.11666666666666665,
+        "min_agreement": 0.0,
+        "max_agreement": 0.4444444444444444
+      },
+      "step": {
+        "id": 5,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 0.7777777777777778,
+        "min_agreement": 0.7777777777777778,
+        "max_agreement": 0.7777777777777778
+      },
+      "staircase_k5": {
+        "id": 6,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 0.34375,
+        "min_agreement": 0.25,
+        "max_agreement": 0.5
+      },
+      "sharkfin": {
+        "id": 7,
+        "samples_per_symbol": 100,
+        "n_offsets_tested": 40,
+        "mean_agreement": 0.9199999999999999,
+        "min_agreement": 0.8,
+        "max_agreement": 1.0
+      },
+      "white_noise": {
+        "id": 8,
+        "samples_per_symbol": 40,
+        "n_offsets_tested": 39,
+        "mean_agreement": 0.39143817169825834,
+        "min_agreement": 0.3001000333444481,
+        "max_agreement": 0.7842614204734911
+      },
+      "noise_plus_drift": {
+        "id": 9,
+        "samples_per_symbol": 40,
+        "n_offsets_tested": 39,
+        "mean_agreement": 1.0,
+        "min_agreement": 1.0,
+        "max_agreement": 1.0
+      },
+      "mixed_sine_noise": {
+        "id": 10,
+        "samples_per_symbol": 40,
+        "n_offsets_tested": 39,
+        "mean_agreement": 0.6152125279642059,
+        "min_agreement": 0.4899328859060403,
+        "max_agreement": 0.8926174496644296
+      },
+      "smooth_fs10": {
+        "id": 11,
+        "samples_per_symbol": 40,
+        "n_offsets_tested": 39,
+        "mean_agreement": 0.5002581311306145,
+        "min_agreement": 0.22818791946308725,
+        "max_agreement": 0.9731543624161074
+      },
+      "noisy_sine_borderline": {
+        "id": 12,
+        "samples_per_symbol": 50,
+        "n_offsets_tested": 40,
+        "mean_agreement": 0.8794871794871796,
+        "min_agreement": 0.7948717948717948,
+        "max_agreement": 0.8974358974358975
+      }
+    },
+    "overall_mean_agreement": 0.7120492045603918,
+    "note": "Measurement, not a pass/fail criterion. See the module docstring and IMPLEMENTATION_NOTES.md 'Known limitations'."
+  },
+  "estimator_comparison": {
+    "signal": "slow sinusoid whose per-segment rise sweeps through the +/-1.0 range against a 0.5 threshold, plus N(0, 0.2) noise",
+    "samples_per_symbol": 50,
+    "repeats": 200,
+    "flip_rate": {
+      "endpoints": 0.186125,
+      "robust_endpoints": 0.186125,
+      "ols_slope": 0.06575,
+      "theil_sen": 0.0685
+    },
+    "flip_rate_relative_to_endpoints": {
+      "endpoints": 1.0,
+      "robust_endpoints": 1.0,
+      "ols_slope": 0.35325721961047685,
+      "theil_sen": 0.36803223640026866
+    }
+  },
+  "lloydmax_vs_noise_floor": {
+    "signal": "white Gaussian noise, 120000 samples, sps=40",
+    "domain": "normalised delta units (rise per segment, z-scored signal)",
+    "learned_same_halfwidth": 0.33605143206490307,
+    "learned_same_fraction": 0.465,
+    "learned_histogram": [
+      783,
+      1395,
+      822
+    ],
+    "surrogate_same_halfwidth_alpha95": 1.0406862622596649,
+    "surrogate_over_learned_ratio": 3.0968065092449084,
+    "same_fraction_if_noise_floor_injected": 0.946,
+    "histogram_if_noise_floor_injected": [
+      76,
+      2838,
+      86
+    ]
+  },
+  "alphabet_sweep": {
+    "2": {
+      "cutlines": [
+        0.0
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 1,
+      "occupancy_entropy_fraction": 0.9984284947115638,
+      "histogram": [
+        286,
+        314
+      ]
+    },
+    "3": {
+      "cutlines": [
+        -0.3377432533891688,
+        0.3377432533891688
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 1,
+      "occupancy_entropy_fraction": 0.9468738786472833,
+      "histogram": [
+        143,
+        299,
+        158
+      ]
+    },
+    "4": {
+      "cutlines": [
+        -0.539431379591284,
+        0.0,
+        0.539431379591284
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 2,
+      "occupancy_entropy_fraction": 0.9447445328238232,
+      "histogram": [
+        86,
+        200,
+        215,
+        99
+      ]
+    },
+    "5": {
+      "cutlines": [
+        -0.6686462327406751,
+        -0.20303165011703597,
+        0.20303165011703597,
+        0.6686462327406751
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 2,
+      "occupancy_entropy_fraction": 0.9523027464410477,
+      "histogram": [
+        64,
+        129,
+        182,
+        154,
+        71
+      ]
+    },
+    "7": {
+      "cutlines": [
+        -0.8647231457770115,
+        -0.46865855881697993,
+        -0.14845829839136554,
+        0.14845829839136554,
+        0.46865855881697993,
+        0.8647231457770115
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 3,
+      "occupancy_entropy_fraction": 0.9311548795402728,
+      "histogram": [
+        32,
+        69,
+        124,
+        124,
+        139,
+        85,
+        27
+      ]
+    },
+    "8": {
+      "cutlines": [
+        -0.9717051917887816,
+        -0.5831039312892725,
+        -0.2765470419200237,
+        0.0,
+        0.2765470419200237,
+        0.5831039312892725,
+        0.9717051917887816
+      ],
+      "strictly_ascending": true,
+      "symmetric": true,
+      "zero_symbol": 4,
+      "occupancy_entropy_fraction": 0.9263922964177683,
+      "histogram": [
+        23,
+        52,
+        93,
+        118,
+        124,
+        102,
+        71,
+        17
+      ]
+    }
+  }
+}

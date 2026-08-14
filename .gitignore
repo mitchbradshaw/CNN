@@ -181,11 +181,44 @@ cython_debug/
 .cursorindexingignore
 
 
-DATA/
+# ── Data (see DATA/README.md) ────────────────────────────────────────────────
+# Source recordings + everything derived from them. ~2.3 GB, never tracked.
+# DATA/* rather than DATA/ so the negation below can re-include the README —
+# git does not descend into a fully-excluded directory.
+DATA/*
+!DATA/README.md
+
+# ── Run outputs that deliberately stayed at the repo root ────────────────────
+# Results/ IS tracked; these three are not (large binaries / regenerable).
 MATRICES/
 MODELS/
+# Plots/* rather than Plots/ so the README stays tracked (see DATA/ above)
+Plots/*
+!Plots/README.md
+
+# HPC-side output dirs created by job scripts and CFG defaults
+logs/
+metrics/
+models/
+fusion_prediction/
+
+# torchvision ImageFolder staging dirs (legacy; no longer created — see
+# Working/Catalogue/cnn/cnn_rangapur.py)
+_staging_*/
+
+# ── Third-party MATLAB reference implementations (Reference/matlab/) ─────────
+# Vendored verbatim with their own LICENSE files; psax_MATLAB is a nested clone.
+Reference/matlab/csax_MATLAB/
+Reference/matlab/psax_MATLAB/
+
+# ── Editor / tooling ─────────────────────────────────────────────────────────
 .claude/
 .vscode/
-Plots/
-csax_MATLAB/
-psax_MATLAB/
+
+# --- autonomous ticket runner ---
+# Run artifacts: transcripts, reports, per-ticket logs, resumable state.
+runs/
+# Per-ticket git worktrees, if ever created inside the repo root rather than beside it.
+.worktrees/
+# Fixture database provisioned into a worktree.
+DATA/fixture/

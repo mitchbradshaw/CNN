@@ -1,0 +1,14 @@
+{
+  "recording_id": 33,
+  "span": null,
+  "steps": [
+    {
+      "stage": "detection",
+      "algorithm": "matrix_profile",
+      "params": {
+        "window_min": 600.0,
+        "backend": "auto"
+      }
+    }
+  ]
+}
