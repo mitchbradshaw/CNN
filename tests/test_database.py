@@ -1,7 +1,7 @@
 """
 test_database.py
 ==================
-Tests for Working/Preprocessing/database/: schema init, the global<->local
+Tests for Working/database/: schema init, the global<->local
 index conversion (including the channel-boundary-straddle case), and the
 plain CRUD functions.
 
@@ -21,8 +21,8 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from Working.Preprocessing.database.schema import init_db
-from Working.Preprocessing.database import queries as q
+from Working.database.schema import init_db
+from Working.database import queries as q
 
 
 def _fresh_conn():

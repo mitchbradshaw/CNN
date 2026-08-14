@@ -41,8 +41,8 @@ import numpy as np
 import scipy.io
 
 from Working.Preprocessing.manage_data.load_data import RAW_DIR, CHANNEL_DIR
-from Working.Preprocessing.database.schema import init_db
-from Working.Preprocessing.database.queries import insert_recording, list_recordings
+from Working.database.schema import init_db
+from Working.database.queries import insert_recording, list_recordings
 
 N_CHANNELS = 16
 _FS_RE = re.compile(r"_fs(\d+(?:\.\d+)?)$", re.IGNORECASE)
@@ -85,6 +85,142 @@ def _load_mat_vector(path):
             # how scipy.io.loadmat returns them; ravel collapses either way
             # since these are 1-D (or Nx1) vectors.
             return f[keys[0]][()].ravel()
+
+
+def detect_channel_count(path):
+    """Best-effort suggested channel count for a new file — always
+    user-confirmable, never assumed. A CSV's column count is a real
+    signal (each column is plausibly one channel); a .mat file's flat
+    vector carries no such information, so it just suggests this
+    project's established convention (16) as a starting point.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".csv":
+        import pandas as pd
+        first_rows = pd.read_csv(path, header=None, nrows=5)
+        if first_rows.shape[1] > 1:
+            return first_rows.shape[1]
+    return N_CHANNELS
+
+
+def _load_mat_channels(path, n_channels):
+    vector = _load_mat_vector(path)
+    total = vector.shape[0]
+    if total % n_channels != 0:
+        raise ValueError(
+            f"total_samples={total} is not evenly divisible by n_channels={n_channels} "
+            f"({total} % {n_channels} = {total % n_channels})."
+        )
+    L = total // n_channels
+    return [vector[i * L:(i + 1) * L] for i in range(n_channels)]
+
+
+def _load_csv_channels(path, n_channels):
+    import pandas as pd
+    df = pd.read_csv(path, header=None)
+    if df.shape[1] == 1:
+        vector = df.iloc[:, 0].to_numpy()
+        total = len(vector)
+        if total % n_channels != 0:
+            raise ValueError(
+                f"total_samples={total} is not evenly divisible by n_channels={n_channels} "
+                f"({total} % {n_channels} = {total % n_channels})."
+            )
+        L = total // n_channels
+        return [vector[i * L:(i + 1) * L] for i in range(n_channels)]
+    if df.shape[1] != n_channels:
+        raise ValueError(
+            f"CSV has {df.shape[1]} columns but n_channels={n_channels} was requested "
+            "(one column per channel expected when the CSV isn't single-column)."
+        )
+    return [df.iloc[:, i].to_numpy() for i in range(n_channels)]
+
+
+def materialize_arbitrary_file(conn, path, n_channels, fs, progress_callback=None):
+    """Materialize a user-supplied .mat or .csv file with an explicitly
+    confirmed channel count and fs (no assumptions), atomically.
+
+    Every channel is written to a staging directory first; only once *all*
+    of them (plus the manifest) have succeeded is the staging directory
+    swapped into place with a single atomic `os.replace`, and only then are
+    `recordings` rows committed. A failure partway through leaves neither
+    orphaned `.npy` files in the final location nor dangling DB rows — the
+    staging directory is removed and nothing is registered.
+
+    Parameters
+    ----------
+    path : str
+        Path to the source .mat or .csv file (read-only).
+    n_channels, fs : as confirmed/overridden by the caller (e.g. the UI),
+        never silently assumed.
+    progress_callback : callable(done, total), optional
+
+    Returns
+    -------
+    dict summary: stem, n_channels, fs, n_samples, dtype
+    """
+    import datetime
+    import json
+    import shutil
+
+    stem = os.path.splitext(os.path.basename(path))[0]
+    source_file = os.path.basename(path)
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext == ".mat":
+        channels = _load_mat_channels(path, n_channels)
+    elif ext == ".csv":
+        channels = _load_csv_channels(path, n_channels)
+    else:
+        raise ValueError(f"Unsupported file type '{ext}'; expected .mat or .csv.")
+
+    lengths = {ch.shape[0] for ch in channels}
+    if len(lengths) != 1:
+        raise ValueError(f"Channels have inconsistent lengths: {sorted(lengths)}")
+    L = lengths.pop()
+    dtype = channels[0].dtype
+
+    final_dir = os.path.join(CHANNEL_DIR, stem)
+    staging_dir = os.path.join(CHANNEL_DIR, f".staging_{stem}_{os.getpid()}")
+    if os.path.isdir(staging_dir):
+        shutil.rmtree(staging_dir)
+    os.makedirs(staging_dir, exist_ok=True)
+
+    try:
+        for i, chunk in enumerate(channels):
+            np.save(os.path.join(staging_dir, f"CH{i}.npy"), chunk)
+            if progress_callback:
+                progress_callback(i + 1, n_channels)
+
+        manifest = {
+            "source_file": source_file,
+            "n_channels": n_channels,
+            "fs": fs,
+            "n_samples_per_channel": L,
+            "dtype": str(dtype),
+            "imported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        with open(os.path.join(staging_dir, "manifest.json"), "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        if os.path.isdir(final_dir):
+            shutil.rmtree(final_dir)
+        os.replace(staging_dir, final_dir)
+    except Exception:
+        if os.path.isdir(staging_dir):
+            shutil.rmtree(staging_dir)
+        raise
+
+    for i in range(n_channels):
+        insert_recording(
+            conn, source_file=source_file, channel=i, fs=fs, n_samples=L,
+            global_offset=i * L,
+            npy_path=os.path.join(final_dir, f"CH{i}.npy").replace(os.sep, "/"),
+            commit=False,
+        )
+    conn.commit()
+
+    return {"stem": stem, "n_channels": n_channels, "fs": fs, "n_samples": L, "dtype": str(dtype)}
 
 
 def _materialize_one(conn, mat_path):

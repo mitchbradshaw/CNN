@@ -108,4 +108,4 @@ Keep new recordings uppercase.
 - **Model weights, feature CSVs, figures** -> not here. Those live in
   `MODELS/`, `MATRICES/` and `Plots/` at the repo root (see `Results/README.md`).
 - **Annotations, run/detection records** -> `db/annotations.sqlite`, via
-  `Working/Preprocessing/database/queries.py`. Never written to directly.
+  `Working/database/queries.py`. Never written to directly.

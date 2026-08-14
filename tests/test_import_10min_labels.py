@@ -30,8 +30,8 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from Working.Preprocessing.database.schema import init_db
-from Working.Preprocessing.database import queries as q
+from Working.database.schema import init_db
+from Working.database import queries as q
 from Pipelines.import_labels.import_10min_labels import (
     SOURCE_RECORDING,
     _label_dir,

@@ -23,12 +23,23 @@ or technique you used.
 ## Layout
 
 ```
+recipes.py         The recipe: {recording_id, span, steps}. Canonical-JSON
+                    SHA-256 hashing (Working.recipes.short_hash) — the one
+                    identifier for reproducibility, artifact naming, cache
+                    lookup, and "what have I already tried".
+execution.py       execute_recipe() — headless, runs a recipe's steps through
+                    the Adapters/ registry, writes runs/detections. Cluster-safe;
+                    see Pipelines/run_recipe/run_recipe.py for the CLI wrapper.
+artifacts.py       Plots/ filename convention + explicit-save helper.
+encoding_cache.py  Hash-keyed cache under DATA/derived/encodings/.
+database/          SQLite schema + plain-function queries: recordings,
+                    annotations, reviewed spans, tag vocabulary, and the
+                    run-tracking tables (configs/runs/detections/encodings/
+                    motifs/artifacts) — the only DB access point, UI or headless.
+
 Preprocessing/
   manage_data/     load_raw_data, window save/load, interactive window browser
   window_matrix/   WindowMatrix class, feature-column builders, WM plotting
-  database/        SQLite schema + plain-function queries for recordings,
-                    annotations and reviewed spans (see DATA/README.md's
-                    `db/` entry) — the only DB access point, UI or headless
 Detection/
   analysis/        Dehshibi spike detection, wavelet, entropy, frequency, stats
   matrix_profiling/ stumpy motif/discord/chain plotting

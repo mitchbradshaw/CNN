@@ -10,7 +10,10 @@ import pandas as pd
 from scipy.io import loadmat
 import itertools
 
-plt.style.use('https://raw.githubusercontent.com/stumpy-dev/stumpy/main/docs/stumpy.mplstyle')
+# Vendored locally (MATRIX_PROFILE_UI_PROMPT.md §7 item 6) — the previous
+# `plt.style.use(<github raw URL>)` was a network fetch at *import* time,
+# which hangs or fails outright on a compute node with no outbound access.
+plt.style.use(os.path.join(os.path.dirname(__file__), "stumpy.mplstyle"))
 
 # ── Repo-root bootstrap ───────────────────────────────────────────────────────
 # Makes `Working.*` / `Pipelines.*` importable when this file is run directly.
@@ -41,23 +44,41 @@ def plot_matrix_profile(filename, fs, winsize=10, npz_path=""):
     """
     x, t = load_raw_data(filename, fs)
 
-    x = x[:10000]
-    t = t[:10000]
-    t_hours = t / 3600.0
-
-
-
     if npz_path == "":
         npz_path = f"Results/Detection/matrix_profile/mp_{os.path.splitext(filename)[0]}_WIN{winsize}.npz"
-    
+
     # ── Load matrix profile ───────────────────────────────────────────────
     data = np.load(npz_path)
     mp  = data['mp']          # distance profile  (n - m + 1,)
     mpi = data['mpi']         # nearest-neighbour indices
     m   = int(data['m'])      # window length in samples
 
+    # Truncate the SIGNAL and the PROFILE to the same preview window.
+    # Previously only x/t were truncated to 10000 samples while mp/mpi
+    # stayed full-length, so `argsort(mp)` could return an index far
+    # outside the truncated `t_hours` — silently wrong marker positions,
+    # or an outright IndexError (MATRIX_PROFILE_UI_PROMPT.md §7 item 4).
+    n_preview = min(10000, len(x))
+    x = x[:n_preview]
+    t = t[:n_preview]
+    t_hours = t / 3600.0
+
+    mp_preview_len = max(0, n_preview - m + 1)
+    mp = mp[:mp_preview_len]
+    if mp.size == 0:
+        raise ValueError(
+            f"Preview window ({n_preview} samples) is shorter than the "
+            f"matrix-profile window (m={m} samples); nothing to plot."
+        )
+
     motif_idx            = int(np.argsort(mp)[0])
     nearest_neighbor_idx = int(mpi[motif_idx])
+    if nearest_neighbor_idx >= n_preview:
+        raise ValueError(
+            f"Best motif's nearest neighbour (idx={nearest_neighbor_idx}) falls "
+            f"outside the {n_preview}-sample preview window; pick a smaller "
+            "winsize or plot from a shorter recording for this quick-look view."
+        )
 
     # Convert sample indices → hours to match the signal x-axis
     motif_t          = t_hours[motif_idx]
@@ -92,7 +113,7 @@ def plot_matrix_profile(filename, fs, winsize=10, npz_path=""):
     plt.show()
 
 # ── Discords ────────────────────────────────────────────────────────────────────
-def plot_matrix_discords(filename,fs,npz_path=""):
+def plot_matrix_discords(filename, fs, winsize=10, npz_path=""):
     """
     Plot the raw signal with the bottom motif pair highlighted, and the
     matrix profile below it, following the stumpy documentation layout.
@@ -103,6 +124,11 @@ def plot_matrix_discords(filename,fs,npz_path=""):
         Signal file name (passed to load_raw_data, e.g. "M2_concat_fs1_CH0.npy").
     fs : float
         Sampling rate in Hz.
+    winsize : int
+        Window size in minutes, used only to build the default `npz_path`
+        (MATRIX_PROFILE_UI_PROMPT.md §7 item 5: the previous default
+        omitted the `_WIN{n}` token entirely, so it only ever matched the
+        two legacy no-window artifacts).
     npz_path : str
         Path to the .npz file saved by run_matrix_profile.py.
     """
@@ -110,8 +136,8 @@ def plot_matrix_discords(filename,fs,npz_path=""):
     t_hours = t / 3600.0
 
     if npz_path == "":
-        npz_path = f"Results/Detection/matrix_profile/mp_{os.path.splitext(filename)[0]}.npz"
-    
+        npz_path = f"Results/Detection/matrix_profile/mp_{os.path.splitext(filename)[0]}_WIN{winsize}.npz"
+
     # ── Load matrix profile ───────────────────────────────────────────────
     data = np.load(npz_path)
     mp  = data['mp']          # distance profile  (n - m + 1,)

@@ -143,6 +143,26 @@ def list_reviewed_spans(conn, recording_id):
     ).fetchall()
 
 
+def merge_intervals(spans):
+    """Merge overlapping/touching (start, end) pairs into disjoint, sorted
+    intervals. Shared by `reviewed_fraction` (below) and, headlessly, by
+    `UI.plots.build_reviewed_ribbon`'s coverage ribbon — both must agree
+    on what "reviewed" covers, so both compute it via this one function
+    rather than two independently-written merge implementations that could
+    quietly drift apart.
+    """
+    spans = sorted(spans)
+    if not spans:
+        return []
+    merged = [list(spans[0])]
+    for s, e in spans[1:]:
+        if s <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+    return [(s, e) for s, e in merged]
+
+
 def reviewed_fraction(conn, recording_id):
     """Fraction of a recording's samples covered by at least one reviewed
     span (overlaps merged, so double-reviewed regions aren't double-counted).
@@ -155,16 +175,7 @@ def reviewed_fraction(conn, recording_id):
     spans = [(r["start_idx"], r["end_idx"]) for r in list_reviewed_spans(conn, recording_id)]
     if not spans:
         return 0.0
-    spans.sort()
-    covered = 0
-    cur_start, cur_end = spans[0]
-    for s, e in spans[1:]:
-        if s <= cur_end:
-            cur_end = max(cur_end, e)
-        else:
-            covered += cur_end - cur_start
-            cur_start, cur_end = s, e
-    covered += cur_end - cur_start
+    covered = sum(e - s for s, e in merge_intervals(spans))
     return covered / rec["n_samples"]
 
 
@@ -181,7 +192,9 @@ def annotation_exists(conn, recording_id, start_idx, end_idx, source):
 
 def insert_annotation(conn, recording_id, start_idx, end_idx, verdict,
                        source, tag=None, note=None, scale_viewed=None,
-                       created_at=None, commit=True):
+                       created_at=None, event_count=None, status=None,
+                       parent_annotation_id=None, relation_kind=None,
+                       commit=True):
     """Insert one annotation. Always inserts — callers that need
     idempotency (e.g. importers) should check `annotation_exists` first.
 
@@ -194,6 +207,17 @@ def insert_annotation(conn, recording_id, start_idx, end_idx, verdict,
         and hand-made labels distinguishable.
     scale_viewed : str, optional
         The zoom span active when the call was made (e.g. "10min", "1hour").
+    event_count : int, optional
+        Number of discrete events in a spike train / cycle sequence, if
+        known — drives the (computed, not stored) spike-train length band.
+    status : str, optional
+        One of the seeded `status` vocabulary values (candidate / examined /
+        confirmed) — see `Working.database.vocabulary`.
+    parent_annotation_id : int, optional
+        Self-referencing FK — this annotation is a type-specimen or
+        sub-window of another.
+    relation_kind : str, optional
+        'type_specimen' | 'sub_window' | None.
     commit : bool
         False lets a bulk caller batch many inserts into one transaction.
     """
@@ -203,10 +227,12 @@ def insert_annotation(conn, recording_id, start_idx, end_idx, verdict,
     cur = conn.execute(
         """INSERT INTO annotations
                (recording_id, start_idx, end_idx, verdict, tag, note,
-                scale_viewed, source, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                scale_viewed, source, created_at, event_count, status,
+                parent_annotation_id, relation_kind)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (recording_id, start_idx, end_idx, verdict, tag, note,
-         scale_viewed, source, created_at),
+         scale_viewed, source, created_at, event_count, status,
+         parent_annotation_id, relation_kind),
     )
     if commit:
         conn.commit()
@@ -219,10 +245,34 @@ def get_annotation(conn, annotation_id):
     ).fetchone()
 
 
-def list_annotations(conn, recording_id):
+def list_annotations(conn, recording_id, include_deleted=False):
+    """All annotations for a recording, ordered by start_idx. Excludes
+    soft-deleted rows (`deleted_at IS NOT NULL`, see `delete_annotation`)
+    unless `include_deleted=True` — the one place this filter is applied,
+    so every caller (the table, the plot overlay, live counts, exports)
+    automatically excludes deleted rows from all default views, per the
+    brief, without each needing to remember to ask for it."""
+    if include_deleted:
+        return conn.execute(
+            "SELECT * FROM annotations WHERE recording_id = ? ORDER BY start_idx",
+            (recording_id,),
+        ).fetchall()
     return conn.execute(
-        "SELECT * FROM annotations WHERE recording_id = ? ORDER BY start_idx",
+        "SELECT * FROM annotations WHERE recording_id = ? AND deleted_at IS NULL ORDER BY start_idx",
         (recording_id,),
+    ).fetchall()
+
+
+def get_annotations_by_ids(conn, annotation_ids):
+    """Bulk fetch, e.g. for rendering a selection highlight independent of
+    whatever's currently filtered into view. Empty input -> empty output
+    (skips the query — an empty `IN ()` is invalid SQL)."""
+    ids = list(annotation_ids)
+    if not ids:
+        return []
+    placeholders = ",".join("?" * len(ids))
+    return conn.execute(
+        f"SELECT * FROM annotations WHERE id IN ({placeholders})", ids,
     ).fetchall()
 
 
@@ -239,7 +289,8 @@ def update_annotation(conn, annotation_id, force=False, **fields):
             f"Annotation {annotation_id} has source={row['source']!r}; "
             "only manual_ui annotations may be edited (pass force=True to override)."
         )
-    allowed = {"verdict", "tag", "note", "scale_viewed"}
+    allowed = {"verdict", "tag", "note", "scale_viewed", "event_count",
+               "status", "parent_annotation_id", "relation_kind"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
@@ -256,22 +307,36 @@ def update_annotation(conn, annotation_id, force=False, **fields):
 
 
 def delete_annotation(conn, annotation_id, force=False):
-    """Delete a manual annotation. Refuses to delete an imported annotation
-    unless `force=True`."""
+    """Soft-delete (Part E7): sets `deleted_at` rather than removing the
+    row, so an accidental delete has an undo (`undelete_annotation`).
+    Refuses to delete an imported annotation unless `force=True`. A
+    no-op (not an error) if already deleted, matching the previous
+    "delete a possibly-already-gone row" tolerance."""
     row = get_annotation(conn, annotation_id)
-    if row is None:
+    if row is None or row["deleted_at"] is not None:
         return
     if row["source"] != SOURCE_MANUAL_UI and not force:
         raise PermissionError(
             f"Annotation {annotation_id} has source={row['source']!r}; "
             "only manual_ui annotations may be deleted (pass force=True to override)."
         )
-    conn.execute("DELETE FROM annotations WHERE id = ?", (annotation_id,))
+    conn.execute("UPDATE annotations SET deleted_at = ? WHERE id = ?", (_now(), annotation_id))
+    conn.commit()
+
+
+def undelete_annotation(conn, annotation_id):
+    """Part E7's undo — clears `deleted_at`. A no-op if the annotation
+    isn't currently soft-deleted."""
+    conn.execute(
+        "UPDATE annotations SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL",
+        (annotation_id,),
+    )
     conn.commit()
 
 
 def recording_summary(conn, recording_id):
     """Counts per verdict plus reviewed fraction for one recording.
+    Excludes soft-deleted annotations, same as `list_annotations`.
 
     Returns
     -------
@@ -280,7 +345,8 @@ def recording_summary(conn, recording_id):
     """
     counts = {v: 0 for v in VERDICTS}
     for row in conn.execute(
-        "SELECT verdict, COUNT(*) AS n FROM annotations WHERE recording_id = ? GROUP BY verdict",
+        "SELECT verdict, COUNT(*) AS n FROM annotations "
+        "WHERE recording_id = ? AND deleted_at IS NULL GROUP BY verdict",
         (recording_id,),
     ):
         counts[row["verdict"]] = row["n"]

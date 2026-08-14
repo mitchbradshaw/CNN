@@ -214,3 +214,11 @@ Reference/matlab/psax_MATLAB/
 # ── Editor / tooling ─────────────────────────────────────────────────────────
 .claude/
 .vscode/
+
+# --- autonomous ticket runner ---
+# Run artifacts: transcripts, reports, per-ticket logs, resumable state.
+runs/
+# Per-ticket git worktrees, if ever created inside the repo root rather than beside it.
+.worktrees/
+# Fixture database provisioned into a worktree.
+DATA/fixture/

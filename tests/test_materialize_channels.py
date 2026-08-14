@@ -36,7 +36,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from Working.Preprocessing.manage_data.load_data import CHANNEL_DIR
-from Working.Preprocessing.database.queries import list_recordings
+from Working.database.queries import list_recordings
 from Pipelines.materialize_channels.materialize_channels import (
     N_CHANNELS,
     _derive_fs,

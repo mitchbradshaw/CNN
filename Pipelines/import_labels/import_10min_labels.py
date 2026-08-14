@@ -68,8 +68,8 @@ import json
 import os
 
 from Working.Preprocessing.manage_data.load_data import window_root
-from Working.Preprocessing.database.schema import init_db
-from Working.Preprocessing.database.queries import (
+from Working.database.schema import init_db
+from Working.database.queries import (
     SOURCE_IMPORTED_10MIN,
     annotation_exists,
     global_to_local,

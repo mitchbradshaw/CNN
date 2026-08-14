@@ -23,7 +23,8 @@ four subfolders, reflecting **pipeline stage** rather than technique:
 | [`Pipelines/`](Pipelines/README.md) | End-to-end workflows composing several `Working/` components. Organised by workflow, not stage. |
 | [`Experimentation/`](Experimentation/README.md) | Exploratory and one-off analysis. Not guaranteed to work. Never imported. |
 | [`HPC/`](HPC/README.md) | Thin SLURM job scripts that invoke a `Pipelines/` entry point. |
-| [`UI/`](UI/README.md) | Panel/HoloViews signal viewer and annotation tool. The only place that imports a UI library. |
+| [`UI/`](UI/README.md) | Panel/HoloViews signal viewer, annotation tool, and run panel. The only place that imports a UI library. |
+| `Adapters/` | One small file per algorithm, wrapping a `Working/` function to a uniform (params spec, `run`, `output_kind`, optional `plot`) shape. The only place that knows a function's raw signature — see `Adapters/base.py`. |
 | [`DATA/`](DATA/README.md) | Recordings and derived datasets (~2.3 GB, gitignored). |
 | [`Results/`](Results/README.md) | Run outputs, by stage. |
 | [`Plots/`](Plots/README.md) | Saved figures, by stage (gitignored). |
@@ -104,7 +105,7 @@ python Pipelines/window_matrix_build/build_window_matrix.py --status
 
 Per-channel `.npy` splits and manually-sorted labels also live in a SQLite
 database (`DATA/db/annotations.sqlite`, gitignored), queried through plain
-functions in [`Working/Preprocessing/database/`](Working/Preprocessing/database)
+functions in [`Working/database/`](Working/database)
 so both the UI and headless scripts share one API:
 
 ```bash
@@ -119,10 +120,31 @@ panel serve UI/app.py --show
 ```
 
 See [`UI/README.md`](UI/README.md) for the viewer, and the `database`
-module's docstrings for the schema (`recordings`, `reviewed_spans`,
-`annotations` are populated now; `configs`, `runs`, `detections`,
-`encodings`, `motifs` exist for the next phase — algorithm runs, cached
-encodings — so it needs no migration).
+module's docstrings for the schema.
+
+### 6. Running an algorithm, headlessly or from the UI
+
+Every wrapped algorithm is a *recipe* — `{recording_id, span, steps}` — hashed
+(`Working.recipes.short_hash`) into the one identifier used for the `configs`
+row, the `runs`/`detections` it produces, cached encodings, and saved
+artifacts' filenames. Recipes run through `Working.execution.execute_recipe`,
+which is headless (no Panel import anywhere in the chain) and idempotent —
+re-running an identical recipe reuses the prior run instead of recomputing:
+
+```bash
+# headless, e.g. for a SLURM job (see Adapters/README-style docstrings in
+# Adapters/base.py for the adapter shape; part 3 wraps exactly this script)
+python Pipelines/run_recipe/run_recipe.py --config path/to/recipe.json
+
+# interactively: pick a stage/algorithm, auto-generated parameter controls,
+# background execution with cancel, before/after comparison, save as motif
+panel serve UI/app.py --show   # "Run algorithm" / "Run history" tabs
+```
+
+Saved plots follow one naming convention
+(`<recording>_CH<nn>_<stage>_<algorithm>_<paramslug>_<hash8>.<ext>` under
+`Plots/<Stage>/<Algorithm>/`, see `Working/artifacts.py`) and are only ever
+written on explicit request — nothing here saves a plot automatically.
 
 The **`WindowMatrix`** ([`Working/Preprocessing/window_matrix/matrix_calc.py`](Working/Preprocessing/window_matrix/matrix_calc.py))
 is the object most analysis flows through: rows are windows keyed by start

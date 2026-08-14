@@ -1175,12 +1175,30 @@ def build_motif_waveform_overlay(group, x, m, fs, *, normalize=True, show_envelo
     # that stale range it happened to overlap (reported: every motif
     # looked flat and hard to read).
     #
-    # Uses a robust (1st/99th percentile) range rather than a strict
-    # min/max, so one much-less-similar neighbour (large MP distance,
-    # e.g. d=8+) with an outsized z-score excursion can't single-handedly
-    # squash every other curve's shape into an unreadable sliver either.
+    # Uses a Tukey IQR fence (q75-q25, x3) rather than a percentile cutoff
+    # or strict min/max. On real electrophysiology-shaped data, a single
+    # sharp transient is not a single sample -- it's several, wide enough
+    # that even a 1st/99th-percentile cutoff still includes it (confirmed
+    # against a real run: p1 landed at -5.9 with the true min at -6.0, on
+    # a 600-sample window where the flat baseline sits in roughly
+    # [0.1, 0.25] -- a percentile bound is a bound on RANK, and >1% of a
+    # window can legitimately belong to one transient). An IQR fence
+    # bounds the range using only the MIDDLE 50% of the data (q25-q75),
+    # which is insensitive to how extreme or how numerous the tail points
+    # are -- it reliably finds "the flat/wiggly baseline" as the bulk
+    # shape and fences the transient out, regardless of the transient's
+    # width. Transients still draw (a Curve simply clips at the frame
+    # edge outside `ylim` -- normal Bokeh behaviour, not a bug), so a
+    # sharper spike is still visible as touching the top/bottom edge.
     all_values = np.concatenate([v for v, _, _, _ in series])
-    lo, hi = np.percentile(all_values, [1, 99])
+    q1, q3 = np.percentile(all_values, [25, 75])
+    iqr = q3 - q1
+    if iqr <= 0:
+        lo, hi = float(all_values.min()), float(all_values.max())
+    else:
+        k = 3.0
+        lo = max(q1 - k * iqr, float(all_values.min()))
+        hi = min(q3 + k * iqr, float(all_values.max()))
     if hi <= lo:
         lo, hi = float(all_values.min()), float(all_values.max())
     pad = (hi - lo) * 0.12 or 1.0
