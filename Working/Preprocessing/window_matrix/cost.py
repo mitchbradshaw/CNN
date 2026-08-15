@@ -39,6 +39,7 @@ import datetime
 import json
 import multiprocessing
 import os
+import tempfile
 import time
 
 import numpy as np
@@ -111,6 +112,12 @@ def _load_calibration():
         return json.load(f)
 
 
+# Retry budget for the atomic rename in `_save_calibration` — see the comment
+# there. Short and bounded: this guards a microsecond-wide window, not a
+# genuinely locked file.
+_REPLACE_ATTEMPTS = 5
+_REPLACE_BACKOFF_S = 0.05
+
 def _save_calibration(data):
     """Write the calibration file atomically.
 
@@ -124,15 +131,43 @@ def _save_calibration(data):
     `os.replace` is atomic on NTFS and POSIX alike, and unlike `os.rename` it
     overwrites an existing destination on Windows.
     """
-    directory = os.path.dirname(CALIBRATION_PATH)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    tmp_path = CALIBRATION_PATH + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(data, f, indent=2, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_path, CALIBRATION_PATH)
+    directory = os.path.dirname(CALIBRATION_PATH) or "."
+    os.makedirs(directory, exist_ok=True)
+
+    # A FIXED temp name (`path + ".tmp"`) is not enough: this module is written
+    # from a UI background worker as well as the main thread, so two writers
+    # would open the same temp file, and on Windows the second `os.replace`
+    # fails with WinError 5 because the first still holds a handle. `mkstemp`
+    # gives each writer its own file in the destination directory, so the only
+    # contended operation is the rename itself.
+    fd, tmp_path = tempfile.mkstemp(
+        dir=directory,
+        prefix=os.path.basename(CALIBRATION_PATH) + ".",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        # `os.replace` can still raise PermissionError on Windows if a reader,
+        # an indexer or a virus scanner holds the destination open at that
+        # instant. That window is microseconds; retry briefly rather than
+        # failing a calibration over it.
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                os.replace(tmp_path, CALIBRATION_PATH)
+                return
+            except PermissionError:
+                if attempt == _REPLACE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_BACKOFF_S * (attempt + 1))
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------

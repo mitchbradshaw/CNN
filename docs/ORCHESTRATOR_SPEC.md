@@ -153,7 +153,7 @@ Four classes. They are handled differently because they are different events.
 |---|---|---|
 | **Infrastructure** | API error, rate limit, worktree creation failed, env broken | Exponential backoff, up to 3 retries. Does not count against the ticket. |
 | **Stall** | No tool call or no commit for N minutes, or the wall-clock budget exceeded | Kill. One retry from a clean worktree with the previous transcript tail injected. Then quarantine. |
-| **Red at exit** | Agent finished; suite is failing, or an existing test regressed | **No retry.** Quarantine immediately. A second blind attempt at a ticket the agent already believes it finished produces a second wrong answer and burns an hour. |
+| **Red at exit** | Agent finished; suite is failing, or an existing test regressed | **The agent is never retried.** A second blind attempt at a ticket it believes it finished produces a second wrong answer and burns an hour. The *failing tests* are re-run once — see the flake amendment under gate 2 — and the ticket is quarantined unless they pass. |
 | **Review-rejected** | Tests green, review returned blockers | See below. |
 
 **Quarantine** means: branch preserved, not merged, ticket marked `FAILED`, everything blocked by it
@@ -210,6 +210,41 @@ It now pins `testpaths` and excludes `tests/test_analysis_modules.py`, which is 
 diagnostic script whose `test_*` helpers take positional arguments; pytest collected them by name and
 errored on missing fixtures, producing six errors and a non-zero exit. Left unfixed that would have
 failed gate 2 on **every** ticket, tripping the circuit breaker three tickets into night one.
+
+#### Flake amendment — one re-run of the failing tests only
+
+**This amends the failure policy above.** "Red at exit → no retry" remains correct about the *agent*:
+a second blind attempt at a ticket the agent believes it finished produces a second wrong answer and
+burns an hour. Re-running the *tests* is a different act and costs seconds.
+
+On gate 2 red, the orchestrator re-runs **only the failing node ids**, once.
+
+- **Pass on re-run** → the ticket proceeds to the review gate, and is marked **`FLAKY`** in
+  `REPORT.md` with the test ids and both outputs retained in the run directory.
+- **Fail on re-run** → quarantine, exactly as before.
+
+A real regression reproduces every time, so this does not weaken the gate against anything it exists
+to catch. What it prevents is a known-flaky test quarantining innocent tickets, cascading through
+`BLOCKED_UPSTREAM`, and tripping the circuit breaker — with `REPORT.md` attributing every one of
+those failures to a ticket that did nothing wrong. That is the exact "cannot isolate the cause the
+next morning" failure this design exists to prevent, arriving through the back door.
+
+**A `FLAKY` mark is a finding, not a shrug.** Two rules keep it from becoming one: consecutive
+`FLAKY` marks count toward the circuit breaker at half weight, so a suite that has become broadly
+unreliable still halts the run; and any test id marked `FLAKY` twice in one run is listed at the top
+of `REPORT.md` as work to be ticketed, not as noise to be tolerated.
+
+**Known flake source at the time of writing.** `UI/window_matrix_panel.py` spawns a background
+`_worker` thread with no lifecycle management. It outlives the test that created it and touches the
+SQLite connection after teardown, which surfaces as
+`sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread`
+in `test_ladder_renders_one_entry_per_scale`, and as knock-on failures in whichever test runs next.
+The diagnostic signature is decisive: the affected test passes 20/20 in isolation and fails inside
+the full suite, so the interference is between tests, not within one. Calibration writes are now
+atomic (`Working/Preprocessing/window_matrix/cost.py`,
+`Working/Detection/matrix_profiling/cost.py`), which closes one corruption path, but the thread leak
+itself is untouched and needs a ticket: test teardown must join or cancel outstanding workers before
+closing the database. Until that lands, this is the flake the amendment above is absorbing.
 
 ### 3. Scope check
 

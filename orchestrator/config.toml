@@ -1,0 +1,101 @@
+# Autonomous ticket runner — configuration.
+#
+# Nothing tuneable lives in the code. The ceilings in particular are limits on
+# token throughput, on the superlinear growth of conflict probability with
+# in-flight branches, and on morning review bandwidth — not on CPU.
+#
+# Changing this file changes `config_hash` in state.json, which is how a resumed
+# run tells you it is not the run you started.
+
+[run]
+# The integration branch is cut from `base_branch` and never writes back to it.
+base_branch = "main"
+branch_prefix = "integration/run-"
+ticket_branch_prefix = "ticket/"
+# Local wall-clock time after which no new ticket is dispatched. In-flight
+# tickets are allowed to finish.
+wall_clock_stop = "07:00"
+
+[ceilings]
+concurrent = 3
+opus = 2
+
+# Budgets come from the ticket's size flag. Exceeding one is a stall.
+[budgets]
+S = 30
+M = 60
+L = 120
+
+# Model ids handed to `claude -p --model`.
+[models]
+sonnet = "claude-sonnet-5"
+opus = "claude-opus-5"
+# The review and auto-fix agents are the only other LLM calls in the system.
+review = "claude-opus-5"
+fix = "claude-opus-5"
+
+[paths]
+tickets = "docs/tickets"
+runs = "runs"
+# Worktrees live beside the repo, not inside it, so pytest never collects one
+# worktree's tests from another's rootdir.
+worktrees = "../.wt"
+claude_md = "CLAUDE.md"
+coding_standards = "docs/CODING_STANDARDS.md"
+# A small purpose-built fixture database, copied into every worktree. Never the
+# real one: an agent that cannot reach the 11,000-row database cannot damage it.
+fixture_db = "DATA/fixture/annotations.sqlite"
+fixture_db_dest = "DATA/annotations.sqlite"
+# Read-only recording directories, junctioned (mklink /J) into worktrees whose
+# ticket declares it needs real data. Junctions are unaffected by
+# `.git/config` symlinks = false.
+recordings = []
+
+[agent]
+# A list, so a test harness can substitute a stand-in binary.
+cli = ["claude"]
+# `claude -p` with permissions bypassed: the agent sees one worktree and one
+# ticket, and the worktree is disposable.
+extra_args = ["--dangerously-skip-permissions"]
+# No tool call and no commit for this long is a stall, independent of budget.
+stall_minutes = 20
+
+[suite]
+# Never `-n`. tests/_session_isolation.py documents exactly why parallel
+# collection breaks this suite.
+command = ["pytest", "-q", "--tb=no"]
+timeout_minutes = 25
+
+[retries]
+# Infrastructure failures do not count against the ticket.
+infrastructure = 3
+infrastructure_backoff_seconds = 30
+# A stall gets one retry from a clean worktree with the transcript tail injected.
+stall = 1
+
+[review]
+skill = "code-review"
+# Agent-fixes-reviewer-objects is a classic overnight burn. Two rounds, then
+# quarantine.
+max_rounds = 2
+# Blockers stop a merge; majors and minors merge and land in FOLLOWUPS.md.
+blocking_severities = ["blocker"]
+followups_file = "FOLLOWUPS.md"
+timeout_minutes = 30
+# A finding that cites no rule number cannot block a merge at 3am.
+default_severity = "minor"
+
+[circuit_breaker]
+consecutive_quarantines = 3
+quarantine_fraction = 0.4
+# A FLAKY mark is a finding, not a shrug: it counts at half weight, so a suite
+# that has become broadly unreliable still halts the run.
+flaky_weight = 0.5
+
+[rate_limit]
+# Handled fleet-wide, not per-agent. Three agents each retrying independently
+# into a closed door is 60 requests a minute — see claude-retry.log.
+concurrent_signature = 2
+fast_exit_seconds = 60
+initial_backoff_seconds = 60
+max_backoff_seconds = 900
