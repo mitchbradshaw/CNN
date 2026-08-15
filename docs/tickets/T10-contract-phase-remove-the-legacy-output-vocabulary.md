@@ -35,4 +35,5 @@ which fails as a *missing block in a dropdown* rather than as an error.
 - [ ] A test enumerates every registered adapter and asserts its `output_kind` is one of the seven.
 - [ ] A test asserts `discover_adapters()` registers the expected adapter count, so a silently skipped
       import fails the suite rather than disappearing from a dropdown.
-- [ ] All 195 existing tests plus everything added in milestone 1 pass.
+- [ ] The full suite passes with no regressions against the run baseline, including everything
+      added in milestone 1.

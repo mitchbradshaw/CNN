@@ -18,7 +18,6 @@ Run from the project root:
 import inspect
 import os
 import sys
-import tempfile
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
@@ -30,25 +29,18 @@ if PROJECT_ROOT not in sys.path:
 import Working.Preprocessing.window_matrix.cost as cost
 
 
-class _IsolatedCalibration:
+from tests._calibration_isolation import scratch_calibration
+
+
+def _IsolatedCalibration():
     """Redirects `cost.CALIBRATION_PATH` to a fresh temp file for the
     duration of the `with` block, and restores it afterwards — every test
     below uses this rather than sharing (or worse, mutating) the real
-    calibration file at `DATA/db/wm_calibration.json`."""
+    calibration file at `DATA/db/wm_calibration.json`.
 
-    def __enter__(self):
-        self._old = cost.CALIBRATION_PATH
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        os.remove(path)  # calibrate()/_load_calibration() expect it absent-or-valid-json, not empty
-        cost.CALIBRATION_PATH = path
-        self.path = path
-        return self
-
-    def __exit__(self, *exc):
-        cost.CALIBRATION_PATH = self._old
-        if os.path.isfile(self.path):
-            os.remove(self.path)
+    The implementation lives in `tests/_calibration_isolation.py` so this file
+    and `tests/test_window_matrix_panel.py` cannot drift apart."""
+    return scratch_calibration(cost)
 
 
 def test_estimate_seconds_is_none_when_uncalibrated():

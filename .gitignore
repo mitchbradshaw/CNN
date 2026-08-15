@@ -212,7 +212,6 @@ Reference/matlab/csax_MATLAB/
 Reference/matlab/psax_MATLAB/
 
 # ── Editor / tooling ─────────────────────────────────────────────────────────
-.claude/
 .vscode/
 
 # --- autonomous ticket runner ---
@@ -222,3 +221,8 @@ runs/
 .worktrees/
 # Fixture database provisioned into a worktree.
 DATA/fixture/
+
+# .claude/skills/ IS tracked — git worktrees materialise only committed files, so
+# an untracked reviewer skill would be missing from every agent's worktree and the
+# review gate would silently pass. Local per-machine settings stay ignored.
+.claude/settings.local.json

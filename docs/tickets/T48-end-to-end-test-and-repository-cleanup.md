@@ -30,7 +30,8 @@ what the per-ticket merges did not.
 - [ ] A synthetic signal runs through a three-step chain, a detection is adjudicated, the candidate is
       promoted to the library, and the run group is exported — in one test.
 - [ ] The exported manifest's recipe hash equals the run's recipe hash.
-- [ ] All 195 existing tests pass, plus everything added across milestones 1–5.
+- [ ] The full suite passes with no regressions against the run baseline, including everything
+      added across milestones 1–5.
 - [ ] `discover_adapters()` registers the expected count — no adapter is silently skipped by a broken
       optional dependency.
 - [ ] The READMEs describe the four workspaces, the seven types and the manifest format.

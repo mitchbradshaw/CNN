@@ -60,9 +60,27 @@ def _load_calibration():
 
 
 def _save_calibration(data):
-    os.makedirs(os.path.dirname(CALIBRATION_PATH), exist_ok=True)
-    with open(CALIBRATION_PATH, "w") as f:
+    """Write the calibration file atomically.
+
+    A plain `open(path, "w")` truncates first and writes second, so any reader
+    that arrives between those two steps — another process, a background
+    thread, or a test that shares the path — sees a partial file and fails
+    with a `JSONDecodeError`. Writing to a sibling temp file and renaming it
+    over the target makes the swap a single filesystem operation: a reader
+    sees either the whole old file or the whole new one, never a fragment.
+
+    `os.replace` is atomic on NTFS and POSIX alike, and unlike `os.rename` it
+    overwrites an existing destination on Windows.
+    """
+    directory = os.path.dirname(CALIBRATION_PATH)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp_path = CALIBRATION_PATH + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(data, f, indent=2, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, CALIBRATION_PATH)
 
 
 def calibrate(backend="stump", force=False, n0=CALIBRATION_N0, seed=0):

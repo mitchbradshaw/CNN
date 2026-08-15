@@ -193,7 +193,23 @@ autonomous agent produces work that looks finished and isn't: a test that assert
 
 ### 2. Suite green on the branch
 
-The agent runs the full suite before declaring done. 195 existing tests plus whatever the ticket adds.
+The agent runs the full suite before declaring done.
+
+**The gate is a baseline comparison, not a fixed count.** The orchestrator records the pass/fail set
+at run start and gates on *no regressions* — nothing that passed at baseline may fail. A hardcoded
+number is wrong by the second merged ticket, because every ticket adds tests.
+
+Measured 15 Aug 2026 on the clone: **486 tests, 4 min 03 s**, exit 0 once the collection artifact
+below is excluded. That sits in the 2–8 minute band, so the design holds as written: with a ceiling
+of 3 and a ~60 min mean ticket, merges arrive roughly every 20 minutes against a 4-minute lock —
+about an 18% duty cycle, no contention.
+
+**`pytest.ini` is load-bearing.** The repo had no pytest configuration at all, so rootdir was
+inferred and `sys.path` was patched per test file — fragile when pytest is invoked from a worktree.
+It now pins `testpaths` and excludes `tests/test_analysis_modules.py`, which is a standalone
+diagnostic script whose `test_*` helpers take positional arguments; pytest collected them by name and
+errored on missing fixtures, producing six errors and a non-zero exit. Left unfixed that would have
+failed gate 2 on **every** ticket, tripping the circuit breaker three tickets into night one.
 
 ### 3. Scope check
 
@@ -205,8 +221,9 @@ Hard-blocking would be wrong; sometimes a legitimate fix needs a neighbour. An u
 
 ### 4. Two-axis review
 
-`code-review-two-axis` runs against the branch diff, with `docs/CODING_STANDARDS.md` as the Standards
-source and the ticket file as the Spec source. Both must exist for the gate to mean anything — a
+The in-repo two-axis review skill — `.claude/skills/code-review/`, invoked as **`code-review`**, not
+`code-review-two-axis` — runs against the branch diff, with `docs/CODING_STANDARDS.md` as the
+Standards source and the ticket file as the Spec source. Both must exist for the gate to mean anything — a
 review with no standards document falls back to Fowler smells, which are judgement calls and produce
 false blockers at 3am.
 
@@ -337,3 +354,106 @@ subset-by-touched-module gate at merge with one full suite at end of run.
 `01 → 05 → 13 → 14 → 15 → 24 → 25 → 26 → 31 → 32 → 44 → 48 → 49`, and 15 (the step cache) is first on
 the PRD's cut list. Cutting it removes a link from the critical path and a HIGH-risk `execution.py`
 edit. That is a better argument for cutting it than the PRD's own.
+
+---
+
+## Appendix A — `state.json`
+
+The orchestrator's memory. Written atomically after **every** state transition:
+
+```python
+tmp = path.with_suffix(".tmp")
+tmp.write_text(json.dumps(state, indent=1))
+os.replace(tmp, path)        # atomic on NTFS
+```
+
+**The DAG is not stored here.** Blocking edges, mutexes, flags and models are re-derived from the
+ticket front-matter on every start. `state.json` holds only what is *mutable*, so editing a ticket's
+`blocked_by` never requires migrating state.
+
+```json
+{
+  "schema": 1,
+  "run_id": "run-20260815-2130",
+  "integration_branch": "integration/run-20260815-2130",
+  "base_sha": "9f2c1ab",
+  "config_hash": "sha256:…",
+  "started_at": "2026-08-15T21:30:00+10:00",
+  "wall_clock_stop": "2026-08-16T07:00:00+10:00",
+  "circuit_breaker": { "consecutive_quarantines": 0, "tripped": false },
+  "merge_lock_holder": null,
+  "symbols": { "resample_and_znorm": 35, "load_fixture_db": 2 },
+  "tickets": {
+    "17": {
+      "status": "MERGED",
+      "attempts": 1,
+      "branch": "ticket/T17",
+      "worktree": "C:/Users/mmebr/Documents/.wt/T17",
+      "gates": {
+        "red_proof": "pass", "suite": "pass", "scope": "warn",
+        "review": "pass", "overlap": "pass"
+      },
+      "review_rounds": 1,
+      "review_blockers": { "standards": 0, "spec": 0 },
+      "scope_deviations": ["UI/plots.py"],
+      "merge_sha": "4b7e0c2",
+      "started_at": "2026-08-15T23:30:00+10:00",
+      "ended_at": "2026-08-16T00:34:11+10:00",
+      "exit_class": null
+    }
+  }
+}
+```
+
+**Status values.** `PENDING` → `READY` → `RUNNING` → `GATING` → `MERGING` → `MERGED`. Terminal
+alternatives: `FAILED` (quarantined), `BLOCKED_UPSTREAM` (a blocker was quarantined),
+`OVERLAP` (held by the overlap check), `HELD` (`human-gate`, never dispatched).
+
+`symbols` is the accumulated top-level function/class name → owning ticket index that the overlap
+check reads. It is rebuildable from git, but carrying it makes the check cheap.
+
+### Recovery on restart
+
+**Git is the durable truth; `state.json` is an index over it.** Where they disagree, git wins.
+
+On startup, every ticket found in `RUNNING`, `GATING` or `MERGING` is stale by definition — its
+subprocess died with the orchestrator. Each is reconciled against git rather than trusted:
+
+| Git says | Action |
+|---|---|
+| Branch merged into the integration branch | Mark `MERGED`, record the merge sha, move on |
+| Branch exists with commits, not merged | Resume at the first ungated step; do not re-dispatch the agent |
+| Branch exists, no commits beyond base | Delete branch and worktree, reset to `READY` |
+| No branch | Reset to `READY` |
+
+Nothing is ever re-dispatched on the strength of a `state.json` field alone. A crash mid-merge is the
+one case worth stating explicitly: if the merge commit exists but the post-merge suite never ran, the
+ticket returns to `MERGING` and the suite runs again — running it twice is free, skipping it is not.
+
+---
+
+## Appendix B — Pre-flight checks
+
+Run these once, before the first real dispatch. Each is a silent-degradation risk, not a crash.
+
+1. **The reviewer resolves.** Open a Claude Code session *inside a git worktree* and confirm the
+   two-axis review skill is discoverable there. Worktrees contain only tracked files, and `.claude/`
+   is gitignored — so a project-level skill under `.claude/skills/` will **not** exist in any
+   worktree. Either install the skills user-level (`~/.claude/skills/`), or track `.claude/skills/`
+   by adding a negation to `.gitignore`. If the reviewer cannot be found, gate 4 degrades to nothing
+   and every ticket merges unreviewed.
+2. **The reviewer does not ask questions.** The in-repo `code-review` skill asks for a fixed point if
+   none is given, and asks where the spec is if it cannot find one. Unattended, either question
+   hangs the ticket until its budget expires. The runner passes **both** explicitly: the merge-base
+   against the integration branch, and the ticket file path.
+3. **`docs/agents/issue-tracker.md` exists.** Without it the review skill instructs the agent to run
+   `/setup-matt-pocock-skills`, which is interactive. The stub in this repo tells it not to.
+4. **`review.json` is the runner's output, not the skill's.** Neither review skill emits structured
+   findings. The runner converts the prose into severity-tagged JSON, grading against the per-rule
+   severities already assigned in `docs/CODING_STANDARDS.md`.
+5. **Suite wall-clock measured.** `pytest -q --durations=15`, run twice (the first pays import cost
+   for torch/kymatio/aeon). Under ~2 min the design holds as written; 2–8 min holds with a lower
+   ceiling; over ~15 min switch the merge gate to subset-by-touched-module with one full suite at end
+   of run.
+6. **`annotations.sqlite` backed up** to a location outside the working clone. Moving off Drive
+   removed the incidental backup `DATA/README.md` was relying on.

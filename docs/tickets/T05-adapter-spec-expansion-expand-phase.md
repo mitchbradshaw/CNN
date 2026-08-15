@@ -40,4 +40,5 @@ that constraint in each of those tickets.
       existing `x` / `t` / `intervals` / `encoding` fields, which are untouched.
 - [ ] `recommend`, `derive`, `persist`, `max_span_samples`, `plot` and `validate_params` are unchanged
       — this ticket adds fields and removes none.
-- [ ] All nineteen existing adapters import and register without modification, and all 195 tests pass.
+- [ ] All nineteen existing adapters import and register without modification, and the full suite
+      passes with no regressions against the run baseline.

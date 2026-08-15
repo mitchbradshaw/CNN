@@ -20,7 +20,7 @@ is being built and why. Read the section relevant to your ticket; do not read th
 | `Working/database/` | Plain-SQL layer. `schema.py` holds the whole schema and its migrations |
 | `Adapters/` | The analysis block registry. `base.py` is the adapter contract |
 | `UI/` | Panel/HoloViews surfaces. The only place a UI library may be imported |
-| `tests/` | pytest, headless, 195 existing tests |
+| `tests/` | pytest, headless. 486 tests, ~4 min wall-clock |
 | `docs/` | PRD, coding standards, ticket backlog |
 | `DATA/`, `MODELS/`, `MATRICES/`, `Plots/` | Gitignored. Provisioned into your worktree, not committed |
 
@@ -28,9 +28,11 @@ is being built and why. Read the section relevant to your ticket; do not read th
 
 1. **No module below `UI/` may import Panel, HoloViews, Bokeh or matplotlib.** This is what makes
    cluster execution, headless tests and the reproducibility claim possible. It is enforced by a test.
-2. **The 195 existing tests must pass.** Not "mostly pass". If your change breaks one, either your
-   change is wrong or the test encodes a behaviour your ticket is deliberately changing — and if it is
-   the latter, say so explicitly in your commit message.
+2. **The suite must pass with no regressions.** `pytest` from your worktree root: 486 tests, about
+   four minutes, exit code 0. Do not chase a fixed number — every merged ticket adds tests, so the
+   gate is "nothing that passed before now fails", not "N tests pass". If your change breaks one,
+   either your change is wrong or the test encodes a behaviour your ticket is deliberately changing —
+   and if it is the latter, say so explicitly in your commit message.
 3. **Plain SQL, no ORM.** Schema changes are additive and applied through `init_db()`, which must stay
    idempotent.
 4. **Bulk arrays never enter the database.** They live on disk, referenced by path.

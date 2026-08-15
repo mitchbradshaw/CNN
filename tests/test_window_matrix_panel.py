@@ -43,25 +43,18 @@ from Working.database import queries as q
 import Working.Preprocessing.window_matrix.cost as cost
 from UI.app import ViewerApp
 from tests._session_isolation import scratch_session_file
+from tests._calibration_isolation import scratch_calibration
 
 N_SAMPLES = 24_000  # fs=1 -> long enough for 1/10/60 min, too short for 600 min
 
 
-class _IsolatedCalibration:
+def _IsolatedCalibration():
     """Same as tests/test_wm_cost.py's helper — redirects
     `cost.CALIBRATION_PATH` so nothing here touches the real
-    DATA/db/wm_calibration.json."""
-
-    def __enter__(self):
-        self._old = cost.CALIBRATION_PATH
-        fd, path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        os.remove(path)
-        cost.CALIBRATION_PATH = path
-        return self
-
-    def __exit__(self, *exc):
-        cost.CALIBRATION_PATH = self._old
+    DATA/db/wm_calibration.json. Shared implementation in
+    `tests/_calibration_isolation.py`; the previous local copy leaked its temp
+    file on exit."""
+    return scratch_calibration(cost)
 
 
 def _fresh_app_with_recording():
