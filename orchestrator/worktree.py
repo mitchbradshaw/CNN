@@ -88,7 +88,21 @@ def provision(git: Git, *, ticket_id: int, worktrees_root: Path | str,
         source = Path(source)
         if not source.is_dir():
             raise ProvisionError(f"recording directory missing: {source}")
-        _junction(path / source.name, source)
+        # The link must keep the source's path relative to the repo root. Every
+        # path constant in the suite is root-relative, so a junction dropped at
+        # the worktree root is data nothing can find — indistinguishable from
+        # having provisioned nothing, except that it looks like it worked.
+        try:
+            # Both sides resolved: a case or short-path mismatch here would
+            # refuse every worktree in the run, not just this one.
+            relative = source.resolve().relative_to(git.root.resolve())
+        except ValueError:
+            raise ProvisionError(
+                f"recording directory {source} is not inside the repo root {git.root}, "
+                f"so it has no path relative to the repo root to preserve — refusing "
+                f"to guess where it belongs in the worktree"
+            ) from None
+        _junction(path / relative, source)
 
     return Worktree(ticket_id=ticket_id, path=path, branch=branch)
 
@@ -98,13 +112,27 @@ def teardown(git: Git, worktree: Worktree) -> None:
     # Junctions must be unlinked before the tree is removed, or a recursive
     # delete walks into the shared read-only recordings and deletes those too.
     if worktree.path.exists():
-        for child in worktree.path.iterdir():
-            if child.is_dir() and child.is_symlink():
-                child.unlink()
-            elif child.is_dir() and _is_junction(child):
-                child.rmdir()
+        _unlink_links(worktree.path)
 
     git.worktree_remove(worktree.path)
+
+
+def _unlink_links(root: Path) -> None:
+    """Unlink every junction/symlink under `root`, without ever traversing one.
+
+    A junction preserves its source's path relative to the repo root, so it sits
+    several levels down — `DATA/derived/channels/<name>` — and a scan of `root`'s
+    immediate children does not see it. The check has to happen *before* the
+    recursion: `os.walk` descends through Windows junctions even with
+    `followlinks=False`, which is the very traversal this exists to prevent.
+    """
+    for child in root.iterdir():
+        if child.is_symlink():
+            child.unlink()
+        elif _is_junction(child):
+            child.rmdir()  # removes the link; the target is untouched
+        elif child.is_dir():
+            _unlink_links(child)
 
 
 def _is_junction(path: Path) -> bool:

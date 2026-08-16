@@ -22,7 +22,7 @@ from .config import load_config
 from .gitops import Git
 from .planner import render_plan, simulate
 from .report import RunDirectory, render_report
-from .runloop import Runner, capture_baseline
+from .runloop import BaselineError, Runner, capture_baseline
 from .state import RunState, load_state, reconcile, save_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -143,7 +143,17 @@ def _do_run(config, backlog, args) -> int:
     run_dir.plan_path.write_text(plan_text, encoding="utf-8")
     print(plan_text)
 
-    baseline = () if args.skip_baseline else capture_baseline(git, config)
+    try:
+        baseline = () if args.skip_baseline else capture_baseline(
+            git, config, integration_branch=branch)
+    except BaselineError as exc:
+        # Startup is the cheap place to discover a broken worktree. The
+        # alternative is discovering it once per ticket, 20 minutes at a time.
+        print(f"{exc}", file=sys.stderr)
+        git.checkout(config.base_branch)
+        git.delete_branch(branch)
+        return 2
+
     if baseline:
         print(f"baseline: {len(baseline)} test(s) already failing before any ticket ran:")
         for node in baseline:
