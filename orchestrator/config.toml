@@ -45,7 +45,11 @@ coding_standards = "docs/CODING_STANDARDS.md"
 # A small purpose-built fixture database, copied into every worktree. Never the
 # real one: an agent that cannot reach the 11,000-row database cannot damage it.
 fixture_db = "DATA/fixture/annotations.sqlite"
-fixture_db_dest = "DATA/annotations.sqlite"
+# The app resolves its database from Working/database/schema.py:DB_PATH, which is
+# DATA/db/annotations.sqlite. A fixture copied anywhere else is a fixture nothing
+# reads, and every DB-touching test in the worktree would quietly create its own
+# empty database instead.
+fixture_db_dest = "DATA/db/annotations.sqlite"
 # Read-only recording directories, junctioned (mklink /J) into worktrees whose
 # ticket declares it needs real data. Junctions are unaffected by
 # `.git/config` symlinks = false.
@@ -84,6 +88,14 @@ followups_file = "FOLLOWUPS.md"
 timeout_minutes = 30
 # A finding that cites no rule number cannot block a merge at 3am.
 default_severity = "minor"
+
+[overlap]
+# Include module-private (`_`-prefixed) top-level names in the collision check.
+# True is faithful to the spec and to standards rule 6.4: two agents both
+# writing `_resample_and_znorm` are two implementations of one idea, and being
+# private makes that harder to spot rather than less real. Set false if private
+# helper collisions prove to be noise. Dunders are always excluded.
+include_private = true
 
 [circuit_breaker]
 consecutive_quarantines = 3

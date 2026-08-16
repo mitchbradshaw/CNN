@@ -45,8 +45,13 @@ class TicketRecord:
 
 @dataclass
 class CircuitBreaker:
-    consecutive_quarantines: int = 0
+    consecutive_quarantines: float = 0
+    #: Its own streak, because a flaky ticket merges and a merge clears the
+    #: quarantine streak — sharing one counter would make the half-weight rule
+    #: a no-op. See orchestrator/breaker.py.
+    consecutive_flakes: int = 0
     tripped: bool = False
+    reason: str = ""
 
 
 @dataclass

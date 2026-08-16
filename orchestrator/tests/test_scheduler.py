@@ -102,7 +102,59 @@ def test_a_solo_ticket_waits_for_the_field_to_clear(write_ticket, ticket_dir, ce
     decision = schedule(backlog, all_pending(backlog, {2: RUNNING}), ceilings)
 
     assert decision.dispatch == ()
-    assert decision.holds[1].reason == "solo"
+    # Top candidate and solo, so the field is draining for it — which is the
+    # stronger form of "waits for the field to clear".
+    assert decision.holds[1].reason == "draining"
+    assert "T02" in decision.holds[1].detail
+
+
+def test_the_field_drains_once_a_solo_ticket_is_the_top_candidate(write_ticket, ticket_dir,
+                                                                  ceilings):
+    """Without this, a solo ticket only starts on a tick where the field
+    happens to be empty *and* it happens to sort first. With continuous work
+    and a ceiling of 3, that is luck, and T17 gates 26 tickets."""
+    write_ticket(1, flags=["solo"], blocked_by=[9])   # top candidate once 9 lands
+    write_ticket(2)
+    write_ticket(3)
+    write_ticket(9)
+    for i in (4, 5, 6, 7, 8):                          # give 1 the most dependents
+        write_ticket(i, blocked_by=[1])
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog, {9: MERGED, 2: RUNNING}), ceilings)
+
+    assert decision.dispatch == (), "nothing new starts while the solo ticket waits"
+    assert decision.holds[1].reason == "draining"
+    assert decision.holds[3].reason == "draining"
+
+
+def test_draining_ends_the_moment_the_field_is_empty(write_ticket, ticket_dir, ceilings):
+    write_ticket(1, flags=["solo"], blocked_by=[9])
+    write_ticket(2)
+    write_ticket(9)
+    for i in (4, 5, 6, 7, 8):
+        write_ticket(i, blocked_by=[1])
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog, {9: MERGED}), ceilings)
+
+    assert decision.dispatch == (1,)
+
+
+def test_a_low_priority_solo_ticket_does_not_drain_the_field(write_ticket, ticket_dir,
+                                                             ceilings):
+    """Draining costs the whole field's throughput. Only the top candidate
+    earns it — a solo ticket nothing depends on just waits its turn."""
+    write_ticket(1)
+    write_ticket(2, blocked_by=[1])
+    write_ticket(3, blocked_by=[1])
+    write_ticket(9, flags=["solo"])          # no dependents, sorts last
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog), ceilings)
+
+    assert decision.dispatch == (1,)
+    assert decision.holds[9].reason == "solo"
 
 
 def test_global_ceiling_caps_dispatch(write_ticket, ticket_dir):

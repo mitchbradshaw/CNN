@@ -21,8 +21,11 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: pytest's short summary lines, e.g. `FAILED tests/test_x.py::test_y - AssertionError`
-SUMMARY_LINE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", re.MULTILINE)
+#: pytest's short summary lines, e.g. `FAILED tests/test_x.py::test_y - AssertionError`.
+#: The id runs to the ` - ` that introduces the error, not to the first space:
+#: a parametrised id like `test_x[a b]` contains spaces, and truncating it
+#: yields something pytest cannot resolve on the re-run.
+SUMMARY_LINE = re.compile(r"^(?:FAILED|ERROR)\s+(.+?)(?:\s+-\s.*)?$", re.MULTILINE)
 
 #: Stands in for a red the runner could not attribute to a node id — a
 #: collection error, an internal pytest error, a timeout. It is not a node id
@@ -125,9 +128,15 @@ def check_suite(cwd: Path | str, command, *, baseline_failed, timeout_minutes: f
     rerun = run_suite(cwd, command, timeout_minutes=timeout_minutes, node_ids=regressions)
     still_failing = tuple(n for n in regressions if n in set(rerun.failed))
 
-    if still_failing:
-        return SuiteVerdict(status="fail", regressions=still_failing, failed=result.failed,
-                            output=result.output, rerun_output=rerun.output)
+    if still_failing or rerun.exit_code != 0:
+        # `rerun.exit_code != 0` is the load-bearing half. If the re-run could
+        # not execute what it was asked for — an id pytest cannot resolve, a
+        # collection error, a crash — then the ids simply never reappear, and
+        # "they didn't fail again" is not evidence that they passed. Only a
+        # green re-run earns a flake verdict.
+        return SuiteVerdict(status="fail", regressions=still_failing or regressions,
+                            failed=result.failed, output=result.output,
+                            rerun_output=rerun.output)
 
     # Passed on re-run. A FLAKY mark is a finding, not a shrug: the ids and both
     # outputs are retained, and the run loop counts it toward the breaker.

@@ -77,14 +77,39 @@ def test_a_symbol_that_already_existed_is_not_an_addition(repo):
     assert added_symbols(repo, "integration", "ticket/T35") == {"newly_added"}
 
 
-def test_private_names_are_ignored(repo):
-    """A module-private helper is not a shared-vocabulary collision."""
+def test_private_names_are_caught_by_default(repo):
+    """Two agents both writing `_resample_and_znorm` are still two
+    implementations of one idea — being module-private makes the duplication
+    harder to spot, not less real. Standards rule 6.4 calls duplicated logic
+    across modules a blocker at the merge boundary regardless of visibility."""
     branch_with(repo, "ticket/T35", "Working/distances.py", """
         def _private_helper(): pass
         def public_thing(): pass
     """)
 
-    assert added_symbols(repo, "integration", "ticket/T35") == {"public_thing"}
+    assert added_symbols(repo, "integration", "ticket/T35") == {
+        "_private_helper", "public_thing",
+    }
+
+
+def test_private_names_can_be_excluded_by_configuration(repo):
+    branch_with(repo, "ticket/T35", "Working/distances.py", """
+        def _private_helper(): pass
+        def public_thing(): pass
+    """)
+
+    assert added_symbols(repo, "integration", "ticket/T35",
+                         include_private=False) == {"public_thing"}
+
+
+def test_dunder_names_are_never_symbols(repo):
+    """`__all__`-adjacent module machinery is not a shared vocabulary."""
+    branch_with(repo, "ticket/T35", "Working/distances.py", """
+        def __getattr__(name): raise AttributeError(name)
+        def real_thing(): pass
+    """)
+
+    assert added_symbols(repo, "integration", "ticket/T35") == {"real_thing"}
 
 
 def test_a_file_that_does_not_parse_is_skipped_rather_than_crashing(repo):

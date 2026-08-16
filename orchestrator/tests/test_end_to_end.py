@@ -7,6 +7,7 @@ whose behaviour each test dictates.
 """
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -63,6 +64,23 @@ if mode == "impl-first":        # first commit touches implementation
 
 tests = cwd / "tests"
 tests.mkdir(exist_ok=True)
+
+if mode == "flaky":
+    # Fails the first two times it is ever run, passes afterwards. The count
+    # lives outside the worktree so the flake does not follow the test into
+    # the next ticket's branch: run 1 is the red-proof gate, run 2 is the
+    # suite gate, run 3 is the targeted re-run that goes green.
+    (tests / ("test_" + slug + ".py")).write_text(
+        "import os, pathlib\\n"
+        "def test_" + slug + "():\\n"
+        "    counter = pathlib.Path(os.environ['FAKE_FLAKE_DIR']) / '" + slug + ".count'\\n"
+        "    n = int(counter.read_text()) if counter.exists() else 0\\n"
+        "    counter.write_text(str(n + 1))\\n"
+        "    assert n >= 2, 'flaky: run number ' + str(n + 1)\\n"
+    )
+    git("add", "-A"); git("commit", "-m", label + ": red")
+    sys.exit(0)
+
 if mode == "vacuous":           # a test that asserts nothing
     (tests / ("test_" + slug + ".py")).write_text("def test_" + slug + "(): assert True\\n")
     git("add", "-A"); git("commit", "-m", label + ": vacuous test")
@@ -144,6 +162,9 @@ followups_file = "FOLLOWUPS.md"
 timeout_minutes = 2
 default_severity = "minor"
 
+[overlap]
+include_private = true
+
 [circuit_breaker]
 consecutive_quarantines = {breaker}
 quarantine_fraction = 0.4
@@ -206,6 +227,12 @@ def world(tmp_path):
 
     agent = tmp_path / "fake_agent.py"
     agent.write_text(textwrap.dedent(FAKE_AGENT), encoding="utf-8")
+
+    # Where the `flaky` mode keeps its run counts — outside every worktree, so a
+    # flake does not follow its test file into the next ticket's branch.
+    flake_dir = tmp_path / "flake"
+    flake_dir.mkdir()
+    os.environ["FAKE_FLAKE_DIR"] = str(flake_dir)
 
     git = Git(root)
     git.run("init", "-b", "main")
@@ -475,6 +502,37 @@ def test_the_circuit_breaker_halts_a_run_that_is_failing_wholesale(world, monkey
     quarantined = sum(1 for r in runner.state.tickets.values() if r.status == FAILED)
     assert quarantined == 3, "it halts at three, rather than burning the whole backlog"
     assert "CIRCUIT BREAKER" in "\n".join(runner.log)
+
+
+def test_consecutive_flakes_trip_the_breaker_even_though_each_one_merges(world, monkeypatch):
+    """The half-weight flake rule has to survive the merges it enables. If the
+    flake count shared the quarantine counter, every flaky ticket would wipe
+    its own contribution and the rule would be a no-op."""
+    for i in range(1, 8):
+        world.ticket(i)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "flaky")
+    runner = build_runner(world, world.config(ceiling=1, breaker=3))
+
+    runner.run()
+
+    merged = [i for i, r in runner.state.tickets.items() if r.status == MERGED]
+    assert merged, "flaky tickets still merge — that is the amendment"
+    assert runner.state.circuit_breaker.consecutive_flakes >= 6
+    assert runner.state.circuit_breaker.tripped
+    assert "flake mark" in runner.state.circuit_breaker.reason
+
+
+def test_a_clean_ticket_clears_the_flake_streak(world, monkeypatch):
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config())
+    runner.state.circuit_breaker.consecutive_flakes = 2
+
+    runner.run()
+
+    assert runner.state.tickets["1"].status == MERGED
+    assert runner.state.circuit_breaker.consecutive_flakes == 0
 
 
 def test_the_overlap_check_holds_the_second_ticket_and_never_resolves_it(world, monkeypatch):

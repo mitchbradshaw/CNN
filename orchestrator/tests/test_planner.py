@@ -105,6 +105,27 @@ def test_holds_report_only_tickets_that_were_ready_and_held_back(write_ticket, t
     assert held[4].reason == "ceiling"
 
 
+def test_a_drain_wave_is_visible_rather_than_looking_stalled(write_ticket, ticket_dir,
+                                                             config):
+    """The plan must show *why* a stretch of the night starts nothing, or a
+    drain reads as the runner having hung."""
+    write_ticket(1, size="S", budget_minutes=30)
+    write_ticket(2, size="L", budget_minutes=120)
+    write_ticket(9, flags=["solo"], size="M", budget_minutes=60, blocked_by=[1])
+    for i in (3, 4, 5, 6):
+        write_ticket(i, blocked_by=[9])
+    backlog = load_backlog(ticket_dir)
+
+    plan = simulate(backlog, config, ceilings=Ceilings(3, 2))
+
+    text = render_plan(plan)
+    assert "draining" in text
+    starts = {t.id: t.start_minutes for w in plan.waves for t in w.tickets}
+    # T09 waits for the 120-minute ticket to clear, and nothing starts meanwhile.
+    assert starts[9] == 120
+    assert not any(0 < s < 120 for i, s in starts.items() if i != 9)
+
+
 def test_the_wall_clock_stop_prevents_later_dispatch(write_ticket, ticket_dir, config):
     write_ticket(1, size="M", budget_minutes=60)
     write_ticket(2, size="M", budget_minutes=60, blocked_by=[1])

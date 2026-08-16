@@ -15,7 +15,8 @@ from pathlib import Path
 
 REQUIRED_SECTIONS = (
     "run", "ceilings", "budgets", "models", "paths",
-    "agent", "suite", "retries", "review", "circuit_breaker", "rate_limit",
+    "agent", "suite", "retries", "review", "overlap", "circuit_breaker",
+    "rate_limit",
 )
 
 
@@ -73,6 +74,11 @@ class ReviewConfig:
 
 
 @dataclass(frozen=True)
+class OverlapConfig:
+    include_private: bool
+
+
+@dataclass(frozen=True)
 class CircuitBreakerConfig:
     consecutive_quarantines: int
     quarantine_fraction: float
@@ -103,6 +109,7 @@ class Config:
     suite: SuiteConfig
     retries: RetryConfig
     review: ReviewConfig
+    overlap: OverlapConfig
     circuit_breaker: CircuitBreakerConfig
     rate_limit: RateLimitConfig
 
@@ -216,6 +223,9 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             followups_file=_require(data, "review", "followups_file", path),
             timeout_minutes=int(_require(data, "review", "timeout_minutes", path)),
             default_severity=_require(data, "review", "default_severity", path),
+        ),
+        overlap=OverlapConfig(
+            include_private=bool(_require(data, "overlap", "include_private", path)),
         ),
         circuit_breaker=CircuitBreakerConfig(
             consecutive_quarantines=int(

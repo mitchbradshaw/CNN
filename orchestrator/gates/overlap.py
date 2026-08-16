@@ -36,16 +36,34 @@ class OverlapVerdict:
         return "\n".join(lines) + "\n"
 
 
-def _top_level_names(source: str) -> set[str]:
-    """Public top-level function and class names. Unparseable source yields none."""
+def _top_level_names(source: str, *, include_private: bool) -> set[str]:
+    """Top-level function and class names. Unparseable source yields none.
+
+    Private names are included by default — a deliberate choice, not an
+    oversight. Two agents both adding `_resample_and_znorm` are still two
+    implementations of one idea; being module-private makes the duplication
+    harder to notice, not less real, and standards rule 6.4 calls duplicated
+    logic across modules a blocker at the merge boundary either way. Set
+    `overlap.include_private = false` in config.toml to narrow it.
+
+    Dunder names are always excluded: `__getattr__` and friends are module
+    machinery, not shared vocabulary, and would collide constantly.
+    """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return set()
-    return {
-        node.name for node in tree.body
-        if isinstance(node, TOP_LEVEL_DEFS) and not node.name.startswith("_")
-    }
+
+    names = set()
+    for node in tree.body:
+        if not isinstance(node, TOP_LEVEL_DEFS):
+            continue
+        if node.name.startswith("__") and node.name.endswith("__"):
+            continue
+        if not include_private and node.name.startswith("_"):
+            continue
+        names.add(node.name)
+    return names
 
 
 def _file_at(git: Git, ref: str, path: str) -> str:
@@ -55,7 +73,8 @@ def _file_at(git: Git, ref: str, path: str) -> str:
         return ""   # the file did not exist at that ref
 
 
-def added_symbols(git: Git, base: str, branch: str) -> set[str]:
+def added_symbols(git: Git, base: str, branch: str, *,
+                  include_private: bool = True) -> set[str]:
     """Top-level names the branch adds, relative to the merge base."""
     merge_base = git.merge_base(base, branch)
     added: set[str] = set()
@@ -63,8 +82,10 @@ def added_symbols(git: Git, base: str, branch: str) -> set[str]:
     for path in git.files_changed(base, branch):
         if not path.endswith(".py"):
             continue
-        before = _top_level_names(_file_at(git, merge_base, path))
-        after = _top_level_names(_file_at(git, branch, path))
+        before = _top_level_names(_file_at(git, merge_base, path),
+                                  include_private=include_private)
+        after = _top_level_names(_file_at(git, branch, path),
+                                 include_private=include_private)
         added |= after - before
 
     return added

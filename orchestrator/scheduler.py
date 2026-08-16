@@ -90,6 +90,25 @@ def schedule(backlog: Backlog, states: Mapping[int, str], ceilings: Ceilings) ->
 
     candidates.sort(key=lambda i: _sort_key(backlog, i))
 
+    # 3a. Drain for solo. Holding a solo ticket whenever anything is in flight
+    # is not enough on its own: nothing would ever stop *other* tickets taking
+    # the slots, so the solo ticket could only start on a tick where the field
+    # happened to be empty and it happened to sort first. With a ceiling of 3
+    # and continuous work that is luck, and T17 gates 26 tickets.
+    #
+    # So once a solo ticket is the top candidate, the field drains: nothing new
+    # dispatches until the in-flight tickets finish. Only the *top* candidate
+    # earns this — draining costs the whole field's throughput, and a solo
+    # ticket nothing depends on can wait its turn.
+    if candidates and backlog[candidates[0]].solo and in_flight:
+        waiting = ", ".join(f"T{i:02d}" for i in sorted(in_flight))
+        holds[candidates[0]] = Hold(
+            "draining", f"runs alone; waiting for {waiting} to finish")
+        for other in candidates[1:]:
+            holds[other] = Hold(
+                "draining", f"field draining for T{candidates[0]:02d} (solo)")
+        return Decision(dispatch=(), holds=holds)
+
     dispatch: list[int] = []
     slots = ceilings.concurrent - len(in_flight)
     opus_slots = ceilings.opus - opus_in_flight

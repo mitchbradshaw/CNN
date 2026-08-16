@@ -19,7 +19,7 @@ from .scheduler import Ceilings, Hold, schedule
 #: Reasons worth printing on a wave's `held:` line. A ticket waiting on its
 #: blockers is not held back — it is simply not ready, and listing all of them
 #: would bury the ceiling and mutex decisions this line exists to show.
-HELD_BACK = ("ceiling", "opus-ceiling", "mutex", "solo")
+HELD_BACK = ("ceiling", "opus-ceiling", "mutex", "solo", "draining")
 
 
 @dataclass(frozen=True)
@@ -97,6 +97,7 @@ def simulate(backlog: Backlog, config: Config, *, ceilings: Ceilings | None = No
     waves: list[Wave] = []
     now = 0
     stopped_at: int | None = None
+    draining_shown = False
 
     while True:
         if stop_after_minutes is not None and now > stop_after_minutes:
@@ -105,7 +106,21 @@ def simulate(backlog: Backlog, config: Config, *, ceilings: Ceilings | None = No
         else:
             decision = schedule(backlog, states, ceilings)
 
+        if decision and not decision.dispatch and not draining_shown:
+            # A tick that starts nothing because the field is draining for a
+            # solo ticket is a real event in the night, and the only one that
+            # legitimately leaves the machine idle. Recorded once per drain
+            # episode, so the plan shows why rather than looking hung.
+            draining = tuple(sorted(
+                ((i, h) for i, h in decision.holds.items() if h.reason == "draining"),
+                key=lambda pair: pair[0],
+            ))
+            if draining:
+                waves.append(Wave(len(waves) + 1, now, (), draining))
+                draining_shown = True
+
         if decision and decision.dispatch:
+            draining_shown = False
             planned = []
             for ticket_id in decision.dispatch:
                 ticket = backlog[ticket_id]
@@ -178,6 +193,12 @@ def render_plan(plan: Plan) -> str:
     for wave in plan.waves:
         prefix = f"wave {wave.index:<3} {_format_clock(wave.at_minutes):>8}   "
         pad = " " * len(prefix)
+
+        if not wave.tickets:
+            solo = [i for i, h in wave.holds if "runs alone" in h.detail]
+            who = f"T{solo[0]:02d}" if solo else "a solo ticket"
+            lines.append(f"{prefix}— draining: nothing starts until {who} can run alone —")
+
         for n, ticket in enumerate(wave.tickets):
             note = ""
             if ticket.was_blocked_by:
@@ -196,6 +217,11 @@ def render_plan(plan: Plan) -> str:
             lines.append(f"{pad}held: {held}{more}")
 
     autonomous = sum(len(w.tickets) for w in plan.waves)
+    drains = sum(1 for w in plan.waves if not w.tickets)
+    if drains:
+        lines.append("")
+        lines.append(f"{drains} drain wave(s): the field is deliberately emptied so a "
+                     f"solo ticket can run alone.")
     lines += [
         "",
         f"projected drain {plan.drain_minutes / 60:.1f} h · "

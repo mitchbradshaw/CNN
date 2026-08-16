@@ -150,6 +150,42 @@ def test_a_red_with_no_node_ids_is_never_marked_flaky(suite_dir):
     assert verdict.flaky == ()
 
 
+def test_a_rerun_that_could_not_run_is_not_a_flake(suite_dir, monkeypatch):
+    """If the re-run cannot execute the tests it was asked for — a truncated
+    node id, an id that no longer exists, a collection error — then the ids
+    simply do not reappear, and "they didn't fail again" would read as "they
+    passed". A flake verdict requires the re-run to have actually gone green."""
+    suite_dir.write("test_bad.py", "def test_broken(): assert False\n")
+
+    real = run_suite
+
+    def rerun_cannot_collect(*args, **kwargs):
+        if kwargs.get("node_ids"):
+            kwargs["node_ids"] = ["tests/test_bad.py::test_broken[truncated"]
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("orchestrator.gates.suite.run_suite", rerun_cannot_collect)
+
+    verdict = check_suite(suite_dir, COMMAND, baseline_failed=(), timeout_minutes=5)
+
+    assert verdict.status == "fail"
+    assert verdict.flaky == ()
+
+
+def test_a_node_id_containing_spaces_survives_parsing():
+    """`FAILED tests/t.py::test_x[a b] - AssertionError` — a `\\S+` capture
+    truncates this at the space and re-runs an id pytest cannot resolve."""
+    from orchestrator.gates.suite import parse_failures
+
+    parsed = parse_failures(
+        "FAILED tests/t.py::test_x[a b] - AssertionError: nope\n"
+        "FAILED tests/t.py::test_y - ValueError\n"
+        "ERROR tests/t.py::test_z\n"
+    )
+
+    assert parsed == ("tests/t.py::test_x[a b]", "tests/t.py::test_y", "tests/t.py::test_z")
+
+
 def test_the_rerun_happens_exactly_once(suite_dir, monkeypatch):
     suite_dir.write("test_bad.py", """
         def test_broken(): assert False

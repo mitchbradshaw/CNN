@@ -90,7 +90,12 @@ def test_the_written_file_matches_appendix_a(tmp_path):
         "started_at", "wall_clock_stop", "circuit_breaker", "merge_lock_holder",
         "symbols", "tickets",
     }
-    assert data["circuit_breaker"] == {"consecutive_quarantines": 0, "tripped": False}
+    # Appendix A's two fields, plus the separate flake streak the half-weight
+    # rule needs to survive the merge it enables (see orchestrator/breaker.py).
+    assert data["circuit_breaker"] == {
+        "consecutive_quarantines": 0, "consecutive_flakes": 0,
+        "tripped": False, "reason": "",
+    }
 
 
 def test_the_write_is_atomic_and_leaves_no_temp_file(tmp_path):

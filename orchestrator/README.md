@@ -81,6 +81,12 @@ loop until nothing is dispatchable:
 `main` is never written. In the morning you review the integration branch as one diff and
 fast-forward `main` yourself, or throw the night away with one `git branch -D`.
 
+**Solo tickets drain the field.** Once a `solo` ticket is the top candidate, nothing new dispatches
+until the in-flight tickets finish. Without this, T17 could only start on a tick where the field
+happened to be empty *and* it happened to sort first — under jitter that lands it around t+7 h
+instead of t+2 h, and it gates 26 tickets. `--plan` prints a drain wave so an idle stretch reads as
+deliberate rather than hung.
+
 ### The five gates
 
 | # | Gate | Failing it means |
@@ -89,7 +95,7 @@ fast-forward `main` yourself, or throw the night away with one `git branch -D`.
 | 2 | **Suite** | No regressions against the baseline. On red, the failing node ids are re-run **once** — pass means `FLAKY`, fail means quarantine. |
 | 3 | **Scope** | Soft. Undeclared files are reported and appended to the review prompt, never blocked. |
 | 4 | **Review** | Two-axis `code-review`, with the fixed point and the spec both passed explicitly. Blockers get one auto-fix round, then quarantine. Majors and minors merge and land in `FOLLOWUPS.md`. |
-| 5 | **Overlap** | Two branches adding the same top-level symbol. The second is **held**, never auto-resolved. |
+| 5 | **Overlap** | Two branches adding the same top-level symbol. The second is **held**, never auto-resolved. Private (`_`-prefixed) names count by default — see `overlap.include_private`. |
 
 Severity is graded by the runner from the rule numbers in `docs/CODING_STANDARDS.md`, not by the
 reviewer. A finding that cites no rule gets `minor` — a reviewer that will not cite a rule does not
@@ -102,7 +108,9 @@ get to stop a merge at 3am.
 
 **The circuit breaker** halts the run after three consecutive quarantines, or when more than 40% of
 dispatched tickets are quarantined. That is the difference between "one ticket was wrong" and "the
-base is broken and every agent is failing for the same reason". `FLAKY` marks count at half weight.
+base is broken and every agent is failing for the same reason". `FLAKY` marks count at half weight,
+on their *own* streak — a flaky ticket merges, and a merge clears the quarantine streak, so sharing
+one counter would let every flake erase its own contribution.
 
 **Rate limiting is handled fleet-wide.** When the signature — fast exit, non-zero code, no commits —
 appears on two or more agents, *all* dispatch pauses and backs off exponentially to a 15-minute cap.
@@ -176,7 +184,7 @@ Two settings are load-bearing and should not be changed casually:
 pytest orchestrator/tests
 ```
 
-203 tests, about two and a half minutes. They live outside `tests/` deliberately: the ticket suite is
+228 tests, a little over three minutes. They live outside `tests/` deliberately: the ticket suite is
 the baseline every gate compares against, and the runner's tests must not enter it.
 
 Every test that touches git builds a disposable repository under `tmp_path`, and every test that

@@ -22,6 +22,7 @@ from pathlib import Path
 from . import status as st
 from .agent import build_prompt, classify_exit, run_agent
 from .backlog import Backlog, Ticket
+from .breaker import BreakerState, note_flaky, note_merged, note_quarantine
 from .config import Config
 from .gates.overlap import added_symbols, check_overlap
 from .gates.red_proof import check_red_proof
@@ -317,7 +318,8 @@ class Runner:
             return False
 
         # 5 — overlap
-        symbols = added_symbols(self.git, base, branch)
+        symbols = added_symbols(self.git, base, branch,
+                                include_private=self.config.overlap.include_private)
         with self._state_lock:
             owners = dict(self.state.symbols)
         overlap = check_overlap(ticket_id=ticket.id, symbols=symbols, owners=owners)
@@ -418,7 +420,10 @@ class Runner:
                 record.status = st.MERGED
                 record.merge_sha = result.merge_sha
                 record.gates["post_merge_suite"] = "pass"
-                self.state.circuit_breaker.consecutive_quarantines = 0
+                # The flake streak clears only if this ticket's suite was
+                # genuinely clean. A ticket that merged because its re-run went
+                # green is evidence of an unreliable suite, not against one.
+                self._note_merged(suite_was_clean=record.gates.get("suite") == "pass")
                 self._commit_state()
             self._note(f"T{ticket.id:02d} MERGED {result.merge_sha[:7]}")
             return
@@ -448,37 +453,56 @@ class Runner:
                 blocked = self.state.record(dependent)
                 if blocked.status in (st.PENDING, st.READY):
                     blocked.status = st.BLOCKED_UPSTREAM
-            self.state.circuit_breaker.consecutive_quarantines += 1
+            self._note_breaker(note_quarantine)
             self._commit_state()
-        self._check_breaker()
 
     def _count_flaky(self) -> None:
         """A FLAKY mark counts toward the breaker at half weight."""
         with self._state_lock:
-            self.state.circuit_breaker.consecutive_quarantines += \
-                self.config.circuit_breaker.flaky_weight
+            self._note_breaker(note_flaky)
             self._commit_state()
-        self._check_breaker()
 
-    def _check_breaker(self) -> None:
-        breaker = self.config.circuit_breaker
-        with self._state_lock:
-            consecutive = self.state.circuit_breaker.consecutive_quarantines
-            dispatched = [r for r in self.state.tickets.values()
-                          if r.status not in (st.PENDING, st.READY, st.HELD,
-                                              st.BLOCKED_UPSTREAM)]
-            quarantined = [r for r in dispatched if r.status == st.FAILED]
-            fraction = len(quarantined) / len(dispatched) if dispatched else 0.0
+    def _note_merged(self, *, suite_was_clean: bool) -> None:
+        """Called with the state lock held."""
+        breaker = self.state.circuit_breaker
+        working = BreakerState(
+            consecutive_quarantines=breaker.consecutive_quarantines,
+            consecutive_flakes=breaker.consecutive_flakes,
+            tripped=breaker.tripped, reason=breaker.reason,
+        )
+        note_merged(working, suite_was_clean=suite_was_clean)
+        breaker.consecutive_quarantines = working.consecutive_quarantines
+        breaker.consecutive_flakes = working.consecutive_flakes
 
-            tripped = (consecutive >= breaker.consecutive_quarantines
-                       or (len(dispatched) >= 3 and fraction > breaker.quarantine_fraction))
-            if tripped and not self.state.circuit_breaker.tripped:
-                self.state.circuit_breaker.tripped = True
-                self._commit_state()
-                self._note(
-                    f"CIRCUIT BREAKER: {consecutive} consecutive, "
-                    f"{fraction:.0%} of dispatched quarantined — halting the run"
-                )
+    def _note_breaker(self, event) -> None:
+        """Apply one breaker event. Called with the state lock held.
+
+        The policy itself lives in `orchestrator/breaker.py` so it can be
+        tested without git, subprocesses or a clock.
+        """
+        breaker = self.state.circuit_breaker
+        working = BreakerState(
+            consecutive_quarantines=breaker.consecutive_quarantines,
+            consecutive_flakes=breaker.consecutive_flakes,
+            tripped=breaker.tripped,
+            reason=breaker.reason,
+        )
+        dispatched = [r for r in self.state.tickets.values()
+                      if r.status not in (st.PENDING, st.READY, st.HELD,
+                                          st.BLOCKED_UPSTREAM)]
+        quarantined = [r for r in dispatched if r.status == st.FAILED]
+
+        event(working, self.config.circuit_breaker,
+              dispatched=len(dispatched), quarantined=len(quarantined))
+
+        was_tripped = breaker.tripped
+        breaker.consecutive_quarantines = working.consecutive_quarantines
+        breaker.consecutive_flakes = working.consecutive_flakes
+        breaker.tripped = working.tripped
+        breaker.reason = working.reason
+
+        if working.tripped and not was_tripped:
+            self._note(f"CIRCUIT BREAKER: {working.reason} — halting the run")
 
     # ----------------------------------------------------------------- report
 
