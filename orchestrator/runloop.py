@@ -31,7 +31,7 @@ from .gates.review import (
     parse_findings, write_review_json,
 )
 from .gates.scope import check_scope
-from .gates.suite import check_suite, run_suite
+from .gates.suite import UNATTRIBUTED_PREFIX, check_suite, run_suite
 from .gitops import Git
 from .merge import append_followups, merge_ticket
 from .report import RunDirectory, render_report
@@ -527,8 +527,63 @@ def _fix_prompt(ticket: Ticket, findings) -> str:
     )
 
 
-def capture_baseline(git: Git, config: Config) -> tuple[str, ...]:
-    """The failing set at run start. The suite is not green by construction."""
-    result = run_suite(git.root, config.suite.command,
-                       timeout_minutes=config.suite.timeout_minutes)
+class BaselineError(Exception):
+    """The baseline could not be measured where the agents actually live."""
+
+
+# Ticket 0 is not a ticket. The baseline worktree borrows the provisioning path
+# and is torn down, branch and all, before the first agent is dispatched.
+BASELINE_TICKET_ID = 0
+BASELINE_BRANCH_PREFIX = "baseline/"
+
+
+def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tuple[str, ...]:
+    """The failing set at run start. The suite is not green by construction.
+
+    Measured inside a throwaway **provisioned worktree**, never in the main repo.
+    The main repo has `DATA/derived/`; a worktree has only what `provision()`
+    junctions in. A baseline taken in one and compared against the other is not
+    a weak comparison, it is an inverted one — it is what let ten real-data
+    collection errors read as a greenfield ticket's regressions and blocked 36
+    tickets behind it.
+
+    Using the same `provision()` path the agents get also makes provisioning
+    verification automatic: a worktree that cannot be built, or that cannot
+    collect its own suite, now stops the run at startup rather than 20 minutes
+    per ticket into it.
+    """
+    try:
+        worktree = provision(
+            git, ticket_id=BASELINE_TICKET_ID,
+            worktrees_root=config.paths.worktrees,
+            integration_branch=integration_branch,
+            branch_prefix=BASELINE_BRANCH_PREFIX,
+            fixture_db=config.paths.fixture_db,
+            fixture_db_dest=config.paths.fixture_db_dest,
+            recordings=config.paths.recordings,
+        )
+    except ProvisionError as exc:
+        raise BaselineError(
+            f"refusing to start: the baseline worktree could not be provisioned, so "
+            f"no agent's worktree can be either — {exc}"
+        ) from exc
+
+    try:
+        result = run_suite(worktree.path, config.suite.command,
+                           timeout_minutes=config.suite.timeout_minutes)
+    finally:
+        try:
+            teardown(git, worktree)
+        finally:
+            if git.branch_exists(worktree.branch):
+                git.delete_branch(worktree.branch)
+
+    unattributed = [n for n in result.failed if n.startswith(UNATTRIBUTED_PREFIX)]
+    if unattributed:
+        raise BaselineError(
+            "refusing to start: the baseline suite failed in a way that names no "
+            "node ids — a collection error, an internal pytest error, or a timeout. "
+            "Recording that as the baseline would hand every ticket a gate it cannot "
+            f"pass.\n{unattributed[0]}\n\n{result.output[-4000:]}"
+        )
     return result.failed

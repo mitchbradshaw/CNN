@@ -51,13 +51,42 @@ Provisioning per worktree, before the agent starts:
 
 - A copy of a **small purpose-built fixture database** — never the real one. An agent that cannot
   reach the 11,000-row database also cannot damage it. The only ticket that genuinely needs the real
-  database is 04, which is human-gated anyway.
-- Directory **junctions** (`mklink /J`) to the shared read-only recording directories for tickets that
-  declare they need real data. `.git/config` has `symlinks = false`; junctions are unaffected.
+  database is 04, which is human-gated anyway. It is small but **not empty**: `UI/app.py` constructs a
+  `ViewerApp` at import time, so a fixture with no recording row makes every test file that imports
+  `UI.app` fail at collection. It carries recording rows for the junctioned channels and nothing else
+  — no annotations, no motifs, no runs. Rebuilt by `python -m orchestrator.make_fixture`, which is
+  also the definition of what it contains.
+- Directory **junctions** (`mklink /J`) to the shared read-only recording directories, at their path
+  **relative to the repo root** — `DATA/derived/channels/X` must land at `<worktree>/DATA/derived/
+  channels/X`, because every path constant in the suite is root-relative. `.git/config` has
+  `symlinks = false`; junctions are unaffected.
 - The **conda environment is shared**. Dependency changes are not an autonomous action.
+
+**Recorded tradeoff — junctioned recordings are writable.** Junctioning real channel data means an
+agent can reach, and write to, `DATA/derived/channels/M2_aug_concat_fs1`. The database stays
+protected (it is a copy, and carries no annotations); the signal data does not. This is accepted, not
+overlooked: everything under `derived/` is regenerable from `raw/` plus code per `DATA/README.md`, and
+`M2_aug_concat_fs1` is a held-out-safe recording — `M4` is the locked one. The deletion path is the
+sharper risk and is covered by a test: `teardown()` unlinks every junction anywhere in the tree before
+the recursive delete runs, because a junction sits several levels down and a scan of the worktree's
+immediate children does not see it. Widening `recordings` re-opens this decision and should be argued
+again, not inherited.
 
 `SESSION_STATE_PATH` resolves relative to cwd, so per-worktree UI session state isolates correctly
 provided each agent's cwd is its own worktree.
+
+### The baseline is measured inside a worktree
+
+The baseline — the set of tests already failing before any ticket runs — is captured in a **throwaway
+provisioned worktree**, using the same `provision()` path the agents get, which is then torn down
+along with its branch. Measuring it in the main repo and comparing it against a worktree is an
+inverted comparison, not a weak one: the main repo has `DATA/derived/`, a worktree has only what is
+junctioned in, and the difference reads as every ticket's regressions.
+
+This makes provisioning verification automatic at startup. If the baseline worktree cannot be
+provisioned, or its suite fails in a way that names no node ids (a collection error, an internal
+pytest error, a timeout), `--run` refuses to start and says why — at t+0, rather than 20 minutes per
+ticket for 39 tickets.
 
 ### Branching and merge authority
 

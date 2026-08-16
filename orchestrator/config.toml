@@ -50,10 +50,24 @@ fixture_db = "DATA/fixture/annotations.sqlite"
 # reads, and every DB-touching test in the worktree would quietly create its own
 # empty database instead.
 fixture_db_dest = "DATA/db/annotations.sqlite"
-# Read-only recording directories, junctioned (mklink /J) into worktrees whose
-# ticket declares it needs real data. Junctions are unaffected by
+# Read-only recording directories, junctioned (mklink /J) into worktrees at
+# their path relative to the repo root. Junctions are unaffected by
 # `.git/config` symlinks = false.
-recordings = []
+#
+# This is the minimal set, derived from evidence rather than convenience: the
+# only real-data path any test file references is
+# DATA/derived/channels/M2_aug_concat_fs1/CH0.npy, and it is needed because
+# UI/app.py:2279 constructs a ViewerApp at import time — so the ten files that
+# import UI.app fail at COLLECTION without it, not at assertion time. 317 MB,
+# against 1.3 GB for all of channels/ and 2.3 GB for all of derived/.
+#
+# ISOLATION TRADEOFF (recorded deliberately, see ORCHESTRATOR_SPEC.md §Isolation):
+# an agent can reach and write to this directory. The database stays protected —
+# it is copied, and the copy holds no annotations — but the signal data does not.
+# Accepted because everything under derived/ is regenerable from raw/ plus code,
+# and because M2_aug_concat_fs1 is a held-out-safe recording (M4 is the locked
+# one). The deletion path is covered by the teardown-junction test.
+recordings = ["DATA/derived/channels/M2_aug_concat_fs1"]
 
 [agent]
 # A list, so a test harness can substitute a stand-in binary.
