@@ -20,6 +20,7 @@ import traceback
 import numpy as np
 
 from Adapters.registry import discover_adapters, get_adapter
+from Working.chain_validation import validate_recipe_steps
 from Working.database import queries as q
 from Working.database.runs import (
     find_completed_run,
@@ -135,6 +136,14 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
     recording = q.get_recording_by_id(conn, recipe["recording_id"])
     if recording is None:
         raise ValueError(f"No recording with id={recipe['recording_id']}")
+
+    # Hard-fail before any computation (or run row) — a hand-edited or
+    # cluster-generated recipe that bypassed `Working.recipes.make_recipe`
+    # must not get partway through a long run before failing. Same seam
+    # `make_recipe` uses, so the two layers can't drift apart.
+    ok, reason = validate_recipe_steps(recipe["steps"])
+    if not ok:
+        raise ValueError(f"Invalid chain: {reason}")
 
     span = recipe["span"]
     span_start = 0 if span is None else span[0]
