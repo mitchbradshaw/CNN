@@ -57,9 +57,18 @@ Four things, in order.
 2. **Check the reviewer resolves inside a worktree.** `.claude/skills/` is tracked in this repo
    specifically so it survives into worktrees. Verify with
    `git ls-files .claude/skills/code-review`.
-3. **Provide the fixture database** at the path in `config.toml` (`paths.fixture_db`, default
-   `DATA/fixture/annotations.sqlite`). It is copied — never linked — into every worktree.
-   Provisioning refuses to continue without it rather than let an agent find the real database.
+3. **Rebuild the fixture database** with `python -m orchestrator.make_fixture`. It is written to
+   `config.toml`'s `paths.fixture_db` (default `DATA/fixture/annotations.sqlite`) and copied — never
+   linked — into every worktree. Provisioning refuses to continue without it rather than let an agent
+   find the real database, and the builder now refuses to emit a row whose `.npy` is not on disk.
+
+   That last check is not hypothetical. In run-20260817-1157 the channel directory named in
+   `paths.recordings` was empty, so all 16 fixture rows pointed at files that did not exist.
+   `UI/app.py` builds a `ViewerApp` at import time, the load raised `FileNotFoundError`, and the ten
+   test files that import `UI.app` failed at *collection* — which aborts the whole pytest session.
+   Every worktree ran zero tests all night while the suite gate reported green. Rebuild the fixture
+   after any change to `paths.recordings`, after a schema migration, and any time
+   `DATA/derived/channels/` has been cleared.
 4. **Measure the suite.** `pytest -q --durations=15`, twice — the first run pays the import cost for
    torch/kymatio/aeon. Under ~2 min the design holds as written; 2–8 min holds with a lower ceiling;
    over ~15 min the merge gate becomes the bottleneck and the policy needs revisiting.

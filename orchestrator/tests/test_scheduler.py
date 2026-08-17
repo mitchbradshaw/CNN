@@ -48,6 +48,56 @@ def test_human_gated_tickets_are_never_dispatched(write_ticket, ticket_dir, ceil
     assert decision.holds[1].reason == "human-gate"
 
 
+def test_a_done_ticket_is_never_dispatched(write_ticket, ticket_dir, ceilings):
+    """`done` means the work is already in the base from an earlier run."""
+    write_ticket(1, flags=["done"])
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog), ceilings)
+
+    assert decision.dispatch == ()
+
+
+def test_a_done_ticket_releases_its_dependents(write_ticket, ticket_dir, ceilings):
+    """The half that separates `done` from `human-gate`.
+
+    A human gate *holds* everything downstream, because the work has not
+    happened. `done` is the opposite claim — it has happened and landed — so the
+    dependents must run. Getting this wrong strands the whole subtree.
+    """
+    write_ticket(1, flags=["done"])
+    write_ticket(2, blocked_by=[1])
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog), ceilings)
+
+    assert decision.dispatch == (2,)
+    assert 2 not in decision.holds
+
+
+def test_a_done_ticket_is_not_reported_as_holding_anything(write_ticket, ticket_dir, ceilings):
+    """It is not waiting on anything, so it must not appear in the hold list."""
+    write_ticket(1, flags=["done"])
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog), ceilings)
+
+    assert 1 not in decision.holds
+
+
+def test_done_beats_a_stale_pending_state(write_ticket, ticket_dir, ceilings):
+    """A fresh run seeds every ticket PENDING; `done` has to win over that.
+
+    Otherwise the flag would only work on a resumed run, which is the one case
+    that never needed it.
+    """
+    write_ticket(1, flags=["done"])
+    write_ticket(2, blocked_by=[1])
+    backlog = load_backlog(ticket_dir)
+
+    assert schedule(backlog, {1: PENDING, 2: PENDING}, ceilings).dispatch == (2,)
+
+
 def test_mutex_partners_are_never_co_dispatched(write_ticket, ticket_dir, ceilings):
     write_ticket(1, mutex=[2])
     write_ticket(2)

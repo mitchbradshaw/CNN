@@ -66,6 +66,16 @@ def schedule(backlog: Backlog, states: Mapping[int, str], ceilings: Ceilings) ->
     """Return the tickets to dispatch now, and why each other candidate is held."""
     holds: dict[int, Hold] = {}
 
+    # A ticket flagged `done` merged in an earlier run and its work is in this
+    # run's base. Overlaid here rather than read from `states` because a fresh
+    # run seeds every ticket PENDING — sourcing it from the state store would
+    # make the flag work only on a resume, which is the case that never needed
+    # it. LANDED, not merely terminal: the dependents have to be released.
+    states = dict(states)
+    for ticket in backlog:
+        if ticket.done:
+            states[ticket.id] = st.LANDED
+
     in_flight = [i for i, s in states.items() if s in st.IN_FLIGHT]
     opus_in_flight = sum(1 for i in in_flight if backlog[i].model == "opus")
     solo_in_flight = any(backlog[i].solo for i in in_flight)

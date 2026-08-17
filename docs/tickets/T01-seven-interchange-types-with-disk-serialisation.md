@@ -6,12 +6,16 @@ size: M
 blocked_by: []
 mutex: []
 files: ["__init__.py", "encoding.py", "grouping.py", "model.py", "scores.py", "signal.py", "spanset.py", "tests/test_types.py", "windowset.py"]
-flags: []
+flags: [done]
 level: 0
 unblocks: 36
 budget_minutes: 60
 ---
 # 01 — Seven interchange types with disk serialisation
+
+> **Done.** Merged by run-20260817-1157 as `36a69ce`, both review rounds clean. The `done` flag keeps
+> the file loadable — every `blocked_by: [1]` still resolves — while dropping it out of scheduling.
+> Do not re-dispatch; the work is in the base.
 
 **Model:** [S] · **Size:** [M]
 

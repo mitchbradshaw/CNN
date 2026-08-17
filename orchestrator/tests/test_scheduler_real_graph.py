@@ -31,7 +31,10 @@ def drain(backlog, ceilings, *, max_ticks=500):
     case, which is the one that stresses concurrency hardest. Yields the set
     dispatched on each tick together with the set that was in flight with it.
     """
-    states = {t.id: (HELD if t.human_gate else PENDING) for t in backlog}
+    states = {
+        t.id: MERGED if t.done else (HELD if t.human_gate else PENDING)
+        for t in backlog
+    }
     for _ in range(max_ticks):
         decision = schedule(backlog, states, ceilings)
         if not decision.dispatch:
@@ -46,9 +49,11 @@ def test_a_full_drain_lands_every_autonomous_ticket(real):
     landed = [i for wave in drain(real, Ceilings(3, 2)) for i in wave]
 
     assert len(landed) == len(set(landed)), "a ticket was dispatched twice"
-    # Everything except the two human gates and the 21 held downstream of T04.
+    # Everything except the two human gates, the 21 held downstream of T04, and
+    # anything already flagged `done` — that work is in the base, not the night.
     held_downstream = real.dependents(4) | {49}
-    assert set(landed) == set(real.ids) - HUMAN_GATE - held_downstream
+    already_done = {t.id for t in real if t.done}
+    assert set(landed) == set(real.ids) - HUMAN_GATE - held_downstream - already_done
 
 
 def test_human_gated_tickets_are_never_dispatched_at_any_tick(real):
@@ -86,7 +91,9 @@ def test_ceilings_are_never_exceeded(real):
 
 
 def test_blockers_always_land_before_their_dependents(real):
-    landed: set[int] = set()
+    # `done` tickets start landed — that is the claim the flag makes, and the
+    # dependents it releases would otherwise all look dispatched-too-early.
+    landed: set[int] = {t.id for t in real if t.done}
     for wave in drain(real, Ceilings(3, 2)):
         for ticket_id in wave:
             missing = set(real[ticket_id].blocked_by) - landed
@@ -94,17 +101,36 @@ def test_blockers_always_land_before_their_dependents(real):
         landed |= set(wave)
 
 
-def test_the_run_opens_on_the_backlogs_own_reading_order(real):
+def test_the_run_opens_on_the_most_unblocking_tickets_available(real):
     """The spec claims most-unblocking-first opens 01, 02, 03 then 05, 35, 16.
 
-    That ordering was arrived at by hand in the backlog's reading section; the
-    scheduler reaching it mechanically is the check that the rule is the one
-    the backlog was actually written against.
+    That ordering was arrived at by hand in the backlog's reading section, and
+    the scheduler reaching it mechanically was the check that the rule is the
+    one the backlog was written against. It is asserted as a property rather
+    than as that literal tuple because the literal decays: T01 is now `done`, so
+    the run opens on 02, 05, 35, and it will shift again after every night. The
+    rule is what has to hold — nothing left waiting may unblock more than
+    something that went first.
     """
-    waves = list(drain(real, Ceilings(3, 2)))
+    states = {
+        t.id: MERGED if t.done else (HELD if t.human_gate else PENDING)
+        for t in real
+    }
+    decision = schedule(real, states, Ceilings(3, 2))
 
-    assert waves[0] == (1, 2, 3)
-    assert set(waves[1]) == {5, 35, 16}
+    fanout = real.dependents
+    weakest_dispatched = min(len(fanout(i)) for i in decision.dispatch)
+
+    # Only the tickets held for *lack of a slot* test the priority rule. `solo`
+    # and `mutex` hold tickets for reasons that have nothing to do with fan-out
+    # — T17 unblocks 26 and still waits, because it runs alone.
+    starved = [i for i, h in decision.holds.items() if h.reason == "ceiling"]
+    assert starved, "with a ceiling of 3 something must be waiting on a slot"
+    for ticket_id in starved:
+        assert len(fanout(ticket_id)) <= weakest_dispatched, (
+            f"T{ticket_id:02d} unblocks {len(fanout(ticket_id))} but lost its slot to a "
+            f"ticket unblocking {weakest_dispatched}"
+        )
 
 
 def test_solo_waits_rather_than_starving(real):

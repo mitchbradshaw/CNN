@@ -32,9 +32,21 @@ from . import status as st
 from .backlog import Backlog
 from .state import RunState
 
-GATE_ORDER = ("red_proof", "suite", "scope", "review", "overlap")
-GATE_MARK = {"pass": "✓", "warn": "!", "fail": "✗", "flaky": "~", "hold": "H",
-             "skipped": "-", "not-run": "-"}
+#: Gate name -> the letter the legend promises. Not `name[0].upper()`: that
+#: renders scope as `S` (colliding with suite) and review as `R` (colliding with
+#: red-proof), so `R✓ S✓ S✓ R✓ O✓` gives no way to tell which gate failed.
+GATE_ORDER = (
+    ("red_proof", "R"),
+    ("suite", "S"),
+    ("scope", "C"),
+    ("review", "V"),
+    ("overlap", "O"),
+)
+#: `blocked` is the review gate's own word for a fail (gates/review.py) and has
+#: to be mapped, or the one column that explains a review-rejected ticket prints
+#: `V?`.
+GATE_MARK = {"pass": "✓", "warn": "!", "fail": "✗", "blocked": "✗", "flaky": "~",
+             "hold": "H", "skipped": "-", "not-run": "-"}
 
 
 @dataclass(frozen=True)
@@ -87,8 +99,8 @@ def _duration(record) -> str:
 
 def _gates(record) -> str:
     return " ".join(
-        f"{name[0].upper()}{GATE_MARK.get(record.gates.get(name, 'not-run'), '?')}"
-        for name in GATE_ORDER
+        f"{letter}{GATE_MARK.get(record.gates.get(name, 'not-run'), '?')}"
+        for name, letter in GATE_ORDER
     )
 
 

@@ -12,6 +12,12 @@ truth. See `docs/ORCHESTRATOR_SPEC.md` for how the scheduler consumes these fiel
 | `human-gate` | 04, 49 | Never dispatched. Held in the DAG so dependents are correctly blocked. |
 | `solo` | 17 | Runs alone; nothing else in flight. |
 | `human-verify` | 17, 18, 20, 21, 22, 23, 29, 30, 31, 32, 33, 34, 37, 38, 39, 42, 44 | Dispatched and merged, but needs your eyes before `main` moves. |
+| `done` | 01 | Already merged by an earlier run; its work is in the base. Never dispatched, but **releases** its dependents — the opposite of `human-gate`. |
+
+**Marking a ticket done.** When a run merges a ticket and you fast-forward `main`, add `done` to its
+flags. Do not delete the ticket file: `blocked_by` is validated against the loaded set, so removing
+`T01` makes every ticket naming it fail to load. The file stays as the record of what was built and
+drops out of scheduling.
 
 ## Dependency levels
 
@@ -114,7 +120,7 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 
 | # | Title | Model | Size | Level | Unblocks | Blocked by | Flags |
 |---|---|---|---|---|---|---|---|
-| [01](T01-seven-interchange-types-with-disk-serialisation.md) | Seven interchange types with disk serialisation | S | M | 0 | 36 | — |  |
+| [01](T01-seven-interchange-types-with-disk-serialisation.md) | Seven interchange types with disk serialisation | S | M | 0 | 36 | — | `done` |
 | [02](T02-schema-extension-new-tables-new-columns-union-view.md) | Schema extension: new tables, new columns, union view | S | M | 0 | 32 | — |  |
 | [03](T03-held-out-recording-lock.md) | Held-out recording lock | S | S | 0 | 1 | — |  |
 | [04](T04-verdict-constraint-rebuild-add-seed.md) | Verdict-constraint rebuild: add `seed` | O | M | 1 | 21 | 02 | `human-gate` |

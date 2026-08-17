@@ -50,6 +50,20 @@ class Ticket:
         return "human-verify" in self.flags
 
     @property
+    def done(self) -> bool:
+        """The work is already in the base, merged by an earlier run.
+
+        Deleting the ticket file instead would be the obvious move and it does
+        not work: `blocked_by` is validated against the loaded set, so removing
+        T01 makes every ticket that names it unloadable. The ticket has to stay
+        readable — it is still the record of what was built — while dropping out
+        of scheduling. Unlike `human-gate`, this *releases* dependents: the
+        distinction is whether the work has happened, not whether a human is
+        involved.
+        """
+        return "done" in self.flags
+
+    @property
     def label(self) -> str:
         return f"T{self.id:02d}"
 

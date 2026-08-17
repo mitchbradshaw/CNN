@@ -29,6 +29,31 @@ harness work; needs triage into a ticket by a human rather than being self-assig
   junction can be dropped from `recordings` afterwards — which would close the tradeoff rather than
   merely record it.
 
+## Harness — 2026-08-17 (post-run-20260817-1157)
+
+**The 2026-08-16 entry above predicted this run's failure and was not actioned, so it happened
+again.** `DATA/derived/channels/M2_aug_concat_fs1/` was empty; all 16 fixture rows pointed at absent
+`.npy` files; `import UI.app` raised `FileNotFoundError` at collection; pytest aborted the session in
+every worktree. T01 and T02 were graded `suite: pass` having run **zero** tests, and T01 merged on
+that. The channel data has been rematerialised from `DATA/raw/M2_aug_concat_fs1.mat` (317 MB) and
+three guards added — but the underlying defect is still the import-time `create_app()`, and it will
+keep converting ordinary data problems into total-collection failures until it is fixed.
+
+- [blocker] [harness] **Promote the 2026-08-16 entry to a real ticket.** It is one line of code
+  (`if __name__ == "__main__":`) standing between this repo and a class of silent, total gate
+  failure. It also closes the writable-recordings isolation tradeoff in `ORCHESTRATOR_SPEC.md
+  §Isolation`, since the 317 MB junction exists only to make `import` succeed.
+- [major] [harness] **The 98 `_channel_available()` guards `print` and `return` rather than skip.**
+  A test that returns early is reported as *passed*. With the channel data absent, a large share of
+  the "505 passed" was vacuous — restoring the data moved the suite from 152 s to 276 s, which is the
+  size of what was not being executed. These should be `pytest.skip(...)`, so absent data reads as
+  skipped rather than green.
+- [minor] [harness] `DATA/db/ui_session.json` is why the main repo kept passing while every worktree
+  failed: it pins the viewer to `Mushroom_260720_0509_4hrs_CH14_fs1.mat`, whose channel file exists,
+  so `import UI.app` never touched the broken recording. Delete that file and `main` reproduces the
+  worktree failure exactly. Tests should not depend on a gitignored session file for their import to
+  succeed.
+
 ## T01 — 2026-08-17 13:09
 
 - [major] [standards] (rule 6.4) Seven near-identical to_path/from_path bodies and five __eq__ bodies duplicate the same shape across Working/types/*.py

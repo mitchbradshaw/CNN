@@ -9,6 +9,17 @@ The gate deliberately runs only the newly added test file, not the whole suite.
 The question is whether *this* test was red before its implementation existed —
 a suite that happened to be red for an unrelated reason would answer a different
 question and pass a vacuous test.
+
+**Why a collection error counts as red here.** `exit_code != 0` is the whole
+test, so a test file that cannot even be imported passes this gate. That is
+usually correct and is ordinary TDD: the file imports a module the ticket has
+not written yet. It is only trustworthy, though, because `capture_baseline`
+refuses to start a run whose collection is interrupted — so by the time any red
+proof runs, the worktree fixture is known sound and an import failure is
+attributable to the ticket's own new test rather than to broken provisioning.
+In run-20260817-1157 that guard did not exist, and T03's red proof was a
+`FileNotFoundError` from an empty channel directory: a false red, on a gate
+whose entire purpose is to refuse tests that assert nothing.
 """
 
 from __future__ import annotations

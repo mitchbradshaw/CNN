@@ -92,7 +92,14 @@ def simulate(backlog: Backlog, config: Config, *, ceilings: Ceilings | None = No
     ceilings = ceilings or config.ceilings
     gated = {t.id for t in backlog if t.human_gate}
 
-    states = {t.id: (st.HELD if t.human_gate else st.PENDING) for t in backlog}
+    # `done` is seeded MERGED for the same reason the scheduler overlays it:
+    # the ticket has landed. Left PENDING it would never dispatch (the scheduler
+    # sees to that) and then fall out of the loop below as "no slot before the
+    # stop" — reporting merged work as work that never got a slot.
+    states = {
+        t.id: st.MERGED if t.done else (st.HELD if t.human_gate else st.PENDING)
+        for t in backlog
+    }
     finishing: dict[int, int] = {}          # ticket id -> minute it lands
     waves: list[Wave] = []
     now = 0

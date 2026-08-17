@@ -217,6 +217,52 @@ def test_a_timeout_is_reported_rather_than_hanging_the_run(suite_dir):
     assert result.exit_code != 0
 
 
+# ------------------------------------------- collection interrupted, zero tests
+
+#: The two tests below must use the command the run actually uses, not this
+#: module's `-rf`. `-rf` reports failures only, so a collection error yields no
+#: `ERROR` line, no parseable node id, and the unattributed guard catches it —
+#: which is precisely the case that was never broken. Under the production
+#: command pytest *does* name each unimportable file, the failing set is
+#: attributable, and the gate had nothing left to notice.
+PRODUCTION_COMMAND = ("pytest", "-q", "--tb=no")
+
+
+def test_an_interrupted_collection_is_recognised_as_such(suite_dir):
+    """pytest aborts the whole session when a file fails to import: zero tests run.
+
+    It still names the offending file on an `ERROR` line, so the failed set is
+    non-empty and looks ordinary. The `Interrupted` banner is the only thing
+    that distinguishes "ten files failed" from "nothing ran at all".
+    """
+    suite_dir.write("test_broken_import.py", "import nonexistent_module_xyz\n")
+
+    result = run_suite(suite_dir, PRODUCTION_COMMAND, timeout_minutes=5)
+
+    assert result.collection_interrupted
+    assert result.failed == ("tests/test_broken_import.py",), (
+        "the failing set is attributable, which is why no other guard fires"
+    )
+
+
+def test_a_suite_that_never_ran_is_never_a_pass_however_it_matches_baseline(suite_dir):
+    """The regression this exists to catch.
+
+    A baseline that itself could not collect records the broken files as its
+    failing set. Every later run reproduces exactly that set, no node id is
+    unattributed, and the comparison says "no regressions" — so the gate passes
+    a ticket on a suite in which not one test executed.
+    """
+    suite_dir.write("test_broken_import.py", "import nonexistent_module_xyz\n")
+
+    verdict = check_suite(suite_dir, PRODUCTION_COMMAND,
+                          baseline_failed=("tests/test_broken_import.py",),
+                          timeout_minutes=5)
+
+    assert verdict.status == "fail"
+    assert verdict.collection_interrupted
+
+
 def test_the_suite_command_is_never_run_in_parallel():
     """tests/_session_isolation.py documents exactly why `-n` breaks this suite."""
     from orchestrator.config import load_config

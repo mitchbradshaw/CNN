@@ -61,6 +61,22 @@ def test_human_gated_tickets_are_reported_as_not_dispatched(write_ticket, ticket
     assert "T01" in plan.not_dispatched[2].detail
 
 
+def test_a_done_ticket_is_absent_from_the_plan_entirely(write_ticket, ticket_dir, config):
+    """Not dispatched, and not reported as unscheduled either.
+
+    Reporting it under `wall-clock-stop` would read as "T01 never got a slot" —
+    the opposite of the truth, and exactly the line a tired reader acts on at 7am.
+    """
+    write_ticket(1, flags=["done"])
+    write_ticket(2, blocked_by=[1])
+    backlog = load_backlog(ticket_dir)
+
+    plan = simulate(backlog, config, ceilings=Ceilings(3, 2))
+
+    assert 1 not in plan.not_dispatched
+    assert [t.id for w in plan.waves for t in w.tickets] == [2]
+
+
 def test_a_wave_records_what_each_ticket_was_blocked_on(write_ticket, ticket_dir, config):
     write_ticket(1)
     write_ticket(2, blocked_by=[1])
@@ -140,12 +156,22 @@ def test_the_wall_clock_stop_prevents_later_dispatch(write_ticket, ticket_dir, c
 # ---------------------------------------------------------------- real backlog
 
 
-def test_the_real_backlog_drains_27_autonomous_tickets(real, config):
+def test_every_live_ticket_is_either_dispatched_or_explained(real, config):
+    """Was pinned to 27-of-49. That number is a property of a backlog snapshot,
+    not of the planner: it moved to 26 the moment T01 was flagged `done`, and it
+    will move again after every night. What must always hold is that the plan
+    accounts for every ticket still to be built, and drops the ones already
+    built — a ticket silently in neither bucket is the real failure.
+    """
     plan = simulate(real, config, ceilings=config.ceilings)
 
-    dispatched = [t.id for w in plan.waves for t in w.tickets]
-    assert len(dispatched) == 27, "the spec's night-one figure is 27 of 49"
-    assert len(plan.not_dispatched) == 22
+    dispatched = {t.id for w in plan.waves for t in w.tickets}
+    live = {t.id for t in real if not t.done}
+
+    assert dispatched | set(plan.not_dispatched) == live
+    assert not (dispatched & set(plan.not_dispatched)), "a ticket cannot be both"
+    assert not any(real[i].done for i in dispatched), "done tickets are not re-dispatched"
+    assert len(dispatched) > len(plan.not_dispatched), "most of the night is autonomous"
 
 
 def test_the_real_backlog_stalls_against_ticket_04(real, config):
@@ -168,15 +194,21 @@ def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
 
     text = render_plan(plan)
 
+    first = plan.waves[0].tickets[0]
+    dispatched = sum(len(w.tickets) for w in plan.waves)
+
     assert text.startswith("RUN PLAN")
     assert "ceiling 3, opus 2" in text
     assert "wave 1" in text and "t+0h00" in text
-    assert "T01 sonnet M  60m" in text
+    # Derived, not hardcoded: which ticket leads wave 1 changes as tickets land.
+    assert f"T{first.id:02d} {first.model}" in text
+    # T01 is `done` and gone from the schedule, but the tickets it unblocked
+    # still name it — the provenance survives the ticket leaving the plan.
     assert "(was blocked by T01)" in text
     assert "[SOLO — runs alone]" in text
     assert "held:" in text
     assert "projected drain" in text
-    assert "27 tickets autonomous · 22 held" in text
+    assert f"{dispatched} tickets autonomous · {len(plan.not_dispatched)} held" in text
     assert "NOT DISPATCHED" in text
     assert "T04  human-gate" in text
     assert "T49  human-gate" in text

@@ -578,6 +578,21 @@ def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tu
             if git.branch_exists(worktree.branch):
                 git.delete_branch(worktree.branch)
 
+    if result.collection_interrupted:
+        # The failure mode this misses if left to the check below: pytest names
+        # the unimportable files on ordinary `ERROR <file>` lines, so the failing
+        # set is attributable and looks like a merely-red baseline. It is not —
+        # collection aborted, so no test ran. Recorded as the baseline, it makes
+        # every later suite gate a comparison of one empty run against another,
+        # and the whole night's tickets merge on a gate that measured nothing.
+        raise BaselineError(
+            "refusing to start: the baseline suite aborted during collection, so no "
+            "test executed. The named files below could not be imported in a "
+            "provisioned worktree — fix the worktree fixture (missing recording data "
+            "is the usual cause; see orchestrator/make_fixture.py) before running.\n"
+            f"{', '.join(result.failed[:12])}\n\n{result.output[-4000:]}"
+        )
+
     unattributed = [n for n in result.failed if n.startswith(UNATTRIBUTED_PREFIX)]
     if unattributed:
         raise BaselineError(

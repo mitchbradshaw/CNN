@@ -69,15 +69,36 @@ def build(*, config_path: Path = DEFAULT_CONFIG, source_db: Path = SOURCE_DB) ->
     v.seed_vocabulary(conn)
 
     kept = 0
+    absent = []
     for row in source.execute("SELECT * FROM recordings ORDER BY source_file, channel"):
         npy = (REPO_ROOT / row["npy_path"]).resolve()
         if not any(npy.is_relative_to(d) for d in recordings):
+            continue
+        if not npy.is_file():
+            absent.append(row["npy_path"])
             continue
         q.insert_recording(conn, row["source_file"], row["channel"], row["fs"],
                            row["n_samples"], row["global_offset"], row["npy_path"],
                            commit=False)
         kept += 1
     conn.commit()
+
+    if absent:
+        # A row whose file is gone is worse than no row at all. `UI/app.py`
+        # builds a `ViewerApp` at import time and loads the first recording it
+        # finds; an absent `npy_path` raises `FileNotFoundError` during
+        # collection, pytest abandons the session, and every test file that
+        # imports `UI.app` errors. Nothing runs, in every worktree, all night.
+        # The directory being junctioned is not enough — it can be empty, and in
+        # run-20260817-1157 it was.
+        raise SystemExit(
+            f"{len(absent)} recording(s) in {source_db} point inside the junctioned "
+            f"directories but their channel files do not exist:\n  "
+            + "\n  ".join(absent[:8])
+            + (f"\n  ... and {len(absent) - 8} more" if len(absent) > 8 else "")
+            + "\n\nRematerialise them before building the fixture:\n"
+              "    python Pipelines/materialize_channels/materialize_channels.py"
+        )
 
     if not kept:
         raise SystemExit(

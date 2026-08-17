@@ -33,6 +33,14 @@ SUMMARY_LINE = re.compile(r"^(?:FAILED|ERROR)\s+(.+?)(?:\s+-\s.*)?$", re.MULTILI
 UNATTRIBUTED = "<no node id: pytest exited {exit_code}>"
 UNATTRIBUTED_PREFIX = "<no node id:"
 
+#: pytest's abort banner, e.g. `!!!! Interrupted: 10 errors during collection !!!!`.
+#: When a file cannot be imported, pytest abandons the whole session: **no test
+#: executes**. It still prints an `ERROR <file>` line per broken file, so the
+#: failing set is populated and attributable, and every symptom the other
+#: guards look for is absent. This banner is the only evidence that the run
+#: measured nothing at all.
+COLLECTION_INTERRUPTED = re.compile(r"^!+\s*Interrupted:.*collection", re.MULTILINE)
+
 
 @dataclass(frozen=True)
 class SuiteResult:
@@ -41,6 +49,7 @@ class SuiteResult:
     output: str
     duration_seconds: float
     timed_out: bool = False
+    collection_interrupted: bool = False
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,7 @@ class SuiteVerdict:
     output: str = ""
     rerun_output: str = ""
     timed_out: bool = False
+    collection_interrupted: bool = False
 
 
 def parse_failures(output: str) -> tuple[str, ...]:
@@ -98,6 +108,7 @@ def run_suite(cwd: Path | str, command, *, timeout_minutes: float,
         output=output,
         duration_seconds=time.monotonic() - started,
         timed_out=timed_out,
+        collection_interrupted=bool(COLLECTION_INTERRUPTED.search(output)),
     )
 
 
@@ -107,6 +118,16 @@ def check_suite(cwd: Path | str, command, *, baseline_failed, timeout_minutes: f
     baseline = set(baseline_failed)
     result = run_suite(cwd, command, timeout_minutes=timeout_minutes)
     regressions = tuple(n for n in result.failed if n not in baseline)
+
+    if result.collection_interrupted:
+        # Checked before the baseline comparison, because the comparison is what
+        # goes wrong: a baseline captured while collection was broken records the
+        # unimportable files as its failing set, every later run reproduces that
+        # set exactly, and "no regressions" grades a suite in which not one test
+        # executed as a pass. A run that measured nothing cannot clear a gate.
+        return SuiteVerdict(status="fail", regressions=regressions or result.failed,
+                            failed=result.failed, output=result.output,
+                            collection_interrupted=True)
 
     if not regressions:
         return SuiteVerdict(status="pass", failed=result.failed, output=result.output,
