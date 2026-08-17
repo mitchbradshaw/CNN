@@ -2,11 +2,19 @@
 schema.py
 =========
 SQLite schema for the annotation/labelling database and the run-tracking
-tables the next project phase (algorithm runs, detections, cached encodings)
-will write to.
+tables the pipeline (algorithm runs, detections, cached encodings) writes to.
 
-`configs`, `runs`, `detections`, `encodings` and `motifs` are created now so
-that phase needs no migration, but nothing here writes to them yet.
+`configs`, `runs`, `detections`, `encodings` and `motifs` are the original
+run-tracking tables. `adjudications` (+ `adjudication_tags`) is where a human
+verdict against a machine detection lives — the one place algorithmic output
+is judged, kept physically separate from `annotations`. `motif_entry`,
+`motif_member`, `motif_edge` and `motif_entry_tags` are the shape-first motif
+library: an entry is an exemplar span, a member is any span matched to it in
+any recording/channel, an edge is a distance-carrying relationship between
+two members. `run_groups` holds N sibling runs fanned out from one recipe
+(`runs.run_group_id`); `runs.surrogate_of_run_id` pairs a run with its
+surrogate control. `step_artifacts` is the per-step recipe-prefix cache.
+`templates` is a saved chain with recording and span stripped.
 
 No ORM — plain `sqlite3`, callable from scripts and the UI alike.
 
@@ -14,10 +22,10 @@ Migrations
 ----------
 `init_db()` is always additive and safe to call repeatedly: base tables use
 `CREATE TABLE IF NOT EXISTS`, and anything added to an *existing* table
-(new columns on `annotations`, as of the tag-vocabulary feature) is applied
-by `_migrate_annotations_columns`, which checks `PRAGMA table_info` first and
-only adds what's missing. Nothing here ever drops or rewrites a column, so
-existing rows are untouched.
+(new columns on `annotations`; `run_group_id`/`surrogate_of_run_id` on
+`runs`) is applied by `_migrate_columns`, which checks `PRAGMA table_info`
+first and only adds what's missing. Nothing here ever drops or rewrites a
+column, so existing rows are untouched.
 """
 
 import os
@@ -165,6 +173,115 @@ CREATE TABLE IF NOT EXISTS annotation_tags (
     PRIMARY KEY (annotation_id, tag_id)
 );
 CREATE INDEX IF NOT EXISTS idx_annotation_tags_tag ON annotation_tags(tag_id);
+
+-- Human verdict against a machine detection — the only place adjudication
+-- of algorithmic output lives (standards rule 2.5: annotations stays
+-- human-only, detections/adjudications stay machine-only). One row per
+-- detection. `verdict` carries no CHECK: the vocabulary is due to gain
+-- `seed`, SQLite can't alter a CHECK in place, and a four-verdict CHECK
+-- written here would make that a second non-additive rebuild that rule 2.2
+-- doesn't permit. The vocabulary is enforced in Python instead, against
+-- the shared constant `queries.VERDICTS`.
+CREATE TABLE IF NOT EXISTS adjudications (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    detection_id  INTEGER NOT NULL REFERENCES detections(id),
+    verdict       TEXT    NOT NULL,
+    note          TEXT,
+    created_at    TEXT    NOT NULL,
+    UNIQUE (detection_id)
+);
+
+-- Many-to-many: an adjudication's tags, via the same controlled vocabulary
+-- as annotations and motifs.
+CREATE TABLE IF NOT EXISTS adjudication_tags (
+    adjudication_id INTEGER NOT NULL REFERENCES adjudications(id),
+    tag_id          INTEGER NOT NULL REFERENCES tag_vocabulary(id),
+    PRIMARY KEY (adjudication_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_adjudication_tags_tag ON adjudication_tags(tag_id);
+
+-- Shape-first motif library. An entry is an exemplar span identified by
+-- recording and sample range, with one nullable provenance pointer back to
+-- the detection it came from. One pointer only — a second nullable FK
+-- alongside it would rebuild the origin-discriminator shape `v_spans` was
+-- withdrawn for, one column lower.
+CREATE TABLE IF NOT EXISTS motif_entry (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL,
+    detection_id  INTEGER REFERENCES detections(id),
+    UNIQUE (recording_id, start_idx, end_idx)
+);
+CREATE INDEX IF NOT EXISTS idx_motif_entry_recording ON motif_entry(recording_id);
+
+-- A span matched to a motif_entry. May sit in any recording and any
+-- channel — membership is not restricted to the entry's own recording.
+CREATE TABLE IF NOT EXISTS motif_member (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id      INTEGER NOT NULL REFERENCES motif_entry(id),
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_motif_member_entry ON motif_member(entry_id);
+CREATE INDEX IF NOT EXISTS idx_motif_member_recording ON motif_member(recording_id);
+
+-- A relationship between two members of a motif family — cross-channel
+-- classification compares each pair of members on different channels of
+-- one recording (PIPELINE_PRD.md, Analysis semantics). Carries the
+-- distance that produced the match, plus, when the pair is cross-channel,
+-- the lag/correlation/bin classification.
+CREATE TABLE IF NOT EXISTS motif_edge (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_a_id          INTEGER NOT NULL REFERENCES motif_member(id),
+    member_b_id          INTEGER NOT NULL REFERENCES motif_member(id),
+    distance_function    TEXT    NOT NULL,
+    threshold            REAL    NOT NULL,
+    distance_value       REAL    NOT NULL,
+    recipe_hash          TEXT    NOT NULL,
+    lag                  INTEGER,
+    waveform_correlation REAL,
+    classification_bin   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_motif_edge_member_a ON motif_edge(member_a_id);
+CREATE INDEX IF NOT EXISTS idx_motif_edge_member_b ON motif_edge(member_b_id);
+
+-- Many-to-many: an entry's tags. Surrogate `id` with a UNIQUE pair, rather
+-- than the composite primary key `motif_tags`/`annotation_tags` use,
+-- because no tag may be part of any primary key here.
+CREATE TABLE IF NOT EXISTS motif_entry_tags (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES motif_entry(id),
+    tag_id   INTEGER NOT NULL REFERENCES tag_vocabulary(id),
+    UNIQUE (entry_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_motif_entry_tags_tag ON motif_entry_tags(tag_id);
+
+-- N sibling runs sharing one recipe, fanned out over a channel or band
+-- list. Carries only an id and a created_at — fan-out and scope semantics
+-- belong to the ticket that writes to this table.
+CREATE TABLE IF NOT EXISTS run_groups (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT    NOT NULL
+);
+
+-- Per-step cache, keyed on the hash of the recipe prefix up to and
+-- including that step.
+CREATE TABLE IF NOT EXISTS step_artifacts (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_prefix_hash TEXT    NOT NULL,
+    step_index         INTEGER NOT NULL,
+    path               TEXT    NOT NULL,
+    UNIQUE (recipe_prefix_hash, step_index)
+);
+
+-- Saved chains, with recording and span stripped.
+CREATE TABLE IF NOT EXISTS templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    steps_json TEXT NOT NULL
+);
 """
 
 # Columns added to the original `annotations` table by the tag-vocabulary
@@ -189,6 +306,10 @@ _RUNS_NEW_COLUMNS = [
     ("duration_s", "REAL"),
     ("error_text", "TEXT"),
     ("step_timings_json", "TEXT"),
+    # Fan-out (run_groups) and surrogate-control pairing, both nullable —
+    # a run belongs to neither unless something opts it in.
+    ("run_group_id", "INTEGER REFERENCES run_groups(id)"),
+    ("surrogate_of_run_id", "INTEGER REFERENCES runs(id)"),
 ]
 
 # `motifs` += the symbolic SAX string, when one exists for the motif's span.
