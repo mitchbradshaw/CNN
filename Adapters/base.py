@@ -15,7 +15,23 @@ for the pattern) and registering it — zero changes anywhere else.
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-OUTPUT_KINDS = ("signal", "intervals", "encoding")
+# The seven interchange types that gate which pipeline blocks may connect —
+# see `docs/PIPELINE_PRD.md` "Type system" and `Working.types`. Lower-cased
+# to match the existing string-vocabulary convention below.
+TYPE_KINDS = ("signal", "spanset", "windowset", "encoding", "grouping", "model", "scores")
+
+# What a side input may be bound to at chain-composition time (PRD "Chain
+# shape"): the chain's own root signal, an earlier step's output, or a
+# library exemplar.
+SOURCE_KINDS = ("root_signal", "earlier_step", "library_exemplar")
+
+# Legacy output vocabulary, predating the seven interchange types. Kept
+# alongside them (not replaced) so no adapter breaks on the day this lands —
+# see ticket 05. `signal` and `encoding` already coincide with two of the
+# seven type names; `intervals` does not, so it stays as its own entry.
+_LEGACY_OUTPUT_KINDS = ("signal", "intervals", "encoding")
+
+OUTPUT_KINDS = tuple(dict.fromkeys(_LEGACY_OUTPUT_KINDS + TYPE_KINDS))
 
 
 @dataclass
@@ -48,6 +64,47 @@ class ParamSpec:
 
 
 @dataclass
+class SideInputSpec:
+    """One additional typed input a step may declare, beyond its primary
+    input (see `AdapterSpec.input_kind`) — e.g. a clustering adapter's
+    primary input is a `WindowSet`, but it may also declare a `signal`
+    side input bound to a library exemplar to cluster against. Binding a
+    side input to an actual value happens at chain-composition time; this
+    only declares what type is expected and what it may be bound to.
+
+    Attributes
+    ----------
+    name : str
+        Keyword name the adapter's `run` function receives the bound value
+        under (mirrors `ParamSpec.name`).
+    type_kind : str
+        One of `TYPE_KINDS` — the interchange type this side input expects.
+    sources : list[str]
+        Non-empty subset of `SOURCE_KINDS` naming what this side input may
+        be bound to at composition time.
+    """
+
+    name: str
+    type_kind: str
+    sources: list
+
+    def __post_init__(self):
+        if self.type_kind not in TYPE_KINDS:
+            raise ValueError(
+                f"Side-input '{self.name}': type_kind must be one of {TYPE_KINDS}, "
+                f"got {self.type_kind!r}"
+            )
+        if not self.sources:
+            raise ValueError(f"Side-input '{self.name}': sources must be non-empty")
+        bad = [s for s in self.sources if s not in SOURCE_KINDS]
+        if bad:
+            raise ValueError(
+                f"Side-input '{self.name}': sources must be a subset of {SOURCE_KINDS}, "
+                f"got invalid {bad}"
+            )
+
+
+@dataclass
 class AdapterResult:
     """Uniform output wrapper regardless of `output_kind`.
 
@@ -63,6 +120,7 @@ class AdapterResult:
     t: Any = None            # 'signal': matching timestamps
     intervals: Optional[list] = None   # 'intervals': [(start, end[, score]), ...]
     encoding: Any = None     # 'encoding': array, string, or other value
+    value: Any = None        # a typed object from `Working.types` (ticket 01)
     meta: dict = field(default_factory=dict)
 
 
@@ -86,7 +144,25 @@ class AdapterSpec:
         onto the underlying function" the brief asks for; that mapping
         lives entirely inside `run`, nowhere else.
     output_kind : str
-        One of `OUTPUT_KINDS`.
+        One of `OUTPUT_KINDS` — the legacy `signal`/`intervals`/`encoding`
+        vocabulary, or one of the seven `TYPE_KINDS`, accepted side by side
+        (ticket 05, expand phase). Every existing adapter keeps its legacy
+        value; new adapters (later tickets) declare a `TYPE_KINDS` value.
+    input_kind : str, optional
+        One of `TYPE_KINDS`, or None meaning "root signal" — the primary
+        input this step expects. Every existing adapter takes the raw
+        (x, t, fs) signal, so None is the correct value for all of them and
+        is also the default.
+    side_inputs : list[SideInputSpec]
+        Additional typed inputs beyond the primary one, e.g. a clustering
+        step's library exemplar. Bound to an actual value at chain-
+        composition time (PRD "Chain shape"); declared here only. Empty
+        list (the default, and every existing adapter) means "no side
+        inputs".
+    estimate : callable(x, t, fs, **params) -> float, optional
+        Predicted runtime in seconds for the span about to be analysed,
+        used to warn before a long run. None (the default, and every
+        existing adapter) means "counts as free".
     plot : callable(x, t, result, **params) -> matplotlib.figure.Figure, optional
         None if this algorithm has no natural single-run visualisation.
     max_span_samples : int, optional
@@ -136,6 +212,9 @@ class AdapterSpec:
     params: list
     run: Callable
     output_kind: str
+    input_kind: Optional[str] = None
+    side_inputs: list = field(default_factory=list)
+    estimate: Optional[Callable] = None
     plot: Optional[Callable] = None
     max_span_samples: Optional[int] = None
     description: str = ""
@@ -148,6 +227,11 @@ class AdapterSpec:
             raise ValueError(
                 f"Adapter '{self.name}': output_kind must be one of {OUTPUT_KINDS}, "
                 f"got {self.output_kind!r}"
+            )
+        if self.input_kind is not None and self.input_kind not in TYPE_KINDS:
+            raise ValueError(
+                f"Adapter '{self.name}': input_kind must be one of {TYPE_KINDS} or None, "
+                f"got {self.input_kind!r}"
             )
 
     def validate_params(self, raw_params=None):
