@@ -106,3 +106,25 @@ how the runner treats an agent that misbehaves rather than in what the agents bu
 - [minor] [spec] (no rule cited) WindowSet.to_path leaves a stale features.parquet on directory reuse (windowset.py:87-102), so a featureless set reloads with features
 - [minor] [spec] (no rule cited) Five of seven types are unhashable (custom __eq__ nulls __hash__) while SpanSet and Model hash; inconsistent for cache keys
 - [minor] [spec] (no rule cited) SpanSet docstring promises ends[i] > starts[i] (spanset.py:28) but validation permits end == start (:51)
+
+## T35 — 2026-08-18 06:28
+
+- [major] [standards] (rule 5.1) Distance identity recorded as a bare name while word_length/alphabet_size/n_samples materially change the value and are not part of it
+- [major] [standards] (rule 6.1) Magic default `alphabet_size=10` unnamed and unjustified in a module built around named constants
+- [major] [standards] (rule 6.1) `symbolic_distance` omits the classic sqrt(n/w) factor, so the "MINDIST" name and Lin/Keogh citation promise a lower bound the code does not deliver
+- [major] [standards] (rule 6.4) `scale_invariant_distance` and `native_length_distance` duplicate the same z-normalise-then-Euclidean body
+- [major] [standards] (rule 6.4) `_sax_symbols` re-implements psax.py's single-window `timeseries2symbol(..., NR_opt=1)` plus 1-based-to-0-based idiom
+- [major] [standards] (rule 6.4) Two conflicting constant-span policies in one pipeline: `z_normalize` uses `sigma == 0`, `timeseries2symbol` uses `sigma > 0.001`
+- [minor] [standards] (rule 6.2) `n_samples=None` on `scale_invariant_distance` is an unrequested, untested extension point
+- [major] [standards] (rule 4.2) Symbolic hand-case expectation re-derives cutlines with `normal_cutlines`' exact scipy expression instead of a hand-worked constant
+- [major] [standards] (rule 1.3) `Working/README.md` assigns SAX MINDIST-style comparison to `Working/Comparison/`; module placed at top-level `Working/distances.py` (ticket declares the path)
+- [minor] [standards] (no rule cited) `DISTANCE_REGISTRY` values have non-uniform signatures, so a name-driven caller cannot invoke them uniformly
+- [minor] [standards] (no rule cited) Possible Data Clump: `(word_length, alphabet_size)` SAX configuration travels alongside the span pair through `symbolic_distance`/`_sax_symbols`/`_mindist_cell_table`
+- [major] [spec] (rule 1.4) Merge-risk clause says T35 owns the correlation helper T41 imports; only `z_normalize` was delivered, no correlation helper exists
+- [minor] [spec] (no rule cited) Scale-invariant "hand-computed case" uses equal-length inputs, so `resample_to_length` short-circuits and the resampling limb is never hand-verified
+- [minor] [spec] (no rule cited) `word_length` is a required caller argument rather than a fixed constant, giving `symbolic_distance` a signature incompatible with the other two registry entries
+- [major] [spec] (rule 7.1) `native_length_distance` silently truncates to `min(len)` — undeclared behaviour that makes an empty span read as distance 0.0 from any span
+- [minor] [spec] (no rule cited) `symbolic_distance` omits the `sqrt(n/w)` factor, so it is not the MINDIST it names and cites and does not lower-bound Euclidean distance
+- [major] [spec] (rule 6.4) Reimplements `_mindist_cell_table` when `symbol_distance_table`/`mindist` already exist in `Experimentation/Detection experiments/sax_seed_search.py`
+- [minor] [spec] (no rule cited) Scale-invariant distance is unnormalised by `n_samples = max(len)`, so its magnitude grows ~sqrt(n) and a single recorded threshold is not comparable across durations
+- [minor] [spec] (no rule cited) Constant-span guard differs between `z_normalize` (`sigma == 0`) and `timeseries2symbol` (`norm_thresh = 0.001`), so near-constant pairs score 8.94 native vs 0.0 symbolic
