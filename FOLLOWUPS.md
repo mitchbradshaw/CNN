@@ -28,3 +28,24 @@ harness work; needs triage into a ticket by a human rather than being self-assig
   files' real-data gating can then become a plain module-level `pytest.skip(...)`, and whether the
   junction can be dropped from `recordings` afterwards — which would close the tradeoff rather than
   merely record it.
+
+## T01 — 2026-08-17 13:09
+
+- [major] [standards] (rule 6.4) Seven near-identical to_path/from_path bodies and five __eq__ bodies duplicate the same shape across Working/types/*.py
+- [major] [standards] (rule 6.1) Signal.x vs Scores.values name the same per-timepoint concept two ways in sibling modules
+- [minor] [standards] (rule 6.2) to_path returns a file path no caller can use (from_path takes a directory); windowset.py:90 returns only the geometry path though two files were written
+- [minor] [standards] (no rule cited) spanset.py:28 docstring claims ends[i] > starts[i] but spanset.py:51 checks `end < start`, so zero-length spans pass unvalidated
+- [minor] [standards] (no rule cited) spanset.py:65 and model.py:36 open text files without encoding="utf-8"; non-ASCII span labels break the round-trip on Windows
+- [minor] [standards] (no rule cited) Possible Primitive Obsession: encoding.py:31 kind is an unvalidated str while sibling types validate in __post_init__
+- [minor] [standards] (no rule cited) grouping.py:40 and windowset.py:83 silently coerce dtype on write; array_equal in __eq__ hides the asymmetry from the round-trip tests
+- [minor] [standards] (no rule cited) Possible Duplicated Code in tests: ten inline `import shutil` cleanups and a 50-line embedded subprocess script re-building all seven types; subprocess.run has no timeout
+- [minor] [standards] (no rule cited) Possible Feature Envy: Scores.from_signal reaches into signal.x/signal.fs more than its own state
+- [minor] [spec] (no rule cited) Serialisation-format criterion (.npz/.parquet/.json/path-ref) asserted by no test; all 19 tests check only round-trip equality
+- [minor] [spec] (no rule cited) "each exists as a frozen dataclass" tested for Signal only (test_types.py:58); six types untested for frozen-ness
+- [minor] [spec] (no rule cited) Scores length-vs-signal assertion lives only in opt-in from_signal (scores.py:43-53); bypassed by direct construction and from_path
+- [minor] [spec] (no rule cited) test_scores_from_signal_asserts_length_matches_source_signal (test_types.py:235) is tautological, asserting a length from_signal just enforced
+- [minor] [spec] (no rule cited) "WindowSet carries no timepoint alignment" is asserted by no test; :143 only checks n_windows
+- [minor] [spec] (no rule cited) Scope creep: SpanSet start/end and length validation (spanset.py:40-52) plus two tests, not requested by ticket or PRD
+- [minor] [spec] (no rule cited) WindowSet.to_path leaves a stale features.parquet on directory reuse (windowset.py:87-102), so a featureless set reloads with features
+- [minor] [spec] (no rule cited) Five of seven types are unhashable (custom __eq__ nulls __hash__) while SpanSet and Model hash; inconsistent for cache keys
+- [minor] [spec] (no rule cited) SpanSet docstring promises ends[i] > starts[i] (spanset.py:28) but validation permits end == start (:51)
