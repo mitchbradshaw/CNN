@@ -11,6 +11,7 @@ Run from the project root:
 import dataclasses
 import inspect
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -248,21 +249,73 @@ def test_scores_from_signal_rejects_length_mismatch():
 
 # ── boundary rule ────────────────────────────────────────────────────────────
 
-def test_types_package_imports_no_ui_library():
-    import Working.types.encoding
-    import Working.types.grouping
-    import Working.types.model
-    import Working.types.scores
-    import Working.types.signal
-    import Working.types.spanset
-    import Working.types.windowset
+# Run in a child interpreter where panel/holoviews/bokeh/matplotlib have been
+# made genuinely unimportable, as on a cluster node with no display. Importing
+# the package covers module-scope imports; round-tripping each type covers
+# imports hidden inside a function body.
+_NO_UI_LIBRARIES_SCRIPT = '''
+import sys
 
-    forbidden = ("panel", "holoviews", "bokeh", "matplotlib")
-    for name, mod in list(sys.modules.items()):
-        if name.startswith("Working.types"):
-            src = inspect.getsource(mod)
-            for lib in forbidden:
-                assert lib not in src, f"{name} mentions forbidden import {lib!r}"
+FORBIDDEN = ("panel", "holoviews", "bokeh", "matplotlib")
+
+
+class _RefuseUILibraries:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in FORBIDDEN:
+            raise ImportError("no display libraries on this node: " + fullname)
+        return None
+
+
+sys.meta_path.insert(0, _RefuseUILibraries())
+
+project_root, scratch = sys.argv[1], sys.argv[2]
+sys.path.insert(0, project_root)
+
+import os
+
+import numpy as np
+import pandas as pd
+
+from Working.types import (
+    Encoding,
+    Grouping,
+    Model,
+    Scores,
+    Signal,
+    SpanSet,
+    WindowSet,
+)
+
+values = [
+    Signal(x=np.array([1.0, 2.0]), fs=1.0),
+    SpanSet(starts=(0,), ends=(10,)),
+    WindowSet(starts=np.array([0, 10], dtype=np.int64), length=10, fs=1.0,
+              features=pd.DataFrame({"mean": [1.0, 2.0]})),
+    Encoding(values=np.zeros((2, 4, 4), dtype=np.float32), kind="image"),
+    Grouping(labels=np.array([0, 1], dtype=np.int64)),
+    Model(path=os.path.join("MODELS", "cnn_fusion_v1.joblib")),
+    Scores(values=np.array([0.1, 0.2]), fs=1.0),
+]
+
+for i, value in enumerate(values):
+    d = os.path.join(scratch, str(i))
+    os.makedirs(d)
+    value.to_path(d)
+    assert type(value).from_path(d) == value, type(value).__name__
+'''
+
+
+def test_types_round_trip_with_ui_libraries_unimportable():
+    d = _scratch_dir()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _NO_UI_LIBRARIES_SCRIPT, PROJECT_ROOT, d],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
