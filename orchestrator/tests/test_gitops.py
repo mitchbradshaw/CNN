@@ -55,6 +55,14 @@ def test_branch_creation_and_existence(scratch):
     assert scratch.rev_parse("integration/run-1") == scratch.rev_parse("main")
 
 
+def test_branch_names_lists_every_local_branch(scratch):
+    """One call, so the stale-branch preflight does not shell out per ticket."""
+    scratch.create_branch("ticket/T01", "main")
+    scratch.create_branch("integration/run-1", "main")
+
+    assert scratch.branch_names() == {"main", "ticket/T01", "integration/run-1"}
+
+
 def test_commits_between_lists_only_the_branchs_own_work(scratch):
     scratch.create_branch("ticket/T01", "main")
     scratch.run("checkout", "ticket/T01")

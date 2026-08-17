@@ -22,7 +22,7 @@ from .config import load_config
 from .gitops import Git
 from .planner import render_plan, simulate
 from .report import RunDirectory, render_report
-from .runloop import BaselineError, Runner, capture_baseline
+from .runloop import BaselineError, Runner, capture_baseline, stale_ticket_branches
 from .state import RunState, load_state, reconcile, save_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -116,6 +116,24 @@ def _do_run(config, backlog, args) -> int:
         print("refusing to start: the working tree is dirty. `git worktree add` "
               "materialises only committed files, so anything untracked is invisible "
               "inside every agent's worktree.", file=sys.stderr)
+        return 2
+
+    # Only on a fresh run. On `--resume` these branches are the work being
+    # resumed, and reusing them is the entire point.
+    stale = stale_ticket_branches(
+        backlog, git.branch_names(), prefix=config.ticket_branch_prefix)
+    if stale:
+        print(
+            "refusing to start: these ticket branches are left over from an earlier "
+            "run, and `git worktree add` reuses an existing branch rather than cutting "
+            "a new one — so each of these tickets would be provisioned onto its "
+            "previous attempt's commits, cut from the previous run's base:\n  "
+            + "\n  ".join(stale)
+            + "\n\nEither resume that run instead (`--resume runs/<stamp>`), or, once "
+              "you have salvaged anything you want from them:\n"
+              f"    git branch -D {' '.join(stale)}",
+            file=sys.stderr,
+        )
         return 2
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M")

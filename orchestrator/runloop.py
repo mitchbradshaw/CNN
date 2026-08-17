@@ -527,6 +527,25 @@ def _fix_prompt(ticket: Ticket, findings) -> str:
     )
 
 
+def stale_ticket_branches(backlog, existing_branches, *, prefix: str) -> tuple[str, ...]:
+    """Ticket branches left over from an earlier run, for tickets this run would dispatch.
+
+    `Git.worktree_add` reuses an existing branch instead of cutting a new one —
+    which is right on a resume and wrong on a fresh run. Left unchecked, a
+    quarantined ticket's next attempt is provisioned onto the previous
+    attempt's commits, cut from the previous run's base, and the red-proof gate
+    grades last night's test commit as this run's first.
+
+    Tickets that will not be provisioned are not stale: a `done` ticket's branch
+    is the one most likely to still exist, since it is the one that merged.
+    """
+    existing = set(existing_branches)
+    return tuple(sorted(
+        f"{prefix}T{t.id:02d}" for t in backlog
+        if not t.done and not t.human_gate and f"{prefix}T{t.id:02d}" in existing
+    ))
+
+
 class BaselineError(Exception):
     """The baseline could not be measured where the agents actually live."""
 

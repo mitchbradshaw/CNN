@@ -72,6 +72,11 @@ class Git:
         code, _ = self.try_run("show-ref", "--verify", "--quiet", f"refs/heads/{name}")
         return code == 0
 
+    def branch_names(self) -> set[str]:
+        """Every local branch, in one call."""
+        out = self.run("for-each-ref", "--format=%(refname:short)", "refs/heads/")
+        return {line for line in out.splitlines() if line}
+
     def merge_base(self, a: str, b: str) -> str:
         return self.run("merge-base", a, b)
 
