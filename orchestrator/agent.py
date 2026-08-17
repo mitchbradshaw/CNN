@@ -22,10 +22,16 @@ from .backlog import Ticket
 from .config import Config
 
 #: Substrings that mark the failure as the environment's, not the ticket's.
+#:
+#: `configuration file` covers the CLI's own `~/.claude.json` being unreadable.
+#: That file is global and shared, so concurrent agents can race on it — in
+#: run-20260817-2050 two of three agents read it mid-write, looped on a parse
+#: error for their whole budget, and the tickets were blamed for it.
 INFRASTRUCTURE_MARKERS = (
     "rate_limit", "rate limit", "429", "overloaded_error", "api_error",
     "internal server error", "503", "econnreset", "connection error",
     "authentication_error", "credit balance",
+    "configuration file", "is corrupted",
 )
 
 PROMPT = """\
@@ -69,6 +75,11 @@ class AgentResult:
     transcript: str
     duration_seconds: float
     timed_out: bool = False
+    #: Killed for going `stall_minutes` without a new commit, rather than at the
+    #: budget. Distinct from `timed_out` so the run log can say which bound hit,
+    #: and it says nothing about whether the work so far is any good — an agent
+    #: that finished and then hung trips this having done everything asked.
+    stalled_without_commit: bool = False
 
 
 def build_prompt(ticket: Ticket, config: Config, *,
@@ -86,19 +97,41 @@ def build_prompt(ticket: Ticket, config: Config, *,
 
 
 def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: float,
-              extra_args=(), transcript_path: Path | str | None = None) -> AgentResult:
-    """Run one agent to completion, its budget, or its death."""
+              extra_args=(), transcript_path: Path | str | None = None,
+              stall_minutes: float | None = None, commit_count=None,
+              poll_seconds: float = 5.0) -> AgentResult:
+    """Run one agent to completion, its budget, or its death.
+
+    With `stall_minutes` and `commit_count` supplied, the agent is also killed
+    early once it has gone that long without a *new* commit. Progress is measured
+    in commits and not in output on purpose: both failures this exists to catch
+    emit output happily. One is a CLI looping on a config parse error, which
+    produces nothing but noise; the other is an agent that finished its work and
+    then hung, which produced everything it was asked for. Killing is not a
+    verdict on either — the commits go to the gates regardless, and the gates
+    decide.
+    """
     argv = [*cli, "-p", prompt, "--model", model, *extra_args]
     started = time.monotonic()
     timed_out = False
+    stalled_without_commit = False
+
+    watch_for_stall = stall_minutes is not None and commit_count is not None
 
     try:
-        completed = subprocess.run(
-            argv, cwd=str(Path(cwd)), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=budget_minutes * 60,
-        )
-        exit_code = completed.returncode
-        transcript = completed.stdout + completed.stderr
+        if not watch_for_stall:
+            completed = subprocess.run(
+                argv, cwd=str(Path(cwd)), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=budget_minutes * 60,
+            )
+            exit_code = completed.returncode
+            transcript = completed.stdout + completed.stderr
+        else:
+            exit_code, transcript, timed_out, stalled_without_commit = _run_watched(
+                argv, cwd=cwd, budget_minutes=budget_minutes,
+                stall_minutes=stall_minutes, commit_count=commit_count,
+                poll_seconds=poll_seconds,
+            )
     except subprocess.TimeoutExpired as exc:
         timed_out = True
         exit_code = 124
@@ -114,6 +147,7 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
         transcript=transcript,
         duration_seconds=time.monotonic() - started,
         timed_out=timed_out,
+        stalled_without_commit=stalled_without_commit,
     )
 
     if transcript_path is not None:
@@ -122,6 +156,75 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
         transcript_path.write_text(result.transcript, encoding="utf-8")
 
     return result
+
+
+def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
+                 commit_count, poll_seconds: float):
+    """Popen plus a poll loop, returning `(exit_code, transcript, timed_out, stalled)`.
+
+    Output goes to a temp file rather than a pipe: an agent that fills a pipe
+    buffer nobody is draining deadlocks, and the whole point here is to keep
+    watching while it talks.
+    """
+    import tempfile
+
+    started = time.monotonic()
+    budget_deadline = started + budget_minutes * 60
+    #: Reset on every new commit, so the deadline measures silence rather than
+    #: total runtime. T35 in run-20260817-2050 committed twice inside twelve
+    #: minutes and then hung for another forty-eight; a deadline anchored to the
+    #: start would have left all forty-eight of them on the clock.
+    quiet_since = started
+    last_commits = 0
+    timed_out = False
+    stalled = False
+
+    with tempfile.TemporaryDirectory() as scratch:
+        sink_path = Path(scratch) / "transcript"
+        with open(sink_path, "w+b") as sink:
+            process = subprocess.Popen(
+                argv, cwd=str(Path(cwd)), stdout=sink, stderr=subprocess.STDOUT,
+            )
+            try:
+                while True:
+                    try:
+                        process.wait(timeout=poll_seconds)
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+
+                    now = time.monotonic()
+                    if now >= budget_deadline:
+                        timed_out = True
+                        break
+
+                    commits = commit_count()
+                    if commits != last_commits:
+                        last_commits = commits
+                        quiet_since = now
+                    elif now - quiet_since >= stall_minutes * 60:
+                        stalled = True
+                        break
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+
+        transcript = sink_path.read_bytes().decode("utf-8", "replace")
+
+    if timed_out:
+        exit_code = 124
+        transcript += (f"\n[orchestrator] agent exceeded its {budget_minutes:g} minute "
+                       f"budget and was killed\n")
+    elif stalled:
+        exit_code = 124
+        transcript += (f"\n[orchestrator] agent made no new commit in {stall_minutes:g} "
+                       f"minutes and was killed. Whatever it had already committed "
+                       f"still goes to the gates.\n")
+    else:
+        exit_code = process.returncode
+
+    return exit_code, transcript, timed_out, stalled
 
 
 def _decode(stream) -> str:
@@ -152,15 +255,27 @@ def classify_exit(result: AgentResult, *, commits_made: int, config: Config) -> 
     `red at exit` and `review-rejected` are the gates' verdicts, not this
     function's — an agent that exited non-zero after real work still goes to
     the gates, because the gates are what judge the work.
+
+    That principle governs timeouts too, which it did not until
+    run-20260817-2050: a hung process is a process failure, but its commits are
+    still work, and only the gates can say whether the work is any good.
+    Commits, not the exit path, decide whether there is anything to judge.
     """
-    if result.timed_out:
+    # Checked before `timed_out`, because the environment can break in ways that
+    # present as a timeout: a CLI that cannot read its own config never exits,
+    # and grading that as a stall spends the ticket's one retry, quarantines it,
+    # and counts it toward the circuit breaker for something it did not do.
+    # The `exit_code != 0` guard stays: an agent that finished cleanly and merely
+    # *mentioned* a rate limit in its output has not hit one, and quarantining it
+    # for the word would be worse than the bug this reordering fixes.
+    lowered = result.transcript.lower()
+    if result.exit_code != 0 and any(m in lowered for m in INFRASTRUCTURE_MARKERS):
+        return "infrastructure"
+
+    if (result.timed_out or result.stalled_without_commit) and commits_made == 0:
         return "stall"
 
     if looks_like_rate_limiting(result, commits_made, config):
-        return "infrastructure"
-
-    lowered = result.transcript.lower()
-    if result.exit_code != 0 and any(m in lowered for m in INFRASTRUCTURE_MARKERS):
         return "infrastructure"
 
     if commits_made == 0:

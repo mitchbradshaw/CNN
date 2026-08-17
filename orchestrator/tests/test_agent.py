@@ -115,6 +115,109 @@ def test_a_missing_cli_is_reported_rather_than_raising(tmp_path):
     assert "could not be launched" in result.transcript
 
 
+# ----------------------------------------------- stalling without ever committing
+
+
+def test_an_agent_that_never_commits_is_killed_at_the_stall_deadline(fake_cli, tmp_path):
+    """run-20260817-2050: T35 produced output continuously and work never.
+
+    `~/.claude.json` was corrupt, so the CLI printed a parse error in a loop and
+    made no progress. `stall_minutes` was configured at 20 and never implemented,
+    so the agent held its slot for the full 60-minute budget, retried, and burned
+    another 60. Any definition of progress based on *output* would have called it
+    healthy — it was producing plenty. Commits are the only honest signal.
+    """
+    cli = fake_cli("""
+        import sys, time
+        for _ in range(2000):
+            print("config is corrupted", flush=True)
+            time.sleep(0.01)
+    """)
+
+    result = run_agent(cli, cwd=tmp_path, prompt="p", model="m",
+                       budget_minutes=5,              # nowhere near the budget
+                       stall_minutes=0.5 / 60,        # 0.5 s
+                       commit_count=lambda: 0,
+                       poll_seconds=0.05)
+
+    assert result.stalled_without_commit
+    assert result.duration_seconds < 60, "killed at the stall deadline, not the budget"
+    assert "config is corrupted" in result.transcript, "the transcript is still kept"
+
+
+def test_an_agent_that_keeps_committing_is_left_alone(fake_cli, tmp_path):
+    """The false-kill this must not cause: steady progress is not a stall."""
+    cli = fake_cli("""
+        import time
+        time.sleep(0.6)
+        print("done")
+    """)
+    ticks = iter(range(1, 500))
+
+    result = run_agent(cli, cwd=tmp_path, prompt="p", model="m",
+                       budget_minutes=5,
+                       stall_minutes=0.2 / 60,        # would fire if it went quiet
+                       commit_count=lambda: next(ticks),
+                       poll_seconds=0.05)
+
+    assert not result.stalled_without_commit
+    assert result.exit_code == 0
+    assert "done" in result.transcript
+
+
+def test_an_agent_that_finishes_its_work_and_then_hangs_is_cut_loose(fake_cli, tmp_path):
+    """T35's night: two commits inside twelve minutes, then forty-eight idle.
+
+    The commits are real work and must survive — the kill is about reclaiming the
+    slot, not about judging the ticket.
+    """
+    cli = fake_cli("""
+        import time
+        print("committed everything", flush=True)
+        time.sleep(30)
+    """)
+
+    result = run_agent(cli, cwd=tmp_path, prompt="p", model="m",
+                       budget_minutes=5,
+                       stall_minutes=0.4 / 60,
+                       commit_count=lambda: 2,        # committed, then silent
+                       poll_seconds=0.05)
+
+    assert result.stalled_without_commit
+    assert not result.timed_out, "the stall deadline hit first, not the budget"
+    assert "committed everything" in result.transcript
+
+
+def test_stall_detection_is_off_unless_asked_for(fake_cli, tmp_path):
+    """Callers that pass no `stall_minutes` keep the plain run-to-completion path."""
+    cli = fake_cli("""
+        print("quick")
+    """)
+
+    result = run_agent(cli, cwd=tmp_path, prompt="p", model="m", budget_minutes=1)
+
+    assert result.exit_code == 0
+    assert not result.stalled_without_commit
+    assert "quick" in result.transcript
+
+
+def test_the_budget_still_wins_when_nothing_stalls(fake_cli, tmp_path):
+    """Stall detection must not displace the budget as the outer bound."""
+    cli = fake_cli("""
+        import time
+        time.sleep(30)
+    """)
+
+    result = run_agent(cli, cwd=tmp_path, prompt="p", model="m",
+                       budget_minutes=1 / 120,        # 0.5 s
+                       stall_minutes=10,              # never reached
+                       commit_count=lambda: 5,
+                       poll_seconds=0.05)
+
+    assert result.timed_out
+    assert not result.stalled_without_commit
+
+
 # ------------------------------------------------------------- classification
 
 
@@ -130,17 +233,65 @@ def test_a_clean_exit_with_commits_proceeds_to_the_gates(config):
     assert verdict == "ok"
 
 
-def test_a_timeout_is_a_stall(config):
-    verdict = classify_exit(a_result(exit_code=124, timed_out=True), commits_made=1,
+def test_a_timeout_with_no_work_is_a_stall(config):
+    verdict = classify_exit(a_result(exit_code=124, timed_out=True), commits_made=0,
                             config=config)
 
     assert verdict == "stall"
+
+
+def test_a_timeout_after_real_work_goes_to_the_gates(config):
+    """run-20260817-2050 threw away a finished ticket, twice.
+
+    T35 committed its failing tests at 21:02 and its implementation at 21:08,
+    then hung until the 60-minute budget killed it at 21:56. `timed_out` was
+    checked before the commit count, so a complete piece of test-first work was
+    discarded, retried from a clean worktree, and quarantined — while the branch
+    still held both commits.
+
+    This module's own contract already says otherwise: "an agent that exited
+    non-zero having done real work is classified `ok` and handed to the gates to
+    judge". A hung process is a process failure; the commits are the work, and
+    the gates are what decide whether the work is good.
+    """
+    verdict = classify_exit(a_result(exit_code=124, timed_out=True), commits_made=2,
+                            config=config)
+
+    assert verdict == "ok"
 
 
 def test_a_clean_exit_with_no_commits_is_a_stall(config):
     """The agent believes it finished and produced nothing. Retrying the *agent*
     is right here in a way it never is after a red suite."""
     verdict = classify_exit(a_result(), commits_made=0, config=config)
+
+    assert verdict == "stall"
+
+
+def test_a_corrupted_cli_config_is_infrastructure_not_the_tickets_fault(config):
+    """run-20260817-2050 blamed T35 for a broken `~/.claude.json`.
+
+    Three agents launched in the same second, raced on the CLI's global config
+    file, and two read it mid-write. The CLI then looped on a parse error until
+    the budget killed it — and because `timed_out` was checked before the
+    infrastructure markers, the verdict was `stall`: one retry, then the ticket
+    was quarantined and counted toward the circuit breaker. The environment
+    broke, so the environment should wear it.
+    """
+    transcript = ("Claude configuration file at C:\\Users\\x\\.claude.json is corrupted: "
+                  "JSON Parse error: Unexpected EOF\n" * 40)
+
+    verdict = classify_exit(a_result(exit_code=124, timed_out=True, transcript=transcript),
+                            commits_made=0, config=config)
+
+    assert verdict == "infrastructure"
+
+
+def test_a_plain_timeout_with_no_infrastructure_signature_is_still_a_stall(config):
+    """The reordering must not turn every timeout into an infrastructure excuse."""
+    verdict = classify_exit(a_result(exit_code=124, timed_out=True,
+                                     transcript="thinking very hard about spans"),
+                            commits_made=0, config=config)
 
     assert verdict == "stall"
 

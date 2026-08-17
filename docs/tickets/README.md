@@ -12,7 +12,7 @@ truth. See `docs/ORCHESTRATOR_SPEC.md` for how the scheduler consumes these fiel
 | `human-gate` | 04, 49 | Never dispatched. Held in the DAG so dependents are correctly blocked. |
 | `solo` | 17 | Runs alone; nothing else in flight. |
 | `human-verify` | 17, 18, 20, 21, 22, 23, 29, 30, 31, 32, 33, 34, 37, 38, 39, 42, 44 | Dispatched and merged, but needs your eyes before `main` moves. |
-| `done` | 01 | Already merged by an earlier run; its work is in the base. Never dispatched, but **releases** its dependents — the opposite of `human-gate`. |
+| `done` | 01, 05 | Already merged by an earlier run; its work is in the base. Never dispatched, but **releases** its dependents — the opposite of `human-gate`. |
 
 **Marking a ticket done.** When a run merges a ticket and you fast-forward `main`, add `done` to its
 flags. Do not delete the ticket file: `blocked_by` is validated against the loaded set, so removing
@@ -124,7 +124,7 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 | [02](T02-schema-extension-new-tables-new-columns-union-view.md) | Schema extension: new tables, new columns, union view | S | M | 0 | 32 | — |  |
 | [03](T03-held-out-recording-lock.md) | Held-out recording lock | S | S | 0 | 1 | — |  |
 | [04](T04-verdict-constraint-rebuild-add-seed.md) | Verdict-constraint rebuild: add `seed` | O | M | 1 | 21 | 02 | `human-gate` |
-| [05](T05-adapter-spec-expansion-expand-phase.md) | Adapter spec expansion (expand phase) | S | M | 1 | 28 | 01 |  |
+| [05](T05-adapter-spec-expansion-expand-phase.md) | Adapter spec expansion (expand phase) | S | M | 1 | 28 | 01 | `done` |
 | [06](T06-adapter-remap-batch-a-signal-and-interval-blocks.md) | Adapter remap batch A: signal and interval blocks | S | M | 2 | 5 | 05 |  |
 | [07](T07-adapter-remap-batch-b-encoding-blocks.md) | Adapter remap batch B: encoding blocks | S | M | 2 | 3 | 05 |  |
 | [08](T08-adapter-remap-batch-c-matrix-profile-to-scores-window-matr.md) | Adapter remap batch C: matrix profile to Scores, window matrix to WindowSet, executor dispatch | O | M | 2 | 15 | 05 |  |

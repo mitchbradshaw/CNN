@@ -133,6 +133,13 @@ class Runner:
 
         started = []
         for ticket_id in decision.dispatch:
+            if started and self.config.agent.launch_stagger_seconds:
+                # The worktrees are isolated; the CLI's `~/.claude.json` is not.
+                # Three agents launched in the same second raced on it in
+                # run-20260817-2050, two read it mid-write, and both looped on a
+                # parse error until their budget ran out. Spacing the launches is
+                # the cheapest fix that does not involve moving that file.
+                time.sleep(self.config.agent.launch_stagger_seconds)
             self._transition(ticket_id, st.RUNNING,
                              started_at=datetime.now().isoformat(timespec="seconds"))
             thread = threading.Thread(target=self._guarded_pipeline,
@@ -221,6 +228,10 @@ class Runner:
                 self.state.record(ticket.id).attempts = attempt
                 self._commit_state()
 
+            def commits_so_far() -> int:
+                return len(self.git.commits_between(self.state.integration_branch,
+                                                    worktree.branch))
+
             result = run_agent(
                 list(self.config.agent.cli),
                 cwd=worktree.path,
@@ -229,9 +240,10 @@ class Runner:
                 budget_minutes=ticket.budget_minutes or self.config.budget_minutes(ticket.size),
                 extra_args=self.config.agent.extra_args,
                 transcript_path=self.run_dir.artifact(ticket.id, f"transcript-{attempt}.log"),
+                stall_minutes=self.config.agent.stall_minutes,
+                commit_count=commits_so_far,
             )
-            commits = len(self.git.commits_between(self.state.integration_branch,
-                                                   worktree.branch))
+            commits = commits_so_far()
             verdict = classify_exit(result, commits_made=commits, config=self.config)
 
             if verdict == "ok":
@@ -244,7 +256,10 @@ class Runner:
                 return False
 
             # Stall. One retry from a clean worktree with the transcript tail.
-            self._note(f"T{ticket.id:02d} stalled (attempt {attempt})")
+            bound = (f"silent for {self.config.agent.stall_minutes}m"
+                     if result.stalled_without_commit else "budget exhausted")
+            self._note(f"T{ticket.id:02d} stalled (attempt {attempt}, {bound}, "
+                       f"{commits} commit(s))")
             if attempt > self.config.retries.stall:
                 self._quarantine(ticket, "stalled and did not recover", exit_class="stall")
                 return False

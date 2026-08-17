@@ -75,8 +75,20 @@ cli = ["claude"]
 # `claude -p` with permissions bypassed: the agent sees one worktree and one
 # ticket, and the worktree is disposable.
 extra_args = ["--dangerously-skip-permissions"]
-# No tool call and no commit for this long is a stall, independent of budget.
+# No *new* commit for this long and the agent is killed, independent of budget.
+# Measured in commits rather than in output because both failures it catches talk
+# happily: a CLI looping on a config parse error produces nothing but noise, and
+# an agent that has finished and hung produced everything asked of it. Killing is
+# not a verdict — whatever was committed still goes to the gates. In
+# run-20260817-2050 this was configured and never implemented, so T35 committed
+# its work in twelve minutes, hung for forty-eight, and was thrown away twice.
 stall_minutes = 20
+# The CLI rewrites a global `~/.claude.json` at startup. Agents launched in the
+# same instant race on it — in run-20260817-2050 all three started at 20:56:35,
+# two read the file mid-write, and both burned a full 60-minute budget printing
+# `JSON Parse error: Unexpected EOF`. The worktrees are isolated; that file is
+# not. Five seconds is generous against a sub-second write window.
+launch_stagger_seconds = 5
 
 [suite]
 # Never `-n`. tests/_session_isolation.py documents exactly why parallel

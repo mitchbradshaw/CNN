@@ -6,12 +6,16 @@ size: M
 blocked_by: [1]
 mutex: [6, 7, 8, 9, 11, 12, 43]
 files: ["Adapters/base.py", "Adapters/registry.py", "tests/test_adapter_spec.py"]
-flags: []
+flags: [done]
 level: 1
 unblocks: 28
 budget_minutes: 60
 ---
 # 05 — Adapter spec expansion (expand phase)
+
+> **Done.** Merged by run-20260817-2050 as `49dbdfb`, both review rounds clean (0 findings). The `done`
+> flag keeps the file loadable — every `blocked_by: [5]` still resolves — while dropping it out of
+> scheduling. Do not re-dispatch; the work is in the base.
 
 **Model:** [S] · **Size:** [M]
 

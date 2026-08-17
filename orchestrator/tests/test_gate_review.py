@@ -92,6 +92,88 @@ def test_a_malformed_line_is_kept_rather_than_dropped():
     assert findings[0].axis == "standards"
 
 
+# ------------------------------------------------------- judgement findings
+
+JUDGEMENT = """\
+```findings
+standards | 1.1 | - | panel imported in Working/types/signal.py
+standards | 2.5 | judgement | the paired nullable FKs read as an origin discriminator
+standards | 4.2 | judgement | the shape test only checks column names
+spec | - | judgement | the criterion is arguably satisfied another way
+```
+"""
+
+
+def test_a_judgement_marked_finding_is_parsed_as_such():
+    findings = parse_findings(JUDGEMENT)
+
+    assert [f.judgement for f in findings] == [False, True, True, True]
+    assert findings[1].rule == "2.5"
+    assert "discriminator" in findings[1].summary
+
+
+def test_a_judgement_call_cannot_block_however_its_rule_is_graded():
+    """run-20260817-2050, in one assertion.
+
+    The reviewer wrote "No blockers" and marked all nine findings judgement.
+    Rules 2.5 and 4.2 are graded `blocker`, so the runner re-graded four of them
+    into blockers and quarantined T02 for findings the reviewer had explicitly
+    disclaimed. An interpretation the reviewer will not stand behind is a
+    follow-up, not a merge gate.
+    """
+    severities = load_rule_severities(STANDARDS)
+
+    graded = grade_findings(parse_findings(JUDGEMENT), severities, default="minor")
+
+    assert graded[0].severity == "blocker", "a definite 1.1 violation still blocks"
+    assert graded[1].severity != "blocker"
+    assert graded[2].severity != "blocker"
+
+    verdict = check_review(graded, blocking_severities=("blocker",))
+    assert verdict.status == "blocked", "only because of the un-hedged 1.1"
+    assert verdict.blockers == {"standards": 1, "spec": 0}
+
+
+def test_judgement_calls_alone_let_the_ticket_merge():
+    severities = load_rule_severities(STANDARDS)
+    prose = "```findings\nstandards | 2.5 | judgement | reads as a discriminator\n```\n"
+
+    verdict = check_review(grade_findings(parse_findings(prose), severities,
+                                          default="minor"),
+                           blocking_severities=("blocker",))
+
+    assert verdict.status == "pass"
+    assert len(verdict.followups) == 1, "recorded, not discarded"
+
+
+def test_the_three_field_form_still_parses():
+    """Every existing review emits `axis | rule | summary`; none may break."""
+    findings = parse_findings(STRUCTURED)
+
+    assert len(findings) == 3
+    assert not any(f.judgement for f in findings)
+    assert findings[0].rule == "1.1"
+    assert "round-trip" in findings[2].summary
+
+
+def test_a_summary_containing_a_pipe_is_not_mistaken_for_a_judgement_flag():
+    prose = "```findings\nstandards | 6.1 | named foo | bar rather than baz\n```\n"
+
+    findings = parse_findings(prose)
+
+    assert len(findings) == 1
+    assert not findings[0].judgement
+    assert findings[0].summary == "named foo | bar rather than baz"
+
+
+def test_the_review_prompt_explains_the_judgement_field():
+    prompt = build_review_prompt(skill="code-review", merge_base="abc123",
+                                 ticket_path="docs/tickets/T02.md",
+                                 standards_path="docs/CODING_STANDARDS.md")
+
+    assert "judgement" in prompt.lower()
+
+
 # ---------------------------------------------------------------- grading
 
 
@@ -206,7 +288,9 @@ def test_the_review_prompt_requests_the_structured_block():
                                  standards_path=Path("s.md"))
 
     assert "```findings" in prompt
-    assert "axis | rule | summary" in prompt
+    # Four fields since run-20260817-2050: the reviewer marks judgement calls,
+    # which are recorded but never block. See `grade_findings`.
+    assert "axis | rule | judgement | summary" in prompt
 
 
 def test_out_of_scope_files_are_appended_to_the_review_prompt():

@@ -48,6 +48,7 @@ class AgentConfig:
     cli: tuple[str, ...]
     extra_args: tuple[str, ...]
     stall_minutes: int
+    launch_stagger_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,7 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             cli=tuple(_require(data, "agent", "cli", path)),
             extra_args=tuple(data["agent"].get("extra_args", [])),
             stall_minutes=int(_require(data, "agent", "stall_minutes", path)),
+            launch_stagger_seconds=float(data["agent"].get("launch_stagger_seconds", 0.0)),
         ),
         suite=SuiteConfig(
             command=tuple(_require(data, "suite", "command", path)),

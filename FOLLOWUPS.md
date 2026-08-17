@@ -54,6 +54,38 @@ keep converting ordinary data problems into total-collection failures until it i
   worktree failure exactly. Tests should not depend on a gitignored session file for their import to
   succeed.
 
+## Harness — 2026-08-18 (post-run-20260817-2050)
+
+The fixture repair held: the baseline was empty and the suite gate was real. Three new defects, all in
+how the runner treats an agent that misbehaves rather than in what the agents built.
+
+- [fixed] **The CLI's `~/.claude.json` is global, and the worktrees are not.** All three agents launched
+  at 20:56:35, raced on it, and two read it mid-write. They then looped on `JSON Parse error:
+  Unexpected EOF` for their entire 60-minute budget. Launches are now staggered
+  (`agent.launch_stagger_seconds`), and the corruption signature is an infrastructure marker so the
+  ticket is not blamed for it.
+- [fixed] **`agent.stall_minutes` was configured and never implemented.** T35 committed its failing
+  tests at 21:02 and its implementation at 21:08, then hung until the budget killed it at 21:56 — and
+  the runner discarded a complete, test-first ticket, retried it, and quarantined it while both commits
+  sat on the branch. Two causes: nothing watched for silence, and `timed_out` was checked before the
+  commit count, contradicting this module's own rule that work goes to the gates.
+- [fixed] **Judgement calls were being promoted to merge blockers.** The T02 review wrote "No blockers"
+  and marked all nine findings judgement; four cited rules graded `blocker`, and the runner re-graded
+  them into blockers. The findings block now carries a `judgement` field that caps a finding below
+  `blocker`. Replaying that review through the new grading yields 0 blockers and 15 follow-ups.
+- [watch] **`stall_minutes = 20` is now live, and has never been validated against a large ticket.**
+  It is the value the config already declared, so it is what got implemented rather than a number
+  invented here. Both observed failures are caught comfortably by it — T35 was silent for 48 minutes,
+  and the config-corruption case never commits at all. The exposure is a genuinely slow ticket: T17
+  splits two god-class UI modules, and an agent that spends more than 20 minutes between commits there
+  would be killed with partial work, fail the suite gate, and be quarantined where previously it had
+  the full 60 minutes. Nothing is lost silently — the commits still go to the gates — but if T17 or
+  another `L` ticket starts dying this way, raise the number rather than assuming the ticket is bad.
+- [open] **The transcript is lost when an agent is killed on Windows.** `subprocess.run` with
+  `capture_output=True` returns no stdout on `TimeoutExpired`, which is why T35's transcript was 69
+  bytes and the diagnosis took a branch inspection rather than a log read. The watched path now writes
+  to a file and keeps it, but `run_agent`'s unwatched path and the review/fix calls still lose it.
+
 ## T01 — 2026-08-17 13:09
 
 - [major] [standards] (rule 6.4) Seven near-identical to_path/from_path bodies and five __eq__ bodies duplicate the same shape across Working/types/*.py

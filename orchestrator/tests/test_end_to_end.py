@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -31,7 +32,6 @@ import os, pathlib, re, subprocess, sys
 argv = sys.argv[1:]
 prompt = argv[argv.index("-p") + 1]
 cwd = pathlib.Path.cwd()
-mode = os.environ.get("FAKE_AGENT_MODE", "good")
 
 
 def git(*args):
@@ -50,6 +50,13 @@ if "code-review" in prompt:
 
 label = re.search(r"T(\\d\\d)", prompt).group(0)
 slug = label.lower()
+
+# Per-ticket first, then the run-wide default. A test that wants one ticket to
+# misbehave sets `FAKE_AGENT_MODE_T01` once, before the run: agents are launched
+# on concurrent threads, so flipping a single global between dispatches is a race
+# that the two agents resolve by whichever happens to read it last.
+mode = os.environ.get("FAKE_AGENT_MODE_" + label,
+                      os.environ.get("FAKE_AGENT_MODE", "good"))
 
 if mode == "silent":            # exits clean having committed nothing
     print("I have decided to do nothing.")
@@ -144,6 +151,7 @@ recordings = []
 cli = {cli}
 extra_args = []
 stall_minutes = 5
+launch_stagger_seconds = {stagger}
 
 [suite]
 command = ["pytest", "-q", "--tb=no", "-rf"]
@@ -257,11 +265,11 @@ def world(tmp_path):
             git.create_branch("integration", "main")
             git.checkout("integration")
 
-        def config(self, *, ceiling=2, breaker=3, stall_retries=0):
+        def config(self, *, ceiling=2, breaker=3, stall_retries=0, stagger=0.0):
             path = tmp_path / "config.toml"
             cli = json.dumps([sys.executable, str(agent)])
             path.write_text(CONFIG.format(cli=cli, ceiling=ceiling, breaker=breaker,
-                                          stall_retries=stall_retries),
+                                          stall_retries=stall_retries, stagger=stagger),
                             encoding="utf-8")
             return load_config(path, repo_root=root)
 
@@ -428,22 +436,41 @@ def test_a_quarantined_blocker_holds_its_dependents_and_the_run_continues(world,
     world.ticket(2, blocked_by=[1])
     world.ticket(3)
     world.commit()
-    monkeypatch.setenv("FAKE_AGENT_MODE", "no-impl")
+    # Only ticket 1 misbehaves; the others are fine. Declared per ticket and up
+    # front, because tickets 1 and 3 are dispatched into concurrent threads.
+    monkeypatch.setenv("FAKE_AGENT_MODE_T01", "no-impl")
     runner = build_runner(world, world.config())
-    # Only ticket 1 misbehaves; the others are fine.
-    original = runner._run_agent_with_retry
-
-    def selective(ticket, worktree):
-        monkeypatch.setenv("FAKE_AGENT_MODE", "no-impl" if ticket.id == 1 else "good")
-        return original(ticket, worktree)
-
-    runner._run_agent_with_retry = selective
 
     runner.run()
 
     assert runner.state.tickets["1"].status == FAILED
     assert runner.state.tickets["2"].status == BLOCKED_UPSTREAM
     assert runner.state.tickets["3"].status == MERGED, "the run continues with the rest"
+
+
+def test_agents_in_one_wave_are_not_launched_in_the_same_instant(world):
+    """run-20260817-2050 launched three agents at 20:56:35 and lost two of them.
+
+    The CLI writes a global `~/.claude.json` at startup, so simultaneous launches
+    race on it; two agents read it mid-write, looped on a JSON parse error, and
+    burned their whole budget. The worktrees are isolated but that file is not,
+    and nothing else in the design notices — so the launches are spaced instead.
+
+    A lower bound on elapsed time, which `sleep` guarantees; upper bounds would
+    be flaky.
+    """
+    world.ticket(1)
+    world.ticket(2)
+    world.commit()
+    runner = build_runner(world, world.config(ceiling=2, stagger=0.3))
+
+    started = time.monotonic()
+    dispatched = runner._dispatch_wave()
+    elapsed = time.monotonic() - started
+
+    assert len(dispatched) == 2
+    assert elapsed >= 0.3, "the second agent waited for the first to clear the config"
+    runner._join_all()
 
 
 def test_a_human_gated_ticket_is_never_dispatched(world):

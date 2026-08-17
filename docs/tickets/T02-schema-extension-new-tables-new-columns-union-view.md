@@ -32,9 +32,11 @@ those tickets each add their own functions to it.
 **Acceptance criteria:**
 - [ ] `adjudications` exists: one row per detection, with verdict, note, created_at, and an
       `adjudication_tags` join table against `tag_vocabulary`. `verdict` is `TEXT NOT NULL` with **no
-      `CHECK` constraint** — see the adjudication at the end.
+      `CHECK` constraint** — see the adjudication at the end. "One row per detection" is
+      `UNIQUE (detection_id)`, not a plain index.
 - [ ] `motif_entry`, `motif_member`, `motif_edge` exist. An entry is identified by recording and sample
-      range with optional nullable provenance pointers to a detection or an annotation. A member may
+      range — `UNIQUE (recording_id, start_idx, end_idx)`, since "identified by" is a constraint and not
+      a comment — with **one** nullable provenance pointer, `detection_id`. A member may
       reference any recording and any channel. An edge carries distance function, threshold, distance
       value, recipe hash, and nullable inter-channel lag, waveform correlation and classification bin.
 - [ ] `motif_entry_tags` attaches tags many-to-many; no tag is part of any primary key.
@@ -45,6 +47,8 @@ those tickets each add their own functions to it.
       scope semantics are ticket 25's. The previous attempt made `config_id` mandatory, which decides
       on 25's behalf that a group cannot exist before its config does.
 - [ ] `step_artifacts` exists, keyed on a recipe-prefix hash plus step index, storing an artifact path.
+      "Keyed on" is `UNIQUE (recipe_prefix_hash, step_index)` — it is the only falsifiable claim a cache
+      table makes, and a cache whose key is not unique is not a cache.
 - [ ] `templates` exists, storing a name and a steps JSON blob with no recording or span.
 - [ ] ~~`v_spans` exists as a view unioning `annotations` and `detections` with an `origin` column
       whose only values are `'human'` and `'machine'`.~~ **Withdrawn — see below.**
@@ -52,9 +56,10 @@ those tickets each add their own functions to it.
       annotation-tag link identical — `annotations` and `annotation_tags` included, not only the new
       tables.
 - [ ] No `INSERT` in this ticket writes an annotation row from a machine source.
-- [ ] No function is added to `Working/database/runs.py`, or to any module outside the file list. The
-      schema is asserted by introspection (`PRAGMA table_info`, `PRAGMA index_list`, `sqlite_master`),
-      not through accessors this ticket does not own.
+- [ ] No function is added to `Working/database/runs.py`, or to any module outside the file list.
+- [ ] Every constraint above is asserted by **making the database refuse a bad row** — insert the
+      duplicate, assert `sqlite3.IntegrityError` — not by reading column names back out of
+      `PRAGMA table_info`. See the adjudication at the end.
 
 **Adjudicated 2026-08-17 — `v_spans` is withdrawn from this ticket.**
 
@@ -93,9 +98,8 @@ creation is owned by 16**. Edges are 36's, run groups 25's, step artifacts 15's,
 already saying these tickets own these functions; writing them here made the mutex meaningless.
 
 Every acceptance criterion above is about the *shape* of the schema, and shape is testable without an
-accessor: `PRAGMA table_info`, `PRAGMA index_list`, and `sqlite_master` answer all of them, and raw
-`INSERT` statements in the test cover the idempotency criterion. If a criterion seems to need a
-helper, it does not — introspect instead.
+accessor: raw `INSERT` statements against a temp database answer all of them. If a criterion seems to
+need a helper, it does not — use SQL.
 
 This also disposes of the rest of the round-two findings without further argument: the eight
 unrequested read accessors (rule 7.1), the speculative orderings (6.2), `insert_step_artifact`'s
@@ -109,3 +113,43 @@ exists to catch.
 
 **Keep the module docstring current.** `schema.py`'s header lists the tables and the migration steps;
 a new table that is not in it is a stale doc on the file most likely to be read first.
+
+**Adjudicated 2026-08-18 — `motif_entry` keeps `detection_id` and loses `annotation_id`.**
+
+The second attempt gave `motif_entry` two mutually-exclusive nullable FKs, `detection_id` and
+`annotation_id`, and the review called that an origin discriminator spread across two columns — the
+`v_spans` shape rebuilt at column level, right after `v_spans` was withdrawn for exactly that. That
+reading is correct: what makes it a discriminator is the *pair*, because every reader has to branch on
+which one is null to learn whether a human or a machine put the span there.
+
+One pointer is not a pair and cannot be branched on. `detection_id` stays, because ticket 16 needs it —
+its first acceptance criterion is that every migrated `motifs` row keeps "its detection pointer as
+provenance", and that pointer has to have somewhere to land. `annotation_id` goes: nothing in this
+backlog reads it, rule 6.2 forbids the speculative column, and if annotation-sourced entries are ever
+wanted, ticket 16 owns entry creation and should decide the shape with a real consumer in front of it.
+
+**Adjudicated 2026-08-18 — assert the constraints, do not transcribe the columns.**
+
+The previous instruction here said to assert the schema by introspection, and that was wrong. It
+produced `assert {"recording_id","start_idx","end_idx"}.issubset(cols)` — five near-identical bodies
+reading column names back out of `PRAGMA table_info`, which is DDL transcription and precisely what
+rule 4.2 calls "not a test". It also produced a test asserting `v_spans` does *not* exist, which was
+green before the ticket started and cannot go red from anything the ticket does.
+
+Test the constraints by their behaviour instead, which needs no accessor and no introspection:
+
+- insert two `adjudications` rows for one detection — the second must raise `sqlite3.IntegrityError`;
+- insert two `motif_entry` rows with the same `(recording_id, start_idx, end_idx)` — the second must
+  raise;
+- insert two `step_artifacts` rows with the same `(recipe_prefix_hash, step_index)` — the second must
+  raise;
+- insert a `motif_member` whose `recording_id` differs from its entry's, on a different channel, and
+  show it is accepted and reads back — "may reference any recording and any channel" is a claim about
+  what the database permits, and only an insert can demonstrate it;
+- delete the `v_spans`-is-absent test entirely. An assertion that cannot fail is a pin, not a test.
+
+**Two shapes that are deliberate, recorded so they are not re-raised as accidents.** The singular
+`motif_entry` / `motif_member` / `motif_edge` names are ticket-specified and ticket 16 refers to them by
+those names; leave them singular. And `motif_entry_tags` uses a surrogate id with a `UNIQUE` rather than
+the composite primary key its siblings use because the criterion above requires that no tag participate
+in a primary key — say *that* in the comment, not what the line does.
