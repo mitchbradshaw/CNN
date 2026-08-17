@@ -11,7 +11,9 @@ Run from the project root:
 
 import inspect
 import os
+import sqlite3
 import sys
+import tempfile
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -184,6 +186,150 @@ def test_recording_summary_counts():
     assert summary["artifact"] == 1
     assert summary["not_interesting"] == 0
     assert summary["total"] == 3
+
+
+# ── schema extension (T02) ──────────────────────────────────────────────────
+# Raw INSERTs against the tables directly — this ticket adds no accessors,
+# so the constraints are exercised the only way available: SQL.
+
+def _insert_detection(conn, rid, start_idx=0, end_idx=100):
+    """Configs -> runs -> detections boilerplate shared by the tests below."""
+    cid = conn.execute(
+        "INSERT INTO configs (config_hash, config_json, created_at) VALUES (?, ?, ?)",
+        (f"hash-{rid}-{start_idx}-{end_idx}", "{}", "2026-01-01T00:00:00"),
+    ).lastrowid
+    run_id = conn.execute(
+        "INSERT INTO runs (config_id, recording_id, span_start, span_end, started_at, status) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (cid, rid, 0, 1000, "2026-01-01T00:00:00", "done"),
+    ).lastrowid
+    det_id = conn.execute(
+        "INSERT INTO detections (run_id, start_idx, end_idx) VALUES (?, ?, ?)",
+        (run_id, start_idx, end_idx),
+    ).lastrowid
+    conn.commit()
+    return det_id
+
+
+def test_adjudications_unique_per_detection_raises():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    det_id = _insert_detection(conn, rid)
+    conn.execute(
+        "INSERT INTO adjudications (detection_id, verdict, created_at) VALUES (?, ?, ?)",
+        (det_id, "interesting", "2026-01-01T00:00:00"),
+    )
+    conn.commit()
+    try:
+        conn.execute(
+            "INSERT INTO adjudications (detection_id, verdict, created_at) VALUES (?, ?, ?)",
+            (det_id, "artifact", "2026-01-01T00:00:01"),
+        )
+        assert False, "expected sqlite3.IntegrityError"
+    except sqlite3.IntegrityError:
+        pass
+
+
+def test_motif_entry_unique_span_raises():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx) VALUES (?, ?, ?)",
+        (rid, 0, 100),
+    )
+    conn.commit()
+    try:
+        conn.execute(
+            "INSERT INTO motif_entry (recording_id, start_idx, end_idx) VALUES (?, ?, ?)",
+            (rid, 0, 100),
+        )
+        assert False, "expected sqlite3.IntegrityError"
+    except sqlite3.IntegrityError:
+        pass
+
+
+def test_step_artifacts_unique_key_raises():
+    conn = _fresh_conn()
+    conn.execute(
+        "INSERT INTO step_artifacts (recipe_prefix_hash, step_index, path) VALUES (?, ?, ?)",
+        ("abc123", 0, "Plots/step0.png"),
+    )
+    conn.commit()
+    try:
+        conn.execute(
+            "INSERT INTO step_artifacts (recipe_prefix_hash, step_index, path) VALUES (?, ?, ?)",
+            ("abc123", 0, "Plots/step0_dup.png"),
+        )
+        assert False, "expected sqlite3.IntegrityError"
+    except sqlite3.IntegrityError:
+        pass
+
+
+def test_motif_member_accepts_different_recording_and_channel():
+    conn = _fresh_conn()
+    rid_a = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    rid_b = q.insert_recording(conn, "a.mat", 1, 1.0, 1000, 0, "a/CH1.npy")
+    entry_id = conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx) VALUES (?, ?, ?)",
+        (rid_a, 0, 100),
+    ).lastrowid
+    conn.commit()
+    # The member's recording (and therefore channel) differs from the entry's.
+    conn.execute(
+        "INSERT INTO motif_member (entry_id, recording_id, start_idx, end_idx) "
+        "VALUES (?, ?, ?, ?)",
+        (entry_id, rid_b, 50, 150),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM motif_member WHERE entry_id = ?", (entry_id,)
+    ).fetchone()
+    assert row is not None
+    assert row["recording_id"] == rid_b
+    assert row["recording_id"] != rid_a
+    assert row["start_idx"] == 50
+    assert row["end_idx"] == 150
+
+
+def test_init_db_idempotent_preserves_all_row_counts():
+    # Unlike the presence check above, this hits a real on-disk db twice —
+    # ":memory:" makes a fresh anonymous database per connection, which
+    # can't demonstrate idempotency against a *populated* database.
+    fd, path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    os.remove(path)
+    try:
+        conn = init_db(path)
+        rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+        q.insert_annotation(conn, rid, 0, 600, "interesting", source=q.SOURCE_MANUAL_UI)
+        tag_id = conn.execute(
+            "INSERT INTO tag_vocabulary (category, value) VALUES (?, ?)",
+            ("element", "spike"),
+        ).lastrowid
+        ann_id = conn.execute("SELECT id FROM annotations LIMIT 1").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO annotation_tags (annotation_id, tag_id) VALUES (?, ?)",
+            (ann_id, tag_id),
+        )
+        conn.commit()
+        conn.close()
+
+        def _counts():
+            c = sqlite3.connect(path)
+            tables = [r[0] for r in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()]
+            counts = {t: c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}
+            c.close()
+            return counts
+
+        before = _counts()
+        init_db(path).close()
+        after = _counts()
+        assert after == before, (before, after)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
