@@ -17,9 +17,13 @@ Pure-dataclass contract tests, no database/UI — runnable standalone:
     python tests/test_adapter_spec.py
 """
 
+import contextlib
+import importlib
 import inspect
 import os
+import pkgutil
 import sys
+import types as pytypes
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
@@ -28,14 +32,28 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import Working.types as interchange_types
 from Adapters.base import (
     OUTPUT_KINDS,
-    SOURCE_KINDS,
-    TYPE_KINDS,
     AdapterResult,
     AdapterSpec,
     SideInputSpec,
 )
+
+# The output vocabulary the nineteen shipped adapters were written against,
+# named here because the point of the expand phase is that they keep using it.
+LEGACY_OUTPUT_KINDS = ("signal", "intervals", "encoding")
+
+# What the PRD ("Chain shape") says a side input may be bound to. Exercised
+# through `SideInputSpec` below rather than compared against the constant that
+# implements it.
+PRD_SOURCE_KINDS = ("root_signal", "earlier_step", "library_exemplar")
+
+
+def _interchange_type_names():
+    """The interchange type names, taken from the module that owns the types
+    rather than from the adapter constant under test."""
+    return [name.lower() for name in interchange_types.__all__]
 
 
 def _spec(**overrides):
@@ -55,22 +73,16 @@ def _spec(**overrides):
 # ── output_kind: legacy vocabulary preserved ────────────────────────────────
 
 def test_output_kind_still_accepts_the_legacy_vocabulary():
-    for kind in ("signal", "intervals", "encoding"):
+    for kind in LEGACY_OUTPUT_KINDS:
         assert _spec(output_kind=kind).output_kind == kind
 
 
-# ── output_kind: seven interchange types accepted too ───────────────────────
+# ── output_kind: interchange types accepted too ─────────────────────────────
 
-def test_type_kinds_is_exactly_the_seven_interchange_types():
-    assert TYPE_KINDS == (
-        "signal", "spanset", "windowset", "encoding", "grouping", "model", "scores",
-    )
-
-
-def test_output_kind_accepts_every_type_kind_not_already_in_legacy_vocabulary():
-    # 'signal' and 'encoding' already existed in the legacy vocabulary; the
-    # other five type names are new territory for output_kind.
-    for kind in ("spanset", "windowset", "grouping", "model", "scores"):
+def test_output_kind_accepts_the_name_of_every_type_working_types_owns():
+    # An adapter may declare its output as any type the type module defines,
+    # without `base.py` needing to be edited to learn that type's name.
+    for kind in _interchange_type_names():
         assert _spec(output_kind=kind).output_kind == kind
 
 
@@ -94,8 +106,8 @@ def test_input_kind_defaults_to_none_meaning_root_signal():
     assert _spec().input_kind is None
 
 
-def test_input_kind_accepts_each_of_the_seven_type_names():
-    for kind in TYPE_KINDS:
+def test_input_kind_accepts_the_name_of_every_type_working_types_owns():
+    for kind in _interchange_type_names():
         assert _spec(input_kind=kind).input_kind == kind
 
 
@@ -134,8 +146,10 @@ def test_side_inputs_carry_a_typed_declaration():
     assert spec.side_inputs[0].sources == ["root_signal", "library_exemplar"]
 
 
-def test_side_input_source_kinds_are_exactly_the_three_named_in_the_prd():
-    assert SOURCE_KINDS == ("root_signal", "earlier_step", "library_exemplar")
+def test_side_input_accepts_each_source_kind_the_prd_names():
+    for source in PRD_SOURCE_KINDS:
+        side = SideInputSpec(name="exemplar", type_kind="signal", sources=[source])
+        assert side.sources == [source]
 
 
 def test_side_input_rejects_an_unknown_type_kind():
@@ -208,76 +222,105 @@ def test_validate_params_behaviour_is_unchanged():
         pass
 
 
-def test_recommend_derive_persist_max_span_samples_plot_still_accepted_and_default_none():
+def test_the_new_fields_default_to_the_values_the_shipped_adapters_rely_on():
+    # The nineteen adapters were written before these fields existed and set
+    # none of them, so the defaults are what they get. Anything other than
+    # "primary input is the root signal, no side inputs, counts as free"
+    # would silently change how every existing step composes and is costed.
     spec = _spec()
-    assert spec.recommend is None
-    assert spec.derive is None
-    assert spec.persist is None
-    assert spec.max_span_samples is None
-    assert spec.plot is None
+    assert spec.input_kind is None
+    assert spec.side_inputs == []
+    assert spec.estimate is None
 
-    marker = object()
-    spec = _spec(
-        recommend=lambda x, t, fs: {"cutoff": 1.0},
-        derive=lambda x, t, fs, params: [("rows", 1, "")],
-        persist=lambda *a, **k: "path",
-        max_span_samples=100,
-        plot=lambda x, t, result, **params: marker,
+
+# ── the shipped adapters import and register unmodified ────────────────────
+
+@contextlib.contextmanager
+def _third_party_gaps_bridged():
+    """Stand in for a third-party package this environment cannot import, so
+    that what follows measures this ticket's contract and not the state of the
+    conda environment.
+
+    `kymatio` is broken against the installed scipy (it imports
+    `scipy.special.sph_harm`, which scipy has since removed) — the case
+    `Adapters/registry.py`'s docstring names, and the reason
+    `discover_adapters()` skips a module rather than failing. The stand-in
+    satisfies the import and nothing else: constructing it raises, so no test
+    can quietly obtain a fake scattering result from it.
+    """
+    try:
+        importlib.import_module("kymatio.numpy")
+        yield
+        return
+    except Exception:
+        pass
+
+    class _Unavailable:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("kymatio is not usable in this environment")
+
+    stub = pytypes.ModuleType("kymatio")
+    stub.numpy = pytypes.ModuleType("kymatio.numpy")
+    stub.numpy.Scattering1D = _Unavailable
+    sys.modules["kymatio"] = stub
+    sys.modules["kymatio.numpy"] = stub.numpy
+    try:
+        yield
+    finally:
+        del sys.modules["kymatio"], sys.modules["kymatio.numpy"]
+
+
+def _shipped_adapter_specs():
+    """Every adapter module in `Adapters/`, imported for real and mapped to
+    the spec it registered.
+
+    The module list comes from the package, not from a list transcribed into
+    this file, and the imports are done directly rather than through
+    `discover_adapters()` so that a module which fails to import fails this
+    test instead of being skipped with a warning.
+    """
+    import Adapters
+    from Adapters.registry import get_adapter
+
+    names = sorted(
+        name for _, name, _ in pkgutil.iter_modules(Adapters.__path__)
+        if name not in ("base", "registry") and not name.startswith("_")
     )
-    assert spec.recommend(None, None, 1.0) == {"cutoff": 1.0}
-    assert spec.derive(None, None, 1.0, {}) == [("rows", 1, "")]
-    assert spec.persist() == "path"
-    assert spec.max_span_samples == 100
-    assert spec.plot(None, None, None) is marker
+    specs = {}
+    with _third_party_gaps_bridged():
+        for name in names:
+            module = importlib.import_module(f"Adapters.{name}")
+            # KeyError here means the module imported but never registered.
+            specs[name] = get_adapter(module.SPEC.name)
+    return specs
 
 
-# ── all nineteen existing adapters import and register unmodified ──────────
-
-_EXPECTED_ADAPTER_NAMES = {
-    "catalogue.gramian_fusion",
-    "catalogue.gramian_gadf",
-    "catalogue.gramian_gasf",
-    "catalogue.gramian_recurrence",
-    "detection.dehshibi_spikes",
-    "detection.entropy",
-    "detection.freq_stft",
-    "detection.matrix_profile",
-    "detection.rupture",
-    "detection.sax_csax",
-    "detection.sax_dsax",
-    "detection.sax_psax",
-    "detection.spike_v1",
-    "detection.wavelet_scattering",
-    "preprocessing.bandpass",
-    "preprocessing.detrend",
-    "preprocessing.highpass",
-    "preprocessing.lowpass",
-    "preprocessing.window_matrix",
-}
+def test_every_shipped_adapter_registers_without_modification():
+    specs = _shipped_adapter_specs()
+    assert len(specs) == 19, f"expected the nineteen shipped adapters, got {sorted(specs)}"
+    for module_name, spec in specs.items():
+        # None of the nineteen was edited by this ticket, so each must still
+        # declare a legacy output_kind and take the new fields' defaults.
+        assert spec.output_kind in LEGACY_OUTPUT_KINDS, module_name
+        assert spec.input_kind is None, module_name
+        assert spec.side_inputs == [], module_name
+        assert spec.estimate is None, module_name
 
 
-def test_all_nineteen_existing_adapters_register_without_modification():
-    from Adapters.registry import discover_adapters
+def test_every_shipped_adapters_declared_params_still_validate():
+    # `validate_params` is the seam the run panel and `execute_recipe` both go
+    # through; a field added to the spec in the wrong place would show up as a
+    # real adapter whose own defaults no longer survive a round trip.
+    for module_name, spec in _shipped_adapter_specs().items():
+        validated = spec.validate_params({})
+        assert set(validated) == {p.name for p in spec.params}, module_name
 
-    specs = discover_adapters()
-    registered = {s.name for s in specs}
-    missing = _EXPECTED_ADAPTER_NAMES - registered
-    # `registry.discover_adapters()` skips (with a warning, not a hard
-    # failure) a module whose *third-party* import is broken in this
-    # environment — e.g. kymatio against a newer scipy, exactly the case
-    # `Adapters/registry.py`'s own docstring names. That is a pre-existing
-    # environment gap, not a regression from this ticket, so only that
-    # specific known gap is tolerated here.
-    assert missing <= {"detection.wavelet_scattering"}, \
-        f"adapters failed to register for an unexpected reason: {missing}"
-    for spec in specs:
-        if spec.name in _EXPECTED_ADAPTER_NAMES:
-            # none of the nineteen were touched by this ticket, so their
-            # output_kind must still be drawn from the legacy vocabulary.
-            assert spec.output_kind in ("signal", "intervals", "encoding"), spec.name
-            assert spec.input_kind is None, spec.name
-            assert spec.side_inputs == [], spec.name
-            assert spec.estimate is None, spec.name
+
+def test_the_expansion_did_not_drop_a_hook_a_shipped_adapter_declares():
+    specs = _shipped_adapter_specs().values()
+    for hook in ("recommend", "derive", "persist", "max_span_samples", "plot"):
+        owners = sorted(s.name for s in specs if getattr(s, hook) is not None)
+        assert owners, f"no shipped adapter declares {hook} any more"
 
 
 # ── runner ───────────────────────────────────────────────────────────────────

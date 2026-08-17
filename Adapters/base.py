@@ -15,10 +15,14 @@ for the pattern) and registering it — zero changes anywhere else.
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-# The seven interchange types that gate which pipeline blocks may connect —
-# see `docs/PIPELINE_PRD.md` "Type system" and `Working.types`. Lower-cased
-# to match the existing string-vocabulary convention below.
-TYPE_KINDS = ("signal", "spanset", "windowset", "encoding", "grouping", "model", "scores")
+import Working.types as _interchange_types
+
+# The interchange types that gate which pipeline blocks may connect. The list
+# is owned by `Working.types` (ticket 01; see `docs/PIPELINE_PRD.md` "Type
+# system") and read from there rather than repeated here, so the adapter
+# vocabulary cannot drift from the types it names. Lower-cased to match the
+# existing string-vocabulary convention below.
+TYPE_KINDS = tuple(name.lower() for name in _interchange_types.__all__)
 
 # What a side input may be bound to at chain-composition time (PRD "Chain
 # shape"): the chain's own root signal, an earlier step's output, or a
