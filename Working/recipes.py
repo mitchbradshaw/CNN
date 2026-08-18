@@ -133,6 +133,15 @@ def make_recipe(recording_id, steps, span=None):
         if norm_span[1] <= norm_span[0]:
             raise ValueError(f"span end must be > start, got {norm_span}")
 
+    # Lazily imported: chain validation pulls in the adapter registry
+    # (Adapters/), a real dependency only `make_recipe` callers that build
+    # actual chains need — a bare hash/serialisation use of this module
+    # shouldn't have to pay for it at import time.
+    from Working.chain_validation import validate_recipe_steps
+    ok, reason = validate_recipe_steps(norm_steps)
+    if not ok:
+        raise ValueError(f"Invalid chain: {reason}")
+
     return {
         "recording_id": int(recording_id),
         "span": norm_span,
