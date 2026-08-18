@@ -113,6 +113,10 @@ def teardown(git: Git, worktree: Worktree) -> None:
     # delete walks into the shared read-only recordings and deletes those too.
     if worktree.path.exists():
         _unlink_links(worktree.path)
+        # Must run after _unlink_links: it walks the whole tree, and a
+        # junction still in place would make that walk wander into the
+        # shared recordings for the same reason the line above exists.
+        _remove_reserved_device_names(worktree.path)
 
     git.worktree_remove(worktree.path)
 
@@ -142,3 +146,41 @@ def _is_junction(path: Path) -> bool:
         return bool(path.lstat().st_file_attributes & 0x400)  # REPARSE_POINT
     except (OSError, AttributeError):
         return False
+
+
+_RESERVED_DEVICE_NAMES = frozenset({
+    "con", "prn", "aux", "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
+})
+
+
+def _remove_reserved_device_names(root: Path) -> None:
+    """Delete any file whose bare name is a Windows reserved device name.
+
+    `nul` is the one that actually turns up: some tool inside an agent's
+    session redirects output with POSIX `> /dev/null` semantics that Windows
+    doesn't honour, and a real 0-byte file called `nul` lands in the
+    worktree instead. Win32 intercepts that name as a device reference
+    ahead of the filesystem, so the ordinary delete path — `os.remove`,
+    `git clean`, even `git worktree remove --force` — fails on it with
+    "Access is denied" (or, at removal time, "Directory not empty"), even
+    though the file underneath is perfectly ordinary. The `\\\\?\\`
+    extended-length-path prefix disables that interception and reaches the
+    real file. Safe to call whether or not any such file exists.
+    """
+    if sys.platform != "win32":
+        return
+    for child in root.rglob("*"):
+        # Not `child.is_file()`: stat-ing the plain path hits the same
+        # device interception as opening it, and it never reports true for
+        # one of these names even though a real file sits there. Directory
+        # enumeration (what `rglob` is built on) is a different Win32 call
+        # and isn't fooled, so the name match alone is the only signal
+        # available here — the extended-path unlink below is a no-op error,
+        # swallowed, if this ever did match a real directory instead.
+        if child.name.lower() in _RESERVED_DEVICE_NAMES:
+            try:
+                Path(rf"\\?\{child.resolve()}").unlink()
+            except OSError:
+                pass

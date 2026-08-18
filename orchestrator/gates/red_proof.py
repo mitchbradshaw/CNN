@@ -78,7 +78,15 @@ def check_red_proof(git: Git, worktree_path: Path | str, *, base: str, branch: s
     # leftover work instead of against the commit it is supposed to verify —
     # a false green that reads as "this test never failed".
     worktree.run("checkout", "--force", "--detach", first.sha)
-    worktree.run("clean", "-fd")
+    # Best-effort: `nul` (Windows' reserved device name) turns up as a stray
+    # untracked file surprisingly often — some tool in an agent's session
+    # redirects output with POSIX-style `> /dev/null` semantics that Windows
+    # doesn't honour, and it creates a literal file called `nul` instead.
+    # Win32 refuses to delete a file with that name through the ordinary
+    # path, so `git clean` exits non-zero even after successfully removing
+    # everything else. That must not abort the whole gate over one inert
+    # leftover file `run_suite` was never going to collect anyway.
+    worktree.try_run("clean", "-fd")
     try:
         result = run_suite(worktree_path, command, timeout_minutes=timeout_minutes,
                            node_ids=list(test_files))

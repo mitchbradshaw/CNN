@@ -32,6 +32,10 @@ INFRASTRUCTURE_MARKERS = (
     "internal server error", "503", "econnreset", "connection error",
     "authentication_error", "credit balance",
     "configuration file", "is corrupted",
+    # run-20260818-2244: every agent printed this and did nothing further —
+    # a plan/session usage cap, not an API rate limit, but the same shape:
+    # the environment can't do work right now, not "the ticket is wrong".
+    "out of extra usage", "out of usage",
 )
 
 PROMPT = """\

@@ -287,6 +287,19 @@ def test_a_corrupted_cli_config_is_infrastructure_not_the_tickets_fault(config):
     assert verdict == "infrastructure"
 
 
+def test_exhausted_usage_quota_is_infrastructure_not_the_tickets_fault(config):
+    """run-20260818-2244: every one of four agents printed this and did
+    nothing further. Same shape as the corrupted-config case above — the
+    environment had no budget left to give, not a ticket anyone got wrong —
+    but it isn't an API rate limit, so it needs its own marker."""
+    transcript = "You're out of extra usage · resets 3:30am (Australia/Brisbane)\n"
+
+    verdict = classify_exit(a_result(exit_code=1, timed_out=True, transcript=transcript),
+                            commits_made=0, config=config)
+
+    assert verdict == "infrastructure"
+
+
 def test_a_plain_timeout_with_no_infrastructure_signature_is_still_a_stall(config):
     """The reordering must not turn every timeout into an infrastructure excuse."""
     verdict = classify_exit(a_result(exit_code=124, timed_out=True,

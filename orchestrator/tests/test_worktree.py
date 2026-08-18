@@ -165,6 +165,39 @@ def test_teardown_unlinks_a_nested_junction_without_touching_its_target(
     assert sentinel.read_bytes() == b"expensive to regenerate"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows reserved device names only")
+def test_teardown_removes_a_stray_nul_file(scratch, tmp_path, fixture_db):
+    """run-20260818-2244: a stalled agent left a real 0-byte file named `nul`
+    in its worktree (some tool redirected output with POSIX `> /dev/null`
+    semantics Windows doesn't honour). Win32 intercepts that name as a
+    device reference ahead of the filesystem, so `git worktree remove
+    --force` failed with "Directory not empty" and the whole ticket came
+    down as an orchestrator error instead of a clean quarantine.
+    """
+    wt = provision(scratch, ticket_id=1, worktrees_root=tmp_path / "wt",
+                   integration_branch="integration", branch_prefix="ticket/",
+                   fixture_db=fixture_db, fixture_db_dest="DATA/annotations.sqlite")
+    nested = wt.path / "Working"
+    nested.mkdir()
+    # A plain `open(nested / "nul", "w")` doesn't reproduce this: Python's
+    # own path handling special-cases "nul" as the null device before it
+    # ever reaches Win32, so it writes nothing and creates no file — the
+    # same reason a `> nul` redirect quietly discards output instead of
+    # creating one. The extended-length-path prefix is what actually
+    # reaches a real file at that name, same as the fix under test.
+    with open(rf"\\?\{(nested / 'nul').resolve()}", "w") as f:
+        f.write("x")
+    # Not `(nested / "nul").is_file()`: stat-ing the plain path hits the
+    # same device interception as opening it, and reports it as not a
+    # regular file even though it is one. Directory enumeration is a
+    # different Win32 call and isn't fooled.
+    assert "nul" in {p.name for p in nested.iterdir()}
+
+    teardown(scratch, wt)
+
+    assert not wt.path.exists()
+
+
 def test_teardown_removes_the_worktree_but_keeps_the_branch(scratch, tmp_path, fixture_db):
     wt = provision(scratch, ticket_id=1, worktrees_root=tmp_path / "wt",
                    integration_branch="integration", branch_prefix="ticket/",
