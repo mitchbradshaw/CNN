@@ -6,7 +6,7 @@ size: M
 blocked_by: [2]
 mutex: [2, 19]
 files: ["Working/database/queries.py", "Working/database/schema.py", "tests/test_database.py"]
-flags: ['human-gate']
+flags: ['human-gate', 'done']
 level: 1
 unblocks: 21
 budget_minutes: 60
