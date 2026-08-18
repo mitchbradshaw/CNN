@@ -6,7 +6,7 @@ size: M
 blocked_by: []
 mutex: [3, 16, 29]
 files: ["UI/__init__.py", "UI/app.py", "UI/run_panel.py"]
-flags: ['solo', 'human-verify']
+flags: ['solo', 'human-verify', 'done']
 level: 0
 unblocks: 26
 budget_minutes: 60

@@ -6,7 +6,7 @@ size: M
 blocked_by: [13]
 mutex: [29]
 files: ["UI/analyse/chain_state.py", "tests/test_chain_state.py"]
-flags: []
+flags: [done]
 level: 3
 unblocks: 9
 budget_minutes: 60
