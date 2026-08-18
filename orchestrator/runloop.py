@@ -334,7 +334,8 @@ class Runner:
 
         # 5 — overlap
         symbols = added_symbols(self.git, base, branch,
-                                include_private=self.config.overlap.include_private)
+                                include_private=self.config.overlap.include_private,
+                                ignore_paths=self.config.overlap.ignore_paths)
         with self._state_lock:
             owners = dict(self.state.symbols)
         overlap = check_overlap(ticket_id=ticket.id, symbols=symbols, owners=owners)

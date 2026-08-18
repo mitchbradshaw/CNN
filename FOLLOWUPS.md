@@ -86,6 +86,35 @@ how the runner treats an agent that misbehaves rather than in what the agents bu
   bytes and the diagnosis took a branch inspection rather than a log read. The watched path now writes
   to a file and keeps it, but `run_agent`'s unwatched path and the review/fix calls still lose it.
 
+## Harness — 2026-08-18 (post-run-20260818-0554)
+
+The night the gates finally behaved: T02 and T35 both merged clean on the first review round, the
+baseline was empty, the circuit breaker never tripped, and no agent stalled. Two things to record.
+
+- [fixed] **The overlap gate counted test-file symbols as shared vocabulary.** T13 passed red-proof,
+  suite and review with zero findings and was held anyway, because its test file's `_run_all()`
+  collided with T35's — the identical footer that 41 of this repo's 42 test files carry. Every
+  `test_*` function name was in the owner map too, so any two tickets naming a test the same way
+  would have collided next. Test modules are leaves that nothing imports; `overlap.ignore_paths`
+  now drops `tests/` from the comparison. Replayed against the real branches, T13 goes hold -> pass
+  and its reported symbols fall from 20 to the 3 real ones.
+- [fixed] **The worktree fixture went stale the moment T02 landed.** `test_the_shipped_fixture_database
+  _is_not_the_real_one` caught it: the fixture predates the schema extension and was missing all nine
+  new tables. Rebuilt. This is now a standing obligation — **run `python -m orchestrator.make_fixture`
+  after any ticket that changes `schema.py`**, which for the remaining backlog means 04 and 16.
+- [watch] **The judgement cap is what let T35 merge, and it was not free.** Three of T35's findings
+  cite `blocker`-graded rules (5.1, 4.2, 1.4) and were capped to `major` because the reviewer marked
+  them judgement calls — without that change T35 would have been quarantined. The policy is the one
+  chosen deliberately, and all nineteen findings are recorded below, but one of the capped three was a
+  real unmet obligation: 35 was supposed to own the correlation helper ticket 41 imports, and shipped
+  only `z_normalize`. T41's ticket has been corrected to write its own rather than hunt for a function
+  that does not exist. Worth re-reading the capped findings on each merged ticket rather than trusting
+  the `0/0` blocker column in REPORT.md.
+- [not a bug] **The run only got three tickets because it started at 05:54.** `wall_clock_stop` is
+  07:00, so the dispatch window was 66 minutes; T13 was allowed to finish and ran to 07:31. Nothing
+  was held or blocked — 44 tickets were simply never dispatched. A run started after 07:00 gets the
+  next day's stop and a ~20h window.
+
 ## T01 — 2026-08-17 13:09
 
 - [major] [standards] (rule 6.4) Seven near-identical to_path/from_path bodies and five __eq__ bodies duplicate the same shape across Working/types/*.py

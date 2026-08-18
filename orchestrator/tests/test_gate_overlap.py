@@ -163,3 +163,44 @@ def test_a_ticket_does_not_collide_with_its_own_earlier_symbols():
                             owners={"resample_and_znorm": 35})
 
     assert verdict.status == "pass"
+
+
+# ------------------------------------------------- test files are not shared vocabulary
+
+
+def test_symbols_defined_in_test_files_do_not_participate(repo):
+    """run-20260818-0554 held T13 for obeying the repo's own convention.
+
+    41 of this repo's 42 test files end with an identical module-private
+    `_run_all()` that runs the file's tests under `__main__`. T35 landed first,
+    took ownership of the name, and T13's test file — a different module, which
+    nothing imports — collided with it and was held. Two test files each
+    carrying the mandated boilerplate are not two implementations of one idea.
+    """
+    branch_with(repo, "ticket/T13", "tests/test_chain_validation.py", """
+        def _run_all(): pass
+        def test_a_chain_is_validated(): pass
+    """)
+
+    assert added_symbols(repo, "integration", "ticket/T13",
+                         ignore_paths=("tests/",)) == set()
+
+
+def test_the_same_branch_still_reports_its_non_test_symbols(repo):
+    """Ignoring test files must not blind the gate to the actual work."""
+    branch_with(repo, "ticket/T13", "Working/chain_validation.py", """
+        def validate_chain(steps): return True
+        def _run_all(): pass
+    """)
+
+    assert added_symbols(repo, "integration", "ticket/T13",
+                         ignore_paths=("tests/",)) == {"validate_chain", "_run_all"}
+
+
+def test_ignoring_nothing_is_the_default(repo):
+    """The narrowing is opt-in, so an unconfigured caller keeps the old reach."""
+    branch_with(repo, "ticket/T13", "tests/test_thing.py", """
+        def _run_all(): pass
+    """)
+
+    assert added_symbols(repo, "integration", "ticket/T13") == {"_run_all"}

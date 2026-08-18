@@ -74,13 +74,26 @@ def _file_at(git: Git, ref: str, path: str) -> str:
 
 
 def added_symbols(git: Git, base: str, branch: str, *,
-                  include_private: bool = True) -> set[str]:
-    """Top-level names the branch adds, relative to the merge base."""
+                  include_private: bool = True,
+                  ignore_paths: tuple[str, ...] = ()) -> set[str]:
+    """Top-level names the branch adds, relative to the merge base.
+
+    `ignore_paths` drops whole prefixes out of the comparison. It exists for
+    test files, which are leaves: nothing imports them, so their top-level names
+    are file-local rather than shared vocabulary, and this repo's convention
+    puts an identical `_run_all()` at the foot of 41 of its 42 test files. In
+    run-20260818-0554 that convention read as a collision — T35 merged first and
+    took the name, and T13 was held for writing the same boilerplate in a
+    different file. The gate exists to catch two implementations of one idea,
+    not two copies of one footer.
+    """
     merge_base = git.merge_base(base, branch)
     added: set[str] = set()
 
     for path in git.files_changed(base, branch):
         if not path.endswith(".py"):
+            continue
+        if any(path.startswith(prefix) for prefix in ignore_paths):
             continue
         before = _top_level_names(_file_at(git, merge_base, path),
                                   include_private=include_private)

@@ -122,6 +122,15 @@ default_severity = "minor"
 # private makes that harder to spot rather than less real. Set false if private
 # helper collisions prove to be noise. Dunders are always excluded.
 include_private = true
+# Path prefixes whose symbols do not participate. Test files are leaves —
+# nothing imports them, so their top-level names are file-local rather than
+# shared vocabulary — and this repo ends 41 of its 42 test files with an
+# identical module-private `_run_all()`. In run-20260818-0554 that convention
+# read as a collision: T35 merged first and took the name, and T13 was held for
+# writing the same boilerplate in a different file, having passed every other
+# gate. The gate is for two implementations of one idea, not two copies of one
+# footer.
+ignore_paths = ["tests/"]
 
 [circuit_breaker]
 consecutive_quarantines = 3

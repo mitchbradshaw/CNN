@@ -125,7 +125,14 @@ def test_the_run_opens_on_the_most_unblocking_tickets_available(real):
     # and `mutex` hold tickets for reasons that have nothing to do with fan-out
     # — T17 unblocks 26 and still waits, because it runs alone.
     starved = [i for i, h in decision.holds.items() if h.reason == "ceiling"]
-    assert starved, "with a ceiling of 3 something must be waiting on a slot"
+    if not starved:
+        # The other legitimate shape for tick one: the top candidate is `solo`,
+        # so the field drains for it and nothing is competing for a slot at all.
+        # T17 became the opening ticket once T02, T05, T13 and T35 had landed.
+        assert decision.dispatch and real[decision.dispatch[0]].solo, (
+            "nothing held for a slot, and no solo ticket to explain why"
+        )
+        return
     for ticket_id in starved:
         assert len(fanout(ticket_id)) <= weakest_dispatched, (
             f"T{ticket_id:02d} unblocks {len(fanout(ticket_id))} but lost its slot to a "

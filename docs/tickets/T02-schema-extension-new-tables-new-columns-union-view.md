@@ -6,12 +6,15 @@ size: M
 blocked_by: []
 mutex: [4, 16, 19, 25, 36]
 files: ["Working/database/schema.py", "tests/test_database.py"]
-flags: []
+flags: [done]
 level: 0
 unblocks: 32
 budget_minutes: 60
 ---
 # 02 — Schema extension: new tables, new columns, union view
+
+> **Done.** Merged by run-20260818-0554 as `6c6b5ae`, clean on the first review round (0 findings)
+> after the 2026-08-17/18 adjudications below. Do not re-dispatch; the work is in the base.
 
 **Model:** [S] · **Size:** [M]
 

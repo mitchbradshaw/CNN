@@ -5,13 +5,18 @@ model: sonnet
 size: M
 blocked_by: [5]
 mutex: [8, 14, 15, 24, 29]
-files: ["Working/chain_validation.py", "Working/execution.py", "Working/recipes.py", "tests/test_chain_validation.py"]
-flags: []
+files: ["Working/chain_validation.py", "Working/execution.py", "Working/recipes.py", "tests/test_chain_validation.py", "tests/test_recipes.py"]
+flags: [done]
 level: 2
 unblocks: 19
 budget_minutes: 60
 ---
 # 13 — Chain validation
+
+> **Done.** Built by run-20260818-0554, which held it on an overlap false positive: its test file's
+> `_run_all()` collided with T35's, the convention 41 of 42 test files follow. The gate now ignores
+> `tests/`. The branch passed red-proof, suite and review (0 findings) and was merged as `f0b77e4`.
+> Do not re-dispatch; the work is in the base.
 
 **Model:** [S] · **Size:** [M]
 

@@ -171,7 +171,11 @@ def test_every_live_ticket_is_either_dispatched_or_explained(real, config):
     assert dispatched | set(plan.not_dispatched) == live
     assert not (dispatched & set(plan.not_dispatched)), "a ticket cannot be both"
     assert not any(real[i].done for i in dispatched), "done tickets are not re-dispatched"
-    assert len(dispatched) > len(plan.not_dispatched), "most of the night is autonomous"
+    assert dispatched, "a backlog with live tickets must dispatch something"
+    # Deliberately no assertion on the ratio of dispatched to held. That is a
+    # fact about ticket 04's bottleneck and about how many tickets have landed
+    # so far, not about the planner, and it inverted the moment the fifth ticket
+    # was flagged `done`.
 
 
 def test_the_real_backlog_stalls_against_ticket_04(real, config):
@@ -202,9 +206,13 @@ def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
     assert "wave 1" in text and "t+0h00" in text
     # Derived, not hardcoded: which ticket leads wave 1 changes as tickets land.
     assert f"T{first.id:02d} {first.model}" in text
-    # T01 is `done` and gone from the schedule, but the tickets it unblocked
-    # still name it — the provenance survives the ticket leaving the plan.
-    assert "(was blocked by T01)" in text
+    # Derived: pinning T01 here broke once every ticket T01 unblocked had itself
+    # landed, leaving nothing in the plan that still named it. What the renderer
+    # must do is annotate whichever dispatched ticket did have blockers.
+    with_blockers = [t for w in plan.waves for t in w.tickets if t.was_blocked_by]
+    if with_blockers:
+        example = with_blockers[0]
+        assert f"(was blocked by T{example.was_blocked_by[0]:02d}" in text
     assert "[SOLO — runs alone]" in text
     assert "held:" in text
     assert "projected drain" in text

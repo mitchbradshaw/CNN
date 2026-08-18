@@ -23,7 +23,7 @@ anything is counted — the control the recurrence claim rests on.
 **Files/modules touched:** new `Working/cross_channel.py`; `Working/library.py` (edge update);
 `UI/workspaces/library/detail.py` (the action); new `tests/test_cross_channel.py`.
 
-**Merge risk:** **MEDIUM vs 35** (correlation and z-normalisation helpers — import, do not rewrite) and
+**Merge risk:** **MEDIUM vs 35** (z-normalisation helper — import, do not rewrite) and
 **MEDIUM vs 36** (edge writes — call the writer). **This is a library-level action, not a block** — it
 must not grow an adapter, because the univariate `Signal` type deliberately cannot express
 multi-channel input and because the classification is a statement about a family, not about a signal.
@@ -31,6 +31,16 @@ multi-channel input and because the classification is a statement about a family
 **Why [O]:** the bin boundaries — "near-zero lag", "near-identical waveform", "small consistent lag",
 "scattered across long intervals" — are judgement calls a spec cannot fully pin down, and they are
 load-bearing for a research claim.
+
+**Correction 2026-08-18 — the correlation helper does not exist; write it here.**
+
+The merge-risk clause above used to say ticket 35 owned "correlation and z-normalisation helpers" and
+that this ticket should import both. 35 merged in run-20260818-0554 having delivered only
+`z_normalize`; the review raised the gap and it was recorded as a follow-up rather than held. So
+`Working/distances.py` gives you `z_normalize` and nothing else — do not go looking for a correlation
+function, and do not treat its absence as a blocker to report. Write the cross-correlation you need in
+your own `Working/cross_channel.py`, import `z_normalize` from `Working.distances`, and this ticket
+owns the correlation helper from here.
 
 **Acceptance criteria:**
 - [ ] For each member pair on different channels of one recording, inter-channel lag comes from the

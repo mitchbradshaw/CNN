@@ -12,7 +12,7 @@ truth. See `docs/ORCHESTRATOR_SPEC.md` for how the scheduler consumes these fiel
 | `human-gate` | 04, 49 | Never dispatched. Held in the DAG so dependents are correctly blocked. |
 | `solo` | 17 | Runs alone; nothing else in flight. |
 | `human-verify` | 17, 18, 20, 21, 22, 23, 29, 30, 31, 32, 33, 34, 37, 38, 39, 42, 44 | Dispatched and merged, but needs your eyes before `main` moves. |
-| `done` | 01, 05 | Already merged by an earlier run; its work is in the base. Never dispatched, but **releases** its dependents — the opposite of `human-gate`. |
+| `done` | 01, 02, 05, 13, 35 | Already merged by an earlier run; its work is in the base. Never dispatched, but **releases** its dependents — the opposite of `human-gate`. |
 
 **Marking a ticket done.** When a run merges a ticket and you fast-forward `main`, add `done` to its
 flags. Do not delete the ticket file: `blocked_by` is validated against the loaded set, so removing
@@ -121,7 +121,7 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 | # | Title | Model | Size | Level | Unblocks | Blocked by | Flags |
 |---|---|---|---|---|---|---|---|
 | [01](T01-seven-interchange-types-with-disk-serialisation.md) | Seven interchange types with disk serialisation | S | M | 0 | 36 | — | `done` |
-| [02](T02-schema-extension-new-tables-new-columns-union-view.md) | Schema extension: new tables, new columns, union view | S | M | 0 | 32 | — |  |
+| [02](T02-schema-extension-new-tables-new-columns-union-view.md) | Schema extension: new tables, new columns, union view | S | M | 0 | 32 | — | `done` |
 | [03](T03-held-out-recording-lock.md) | Held-out recording lock | S | S | 0 | 1 | — |  |
 | [04](T04-verdict-constraint-rebuild-add-seed.md) | Verdict-constraint rebuild: add `seed` | O | M | 1 | 21 | 02 | `human-gate` |
 | [05](T05-adapter-spec-expansion-expand-phase.md) | Adapter spec expansion (expand phase) | S | M | 1 | 28 | 01 | `done` |
@@ -132,7 +132,7 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 | [10](T10-contract-phase-remove-the-legacy-output-vocabulary.md) | Contract phase: remove the legacy output vocabulary | S | S | 5 | 0 | 06, 07, 08, 09, 11, 12 |  |
 | [11](T11-new-adapter-clustering-to-a-grouping.md) | New adapter: clustering to a Grouping | O | M | 3 | 2 | 05, 07 |  |
 | [12](T12-new-adapter-classifier-training-to-a-model.md) | New adapter: classifier training to a Model | O | M | 4 | 1 | 05, 11 |  |
-| [13](T13-chain-validation.md) | Chain validation | S | M | 2 | 19 | 05 |  |
+| [13](T13-chain-validation.md) | Chain validation | S | M | 2 | 19 | 05 | `done` |
 | [14](T14-side-inputs-and-content-addressed-bindings.md) | Side-inputs and content-addressed bindings | S | M | 3 | 15 | 05, 13 |  |
 | [15](T15-step-cache-in-the-executor.md) | Step cache in the executor | O | M | 4 | 12 | 02, 08, 14 |  |
 | [16](T16-shape-first-library-migrate-motif-rows-and-redirect-the-sa.md) | Shape-first library: migrate motif rows and redirect the save paths | O | M | 1 | 8 | 02 |  |
@@ -154,7 +154,7 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 | [32](T32-run-surface-progress-and-per-stage-results.md) | Run surface: progress and per-stage results | O | M | 9 | 3 | 24, 31 | `human-verify` |
 | [33](T33-compare-view-two-run-set-overlap.md) | Compare view: two-run set overlap | O | M | 8 | 3 | 25, 27 | `human-verify` |
 | [34](T34-fold-run-history-and-the-window-matrix-panel-into-analyse.md) | Fold run history and the window-matrix panel into Analyse | S | M | 5 | 0 | 18, 29 | `human-verify` |
-| [35](T35-the-three-distance-functions.md) | The three distance functions | S | M | 1 | 9 | 01 |  |
+| [35](T35-the-three-distance-functions.md) | The three distance functions | S | M | 1 | 9 | 01 | `done` |
 | [36](T36-edge-computation-and-persistence.md) | Edge computation and persistence | S | M | 2 | 8 | 02, 35 |  |
 | [37](T37-seed-an-exemplar-from-the-viewer.md) | Seed an exemplar from the viewer | S | S | 3 | 0 | 16, 18 | `human-verify` |
 | [38](T38-library-grid.md) | Library grid | O | M | 3 | 3 | 16, 18, 36 | `human-verify` |

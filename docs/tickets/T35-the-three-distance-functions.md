@@ -6,12 +6,15 @@ size: M
 blocked_by: [1]
 mutex: [41]
 files: ["Working/distances.py", "tests/test_distances.py"]
-flags: []
+flags: [done]
 level: 1
 unblocks: 9
 budget_minutes: 60
 ---
 # 35 — The three distance functions
+
+> **Done.** Merged by run-20260818-0554 as `f0fe62c`, clean on the first review round (0 findings).
+> Do not re-dispatch; the work is in the base.
 
 **Model:** [S] · **Size:** [M]
 

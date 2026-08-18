@@ -77,6 +77,7 @@ class ReviewConfig:
 @dataclass(frozen=True)
 class OverlapConfig:
     include_private: bool
+    ignore_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,7 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
         ),
         overlap=OverlapConfig(
             include_private=bool(_require(data, "overlap", "include_private", path)),
+            ignore_paths=tuple(data["overlap"].get("ignore_paths", [])),
         ),
         circuit_breaker=CircuitBreakerConfig(
             consecutive_quarantines=int(
