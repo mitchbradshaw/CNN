@@ -40,7 +40,7 @@ pn.extension()
 
 from Working.database.schema import init_db
 from Working.database import queries as q
-from UI.app import ViewerApp
+from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
 
 REAL_CHANNEL_PATH = "DATA/derived/channels/M2_aug_concat_fs1/CH0.npy"

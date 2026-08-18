@@ -42,7 +42,7 @@ from Working.recipes import make_recipe
 from Working.execution import execute_recipe
 import Adapters.preprocessing_window_matrix as wm_adapter
 from Adapters.preprocessing_window_matrix import default_artifact_path
-import UI.app as appmod
+import UI.viewer as appmod
 
 # `execute_recipe`'s persist hook writes through this module-level default
 # (see its docstring: "Overridable so a test can redirect a real

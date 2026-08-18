@@ -1,7 +1,7 @@
 """
 _session_isolation.py
 =======================
-Shared test helper: every test that constructs a `UI.app.ViewerApp`
+Shared test helper: every test that constructs a `UI.viewer.ViewerApp`
 must not read or write the real session file at
 `Working.config.SESSION_STATE_PATH` (Part E9) -- that file is real
 persistent UI state, not test fixture data, and a test-created
@@ -22,7 +22,7 @@ import os
 import tempfile
 from contextlib import contextmanager
 
-import UI.app as _appmod
+import UI.viewer.session as _appmod
 
 
 @contextmanager

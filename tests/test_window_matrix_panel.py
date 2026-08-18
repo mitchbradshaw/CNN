@@ -41,7 +41,7 @@ from Working.config import WM_SCALE_LADDER_MIN
 from Working.database.schema import init_db
 from Working.database import queries as q
 import Working.Preprocessing.window_matrix.cost as cost
-from UI.app import ViewerApp
+from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
 from tests._calibration_isolation import scratch_calibration
 
