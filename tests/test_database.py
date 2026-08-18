@@ -24,6 +24,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from Working.database.schema import init_db
+from Working.database import schema as sch
 from Working.database import queries as q
 
 
@@ -330,6 +331,297 @@ def test_init_db_idempotent_preserves_all_row_counts():
     finally:
         if os.path.exists(path):
             os.remove(path)
+
+
+# -- T04: verdict-constraint rebuild (add `seed`) ------------------------------
+#
+# SQLite cannot ALTER a CHECK constraint in place, so widening the annotations
+# verdict vocabulary means the full table-rebuild procedure against a table that
+# five ALTER TABLE ADD COLUMN migrations have already extended. The failure mode
+# these tests exist to catch is the quiet one: a rebuild that succeeds, reports
+# nothing wrong, and drops a column's values or an annotation_tags link on the
+# floor. Every assertion below is a before/after identity, not a spot-check.
+
+# The `annotations` DDL exactly as it stands in the live database today: the
+# original CREATE TABLE with the four-term CHECK, plus the five columns appended
+# by `_ANNOTATIONS_NEW_COLUMNS` via ALTER TABLE. Reproduced verbatim (including
+# the comma placement ALTER TABLE produces) so the fixture meets the migration
+# in the same shape the real file will.
+_LEGACY_ANNOTATIONS_DDL = """
+CREATE TABLE annotations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL,
+    verdict       TEXT    NOT NULL CHECK (verdict IN
+                      ('interesting', 'not_interesting', 'artifact', 'unsure')),
+    tag           TEXT,
+    note          TEXT,
+    scale_viewed  TEXT,
+    source        TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL
+, event_count INTEGER, parent_annotation_id INTEGER REFERENCES annotations(id), status TEXT, relation_kind TEXT CHECK (relation_kind IN ('type_specimen', 'sub_window') OR relation_kind IS NULL), deleted_at TEXT)
+"""
+
+_LEGACY_INDEXES = [
+    "CREATE INDEX idx_annotations_recording ON annotations(recording_id)",
+    "CREATE INDEX idx_annotations_verdict   ON annotations(verdict)",
+]
+
+
+def _make_legacy_db(path):
+    """Build a pre-rebuild database that resembles the real one where it matters.
+
+    Rows carry every added column; one row is soft-deleted (`deleted_at` set);
+    two rows are children of another via `parent_annotation_id`; tag links span
+    several annotations; and there is at least one row per legacy verdict term.
+    """
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_LEGACY_ANNOTATIONS_DDL)
+    for stmt in _LEGACY_INDEXES:
+        conn.execute(stmt)
+    # Everything else comes from the real schema; `IF NOT EXISTS` leaves the
+    # legacy annotations table alone.
+    conn.executescript(sch._SCHEMA)
+
+    conn.execute(
+        "INSERT INTO recordings (id, source_file, channel, fs, n_samples, "
+        "global_offset, npy_path) VALUES (1, 'a.mat', 0, 1.0, 100000, 0, 'a/CH0.npy')"
+    )
+    rows = [
+        # id, start, end, verdict, tag, note, scale, source, created,
+        #     event_count, parent, status, relation_kind, deleted_at
+        (1, 10, 610, "interesting", "spike", "n1", "1min", "manual_ui", "t1",
+         3, None, "reviewed", None, None),
+        (2, 700, 1300, "not_interesting", None, None, "1min", "imported_10min", "t2",
+         0, None, None, None, None),
+        (3, 1400, 2000, "artifact", "noise", "n3", "3min", "manual_ui", "t3",
+         None, 1, "flagged", "sub_window", None),
+        (4, 2100, 2700, "unsure", None, "n4", "10min", "manual_ui", "t4",
+         7, None, None, "type_specimen", None),
+        # Soft-deleted: `deleted_at` non-null must survive the rebuild, or the
+        # undo behind `delete_annotation` quietly becomes a hard delete.
+        (5, 2800, 3400, "interesting", "burst", None, "1min", "manual_ui", "t5",
+         2, 1, "reviewed", None, "2026-08-01T00:00:00+00:00"),
+    ]
+    conn.executemany(
+        "INSERT INTO annotations (id, start_idx, end_idx, verdict, tag, note, "
+        "scale_viewed, source, created_at, event_count, parent_annotation_id, "
+        "status, relation_kind, deleted_at, recording_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+        rows,
+    )
+    conn.execute("INSERT INTO tag_vocabulary (id, category, value) VALUES (1, 'element', 'spike')")
+    conn.execute("INSERT INTO tag_vocabulary (id, category, value) VALUES (2, 'element', 'burst')")
+    conn.executemany(
+        "INSERT INTO annotation_tags (annotation_id, tag_id) VALUES (?, ?)",
+        [(1, 1), (1, 2), (3, 1), (5, 2)],
+    )
+    conn.commit()
+    conn.close()
+
+
+def _annotation_snapshot(path):
+    """Everything a rebuild could quietly lose, as comparable Python values."""
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(annotations)")]
+    snap = {
+        "columns": set(cols),
+        "n_annotations": conn.execute("SELECT COUNT(*) FROM annotations").fetchone()[0],
+        "n_links": conn.execute("SELECT COUNT(*) FROM annotation_tags").fetchone()[0],
+        "tuples": sorted(
+            tuple(r) for r in conn.execute(
+                "SELECT id, start_idx, end_idx, verdict FROM annotations")
+        ),
+        "links": sorted(
+            tuple(r) for r in conn.execute(
+                "SELECT annotation_id, tag_id FROM annotation_tags")
+        ),
+        "full_rows": sorted(
+            tuple(str(r[c]) for c in sorted(cols))
+            for r in conn.execute("SELECT * FROM annotations")
+        ),
+        "indexes": set(
+            r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' "
+                "AND tbl_name='annotations' AND name NOT LIKE 'sqlite_%'")
+        ),
+    }
+    conn.close()
+    return snap
+
+
+def _temp_db_path():
+    fd, path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    os.remove(path)
+    return path
+
+
+def _backups_for(path):
+    d = os.path.dirname(path) or "."
+    base = os.path.basename(path)
+    return sorted(f for f in os.listdir(d)
+                  if f.startswith(base) and f.endswith(".bak"))
+
+
+def _cleanup(path):
+    d = os.path.dirname(path) or "."
+    for f in [os.path.basename(path)] + _backups_for(path):
+        fp = os.path.join(d, f)
+        if os.path.exists(fp):
+            os.remove(fp)
+
+
+def test_verdict_vocabulary_is_one_shared_constant():
+    # Ticket 19 shares this vocabulary. Two literals that happen to agree today
+    # are the bug; the annotation path and the adjudication path must read the
+    # same object.
+    assert sch.VERDICTS is q.VERDICTS
+    assert set(sch.VERDICTS) == set(
+        ["seed", "interesting", "not_interesting", "artifact", "unsure"])
+
+
+def test_insert_annotation_accepts_seed():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    q.insert_annotation(conn, rid, 10, 610, "seed", source=q.SOURCE_MANUAL_UI)
+    rows = q.list_annotations(conn, rid)
+    assert [r["verdict"] for r in rows] == ["seed"]
+
+
+def test_fresh_schema_check_constraint_accepts_exactly_the_five_terms():
+    # Straight at the CHECK constraint, bypassing the Python-side guard in
+    # insert_annotation -- a validation that only lives in queries.py leaves the
+    # database itself willing to store anything.
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    for i, verdict in enumerate(sch.VERDICTS):
+        conn.execute(
+            "INSERT INTO annotations (recording_id, start_idx, end_idx, verdict, "
+            "source, created_at) VALUES (?,?,?,?,'manual_ui','t')",
+            (rid, i * 100, i * 100 + 50, verdict),
+        )
+    try:
+        conn.execute(
+            "INSERT INTO annotations (recording_id, start_idx, end_idx, verdict, "
+            "source, created_at) VALUES (?,9000,9100,'bogus','manual_ui','t')",
+            (rid,),
+        )
+        assert False, "CHECK constraint should reject an unknown verdict"
+    except sqlite3.IntegrityError:
+        pass
+
+
+def test_verdict_rebuild_preserves_every_row_and_link():
+    path = _temp_db_path()
+    try:
+        _make_legacy_db(path)
+        before = _annotation_snapshot(path)
+        probe = sqlite3.connect(path)
+        legacy_sql = probe.execute(
+            "SELECT sql FROM sqlite_master WHERE name='annotations'").fetchone()[0]
+        probe.close()
+        assert "seed" not in legacy_sql, "fixture is not pre-rebuild"
+
+        init_db(path).close()
+        after = _annotation_snapshot(path)
+
+        assert after["n_annotations"] == before["n_annotations"] == 5
+        assert after["tuples"] == before["tuples"]
+        assert after["n_links"] == before["n_links"] == 4
+        assert after["links"] == before["links"]
+    finally:
+        _cleanup(path)
+
+
+def test_verdict_rebuild_preserves_added_columns_and_soft_deleted_rows():
+    path = _temp_db_path()
+    try:
+        _make_legacy_db(path)
+        before = _annotation_snapshot(path)
+
+        init_db(path).close()
+        after = _annotation_snapshot(path)
+
+        # Same columns, and every value in every column identical -- this is the
+        # assertion that catches a column missing from the INSERT ... SELECT.
+        assert after["columns"] == before["columns"]
+        assert after["full_rows"] == before["full_rows"]
+
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        deleted = conn.execute(
+            "SELECT * FROM annotations WHERE deleted_at IS NOT NULL").fetchall()
+        assert len(deleted) == 1
+        assert deleted[0]["id"] == 5
+        assert deleted[0]["deleted_at"] == "2026-08-01T00:00:00+00:00"
+        assert deleted[0]["parent_annotation_id"] == 1
+        assert deleted[0]["status"] == "reviewed"
+        assert deleted[0]["event_count"] == 2
+        conn.close()
+    finally:
+        _cleanup(path)
+
+
+def test_verdict_rebuild_recreates_indexes_and_accepts_seed_afterwards():
+    path = _temp_db_path()
+    try:
+        _make_legacy_db(path)
+        before = _annotation_snapshot(path)
+
+        conn = init_db(path)
+        after = _annotation_snapshot(path)
+        # SQLite drops a table's indexes along with the table and says nothing.
+        assert after["indexes"] == before["indexes"]
+
+        q.insert_annotation(conn, 1, 5000, 5600, "seed", source=q.SOURCE_MANUAL_UI)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM annotations WHERE verdict='seed'").fetchone()[0] == 1
+        conn.close()
+    finally:
+        _cleanup(path)
+
+
+def test_verdict_rebuild_backs_up_the_database_first():
+    path = _temp_db_path()
+    try:
+        _make_legacy_db(path)
+        before = _annotation_snapshot(path)
+        assert _backups_for(path) == []
+
+        init_db(path).close()
+
+        backups = _backups_for(path)
+        assert len(backups) == 1, backups
+        backup_path = os.path.join(os.path.dirname(path) or ".", backups[0])
+        # A backup nobody has opened is a hypothesis.
+        restored = _annotation_snapshot(backup_path)
+        assert restored["tuples"] == before["tuples"]
+        assert restored["links"] == before["links"]
+    finally:
+        _cleanup(path)
+
+
+def test_verdict_rebuild_is_idempotent():
+    path = _temp_db_path()
+    try:
+        _make_legacy_db(path)
+        init_db(path).close()
+        once = _annotation_snapshot(path)
+        backups_once = _backups_for(path)
+
+        init_db(path).close()
+        twice = _annotation_snapshot(path)
+
+        assert twice == once
+        # A second rebuild would be harmless but wrong: it would re-copy 11k
+        # rows and drop a fresh backup on every startup forever.
+        assert _backups_for(path) == backups_once
+    finally:
+        _cleanup(path)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
