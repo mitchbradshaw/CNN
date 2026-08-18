@@ -187,10 +187,14 @@ def test_the_real_backlog_stalls_against_ticket_04(real, config):
     assert len(downstream) == 20
 
 
-def test_projected_drain_is_about_ten_hours(real, config):
+def test_projected_drain_is_about_six_hours(real, config):
+    """Was "about ten hours" until T17 landed. T17 was the backlog's only
+    `solo` ticket — nothing else dispatches while a solo ticket is draining
+    the field — so finishing it removed the single biggest serialization
+    bottleneck in the DAG, not just 60 minutes of work."""
     plan = simulate(real, config, ceilings=config.ceilings)
 
-    assert 8 * 60 <= plan.drain_minutes <= 12 * 60, plan.drain_minutes
+    assert 5 * 60 <= plan.drain_minutes <= 8 * 60, plan.drain_minutes
 
 
 def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
@@ -213,7 +217,11 @@ def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
     if with_blockers:
         example = with_blockers[0]
         assert f"(was blocked by T{example.was_blocked_by[0]:02d}" in text
-    assert "[SOLO — runs alone]" in text
+    # Derived, same reason: T17 was the only `solo` ticket in the backlog and
+    # is `done` as of T17 landing, so no dispatched ticket is solo any more.
+    solo_dispatched = [t for w in plan.waves for t in w.tickets if t.solo]
+    if solo_dispatched:
+        assert "[SOLO — runs alone]" in text
     assert "held:" in text
     assert "projected drain" in text
     assert f"{dispatched} tickets autonomous · {len(plan.not_dispatched)} held" in text

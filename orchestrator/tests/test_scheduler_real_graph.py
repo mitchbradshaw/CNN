@@ -141,17 +141,27 @@ def test_the_run_opens_on_the_most_unblocking_tickets_available(real):
 
 
 def test_solo_waits_rather_than_starving(real):
-    """17 has no blockers, so it must appear in some wave, alone."""
+    """Whatever solo ticket is currently live must appear in some wave,
+    alone. T17 was the concrete example here until it landed and dropped
+    out of scheduling as `done` — vacuously true with no live solo ticket,
+    since the mechanism itself has synthetic coverage in test_scheduler.py
+    regardless of which ticket happens to carry the flag."""
+    solo_ids = [t.id for t in real if t.solo and not t.done]
     waves = list(drain(real, Ceilings(3, 2)))
-    solo_waves = [w for w in waves if 17 in w]
-
-    assert solo_waves == [(17,)]
+    for solo_id in solo_ids:
+        assert [w for w in waves if solo_id in w] == [(solo_id,)]
 
 
 def test_an_in_flight_ticket_still_constrains_the_next_decision(real):
-    """A one-shot check that in-flight state, not just same-tick state, binds."""
+    """A one-shot check that in-flight state, not just same-tick state, binds
+    — for whichever solo ticket is currently live. T17 was the concrete
+    example until it landed and dropped out of scheduling as `done`."""
+    solo_ids = [t.id for t in real if t.solo and not t.done]
+    if not solo_ids:
+        return
+    solo_id = solo_ids[0]
     states = {t.id: (HELD if t.human_gate else PENDING) for t in real}
-    states[17] = RUNNING
+    states[solo_id] = RUNNING
 
     decision = schedule(real, states, Ceilings(3, 2))
 
