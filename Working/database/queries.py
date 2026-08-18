@@ -18,7 +18,7 @@ concatenated-file global index. Convert once, at import time, with
 import datetime
 import sqlite3
 
-VERDICTS = ("interesting", "not_interesting", "artifact", "unsure")
+from Working.database.schema import VERDICTS  # noqa: F401  (re-exported)
 
 SOURCE_IMPORTED_10MIN = "imported_10min"
 SOURCE_MANUAL_UI = "manual_ui"
@@ -201,7 +201,8 @@ def insert_annotation(conn, recording_id, start_idx, end_idx, verdict,
     Parameters
     ----------
     verdict : str
-        One of `VERDICTS` ('interesting', 'not_interesting', 'artifact', 'unsure').
+        One of `VERDICTS` ('seed', 'interesting', 'not_interesting',
+        'artifact', 'unsure').
     source : str
         e.g. `SOURCE_IMPORTED_10MIN` or `SOURCE_MANUAL_UI` — keeps imported
         and hand-made labels distinguishable.
@@ -340,7 +341,7 @@ def recording_summary(conn, recording_id):
 
     Returns
     -------
-    dict : {"interesting": int, "not_interesting": int, "artifact": int,
+    dict : {"seed": int, "interesting": int, "not_interesting": int, "artifact": int,
             "unsure": int, "total": int, "reviewed_fraction": float}
     """
     counts = {v: 0 for v in VERDICTS}
