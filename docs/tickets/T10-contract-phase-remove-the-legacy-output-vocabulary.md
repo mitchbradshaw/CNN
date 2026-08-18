@@ -1,7 +1,7 @@
 ---
 id: 10
 title: "Contract phase: remove the legacy output vocabulary"
-model: sonnet
+model: haiku
 size: S
 blocked_by: [6, 7, 8, 9, 11, 12]
 mutex: []
@@ -13,7 +13,7 @@ budget_minutes: 30
 ---
 # 10 — Contract phase: remove the legacy output vocabulary
 
-**Model:** [S] · **Size:** [S]
+**Model:** [H] · **Size:** [S]
 
 **What to build:** the dual-form support added in ticket 05 is deleted, leaving the seven type names as
 the only vocabulary in the codebase.

@@ -19,6 +19,12 @@ REQUIRED_SECTIONS = (
     "rate_limit",
 )
 
+#: Ticket-agent tier names in cheapest-first order.
+#: `model_cap` in config.toml is one of these strings. A ticket whose model
+#: tier is to the right of the cap is downgraded to the cap tier.
+#: "review" and "fix" are not tier names — they bypass the cap entirely.
+TIER_ORDER: tuple[str, ...] = ("haiku", "sonnet", "opus")
+
 
 class ConfigError(Exception):
     """`config.toml` is missing, malformed, or internally inconsistent."""
@@ -122,10 +128,27 @@ class Config:
             raise ConfigError(f"no budget configured for size {size!r}") from None
 
     def model_id(self, model: str) -> str:
+        """Return the API model string for `model`, applying `model_cap` if set.
+
+        `model` is either a ticket tier name ("haiku", "sonnet", "opus") or a
+        special key ("review", "fix"). The cap only applies to tier names —
+        review and fix are looked up directly so their explicit config values
+        are always honoured.
+
+        Cap semantics: if the requested tier sits above the cap in TIER_ORDER,
+        the cap tier is used instead. "haiku" caps everything to haiku; "sonnet"
+        caps opus→sonnet but leaves haiku and sonnet unchanged.
+        """
+        effective = model
+        if model in TIER_ORDER:
+            cap = self.models.get("model_cap")
+            if cap and cap in TIER_ORDER:
+                if TIER_ORDER.index(model) > TIER_ORDER.index(cap):
+                    effective = cap
         try:
-            return self.models[model]
+            return self.models[effective]
         except KeyError:
-            raise ConfigError(f"no model id configured for {model!r}") from None
+            raise ConfigError(f"no model id configured for {effective!r}") from None
 
     def wall_clock_stop_at(self, started: datetime) -> datetime:
         """The next occurrence of the configured stop time, at or after `started`."""
@@ -172,6 +195,14 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
         if size not in budgets:
             raise ConfigError(f"{path}: `budgets` has no entry for size {size!r}")
 
+    # Validate model_cap if present.
+    models_raw = dict(data["models"])
+    cap = models_raw.get("model_cap")
+    if cap is not None and cap not in TIER_ORDER:
+        raise ConfigError(
+            f"{path}: `models.model_cap` must be one of {list(TIER_ORDER)}, got {cap!r}"
+        )
+
     p = data["paths"]
 
     def resolved(key: str) -> Path:
@@ -201,7 +232,7 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             opus=int(_require(data, "ceilings", "opus", path)),
         ),
         budgets=budgets,
-        models=dict(data["models"]),
+        models=models_raw,
         paths=paths,
         agent=AgentConfig(
             cli=tuple(_require(data, "agent", "cli", path)),

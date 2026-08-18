@@ -1,7 +1,7 @@
 ---
 id: 7
 title: "Adapter remap batch B: encoding blocks"
-model: sonnet
+model: haiku
 size: M
 blocked_by: [5]
 mutex: [5, 8, 9]
@@ -13,7 +13,7 @@ budget_minutes: 60
 ---
 # 07 — Adapter remap batch B: encoding blocks
 
-**Model:** [S] · **Size:** [M]
+**Model:** [H] · **Size:** [M]
 
 **What to build:** the nine adapters that genuinely produce an image or symbolic representation declare
 `Encoding`, with no behavioural change.

@@ -1,7 +1,7 @@
 ---
 id: 37
 title: "Seed an exemplar from the viewer"
-model: sonnet
+model: haiku
 size: S
 blocked_by: [16, 18]
 mutex: [16, 23]
@@ -13,7 +13,7 @@ budget_minutes: 30
 ---
 # 37 — Seed an exemplar from the viewer
 
-**Model:** [S] · **Size:** [S]
+**Model:** [H] · **Size:** [S]
 
 **What to build:** a shape recognised by eye anchors a library entry without any algorithm having
 proposed it — the case the detection-keyed schema could not express.

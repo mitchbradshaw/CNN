@@ -1,7 +1,7 @@
 ---
 id: 6
 title: "Adapter remap batch A: signal and interval blocks"
-model: sonnet
+model: haiku
 size: M
 blocked_by: [5]
 mutex: [5, 43]
@@ -13,7 +13,7 @@ budget_minutes: 60
 ---
 # 06 — Adapter remap batch A: signal and interval blocks
 
-**Model:** [S] · **Size:** [M]
+**Model:** [H] · **Size:** [M]
 
 **What to build:** the seven adapters whose types are a straight rename declare their new types, with
 no behavioural change.

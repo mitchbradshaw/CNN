@@ -27,12 +27,33 @@ M = 60
 L = 120
 
 # Model ids handed to `claude -p --model`.
+#
+# TIER ORDER (cheapest first): haiku → sonnet → opus
+#   haiku-4-5:  $1 / $5   per MTok  (input / output)
+#   sonnet-5:   $2 / $10  per MTok
+#   opus-5:     $5 / $25  per MTok
+#
+# Counter-intuitive: sonnet-5 ($2) is CHEAPER than sonnet-4-5 or sonnet-4-6
+# ($3). Do NOT downgrade to an older version — it costs more, not less.
+# Similarly opus-4 was $15/$75 (now retired); opus-5 at $5/$25 is the right
+# choice. Always use the latest model in each tier.
+#
+# model_cap applies to ticket agents only (review and fix are set explicitly
+# below). "sonnet" maps opus→sonnet; "haiku" maps both opus and sonnet→haiku.
+# Comment out model_cap to restore per-ticket model assignment from the YAML.
 [models]
-sonnet = "claude-sonnet-5"
-opus = "claude-opus-5"
-# The review and auto-fix agents are the only other LLM calls in the system.
-review = "claude-opus-5"
-fix = "claude-opus-5"
+haiku   = "claude-haiku-4-5"
+sonnet  = "claude-sonnet-5"
+opus    = "claude-opus-5"
+# Downgrade ceiling for ticket agents. Tickets marked [H] haiku are not
+# affected by this; tickets marked [O] opus are downgraded to sonnet.
+# Remove this key to restore original per-ticket model selection.
+model_cap = "sonnet"
+# Review and auto-fix agents are costed separately from ticket agents.
+# Sonnet handles two-axis review reliably and is 2.5x cheaper than opus here.
+# Changed from opus-5 → sonnet-5 (saves ~60% per review, runs every ticket).
+review  = "claude-sonnet-5"
+fix     = "claude-sonnet-5"
 
 [paths]
 tickets = "docs/tickets"

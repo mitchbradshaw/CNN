@@ -1,7 +1,7 @@
 ---
 id: 23
 title: "Promote an adjudicated candidate into the library"
-model: sonnet
+model: haiku
 size: S
 blocked_by: [16, 19, 22]
 mutex: [16, 37]
@@ -13,7 +13,7 @@ budget_minutes: 30
 ---
 # 23 — Promote an adjudicated candidate into the library
 
-**Model:** [S] · **Size:** [S]
+**Model:** [H] · **Size:** [S]
 
 **What to build:** scoring and cataloguing become one continuous motion — an adjudicated candidate
 becomes a library exemplar by an explicit action, and only by an explicit action.

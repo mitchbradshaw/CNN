@@ -1,7 +1,7 @@
 ---
 id: 3
 title: "Held-out recording lock"
-model: sonnet
+model: haiku
 size: S
 blocked_by: []
 mutex: [8, 15, 17]
@@ -13,7 +13,7 @@ budget_minutes: 30
 ---
 # 03 — Held-out recording lock
 
-**Model:** [S] · **Size:** [S]
+**Model:** [H] · **Size:** [S]
 
 **What to build:** the evaluation recording is refused by both the viewer and the runner unless
 explicitly unlocked, so "untouched until the freeze" is true by construction rather than by memory.

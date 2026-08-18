@@ -1,7 +1,7 @@
 ---
 id: 42
 title: "Library grouping selectors"
-model: sonnet
+model: haiku
 size: S
 blocked_by: [38]
 mutex: []
@@ -13,7 +13,7 @@ budget_minutes: 30
 ---
 # 42 — Library grouping selectors
 
-**Model:** [S] · **Size:** [S]
+**Model:** [H] · **Size:** [S]
 
 **What to build:** compare what each grouping basis produces over the same entries — shape, cluster
 membership, or manual tag.

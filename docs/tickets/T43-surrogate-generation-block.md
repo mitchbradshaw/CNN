@@ -1,7 +1,7 @@
 ---
 id: 43
 title: "Surrogate generation block"
-model: sonnet
+model: haiku
 size: M
 blocked_by: [5, 6]
 mutex: [5, 6, 25]
@@ -13,7 +13,7 @@ budget_minutes: 60
 ---
 # 43 — Surrogate generation block
 
-**Model:** [S] · **Size:** [M]
+**Model:** [H] · **Size:** [M]
 
 **What to build:** a signal-to-signal block that produces a null, reproducibly, from its recipe.
 
