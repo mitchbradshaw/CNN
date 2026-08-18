@@ -69,7 +69,16 @@ def check_red_proof(git: Git, worktree_path: Path | str, *, base: str, branch: s
 
     worktree = Git(worktree_path)
     restore_to = worktree.current_branch()
-    worktree.run("checkout", "--detach", first.sha)
+    # `checkout` alone only touches files that differ between the two commits
+    # — it does not remove untracked files, and it leaves alone a tracked file
+    # whose uncommitted edit doesn't conflict with the target tree. An agent
+    # that stalled after its first commit routinely leaves exactly this behind
+    # (a part-written implementation, never `git add`ed), and without cleaning
+    # it first the isolated check silently grades the test against that
+    # leftover work instead of against the commit it is supposed to verify —
+    # a false green that reads as "this test never failed".
+    worktree.run("checkout", "--force", "--detach", first.sha)
+    worktree.run("clean", "-fd")
     try:
         result = run_suite(worktree_path, command, timeout_minutes=timeout_minutes,
                            node_ids=list(test_files))
