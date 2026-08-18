@@ -606,7 +606,7 @@ def _channel_available():
 def _fresh_app():
     from Working.database.schema import init_db
     from Working.database import queries as q
-    from UI.app import ViewerApp
+    from UI.viewer import ViewerApp
     from tests._session_isolation import scratch_session_file
 
     tf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)

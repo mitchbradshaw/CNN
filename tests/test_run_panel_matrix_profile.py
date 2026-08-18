@@ -44,7 +44,7 @@ from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.execution import execute_recipe
 from Working.recipes import make_recipe
-from UI.app import ViewerApp
+from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
 
 import Adapters.detection_matrix_profile as mp_adapter
