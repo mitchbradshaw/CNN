@@ -24,14 +24,29 @@ Migrations
 `CREATE TABLE IF NOT EXISTS`, and anything added to an *existing* table
 (new columns on `annotations`; `run_group_id`/`surrogate_of_run_id` on
 `runs`) is applied by `_migrate_columns`, which checks `PRAGMA table_info`
-first and only adds what's missing. Nothing here ever drops or rewrites a
-column, so existing rows are untouched.
+first and only adds what's missing.
+
+The one exception is `_migrate_annotations_verdict`, which SQLite forces to be
+destructive: a CHECK constraint cannot be altered in place, so widening the
+verdict vocabulary rebuilds the table. It backs the file up first, runs in one
+transaction, verifies its row and tag-link counts before committing, and is a
+no-op once the live constraint is current.
 """
 
+import datetime
 import os
 import sqlite3
 
 DB_PATH = os.path.join("DATA", "db", "annotations.sqlite")
+
+# The controlled terms a human verdict may take, defined once. `queries.VERDICTS`
+# re-exports this same object and the adjudication path reads it too: two
+# literals that happen to agree today are how the annotation and adjudication
+# vocabularies drift apart tomorrow. `seed` marks a span recognised by eye as
+# exemplar-worthy, and is what the shape library promotes from.
+VERDICTS = ("seed", "interesting", "not_interesting", "artifact", "unsure")
+
+_VERDICT_SQL_LIST = ", ".join("'{}'".format(v) for v in VERDICTS)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS recordings (
@@ -62,8 +77,7 @@ CREATE TABLE IF NOT EXISTS annotations (
     recording_id  INTEGER NOT NULL REFERENCES recordings(id),
     start_idx     INTEGER NOT NULL,
     end_idx       INTEGER NOT NULL,
-    verdict       TEXT    NOT NULL CHECK (verdict IN
-                      ('interesting', 'not_interesting', 'artifact', 'unsure')),
+    verdict       TEXT    NOT NULL CHECK (verdict IN (__VERDICTS__)),
     tag           TEXT,
     note          TEXT,
     scale_viewed  TEXT,
@@ -284,6 +298,8 @@ CREATE TABLE IF NOT EXISTS templates (
 );
 """
 
+_SCHEMA = _SCHEMA.replace("__VERDICTS__", _VERDICT_SQL_LIST)
+
 # Columns added to the original `annotations` table by the tag-vocabulary
 # feature. Applied via ALTER TABLE ADD COLUMN, guarded by a PRAGMA
 # table_info check so re-running is a no-op — CREATE TABLE IF NOT EXISTS
@@ -338,6 +354,166 @@ def _migrate_motifs_columns(conn):
     _migrate_columns(conn, "motifs", _MOTIFS_NEW_COLUMNS)
 
 
+# ── The verdict-constraint rebuild ────────────────────────────────────────────
+# SQLite cannot ALTER a CHECK constraint in place, so widening the verdict
+# vocabulary means the full rebuild: create a new table, copy every row across,
+# drop the old one, rename. Against eleven thousand rows of manual labelling
+# that cannot be regenerated from raw data plus code, the failure mode to design
+# against is the quiet one — a column left out of the INSERT ... SELECT does not
+# raise, it just arrives empty.
+#
+# So: the copy list is derived from `PRAGMA table_info` on the *live* table
+# rather than from a list written here (a list here would go stale the next time
+# someone adds a column); a column the new table cannot carry aborts the
+# migration instead of being dropped; the whole thing runs inside one
+# transaction with the row and link counts verified before COMMIT, so a mismatch
+# rolls back rather than lands; and the file is backed up first regardless.
+
+_ANNOTATIONS_REBUILD_SQL = """
+CREATE TABLE annotations_rebuild (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL,
+    verdict       TEXT    NOT NULL CHECK (verdict IN (__VERDICTS__)),
+    tag           TEXT,
+    note          TEXT,
+    scale_viewed  TEXT,
+    source        TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL,
+    event_count   INTEGER,
+    -- Still spelled `annotations`, not `annotations_rebuild`: a forward
+    -- reference while the old table stands, self-referencing after the rename.
+    parent_annotation_id INTEGER REFERENCES annotations(id),
+    status        TEXT,
+    relation_kind TEXT CHECK (relation_kind IN ('type_specimen', 'sub_window')
+                              OR relation_kind IS NULL),
+    deleted_at    TEXT
+)
+"""
+_ANNOTATIONS_REBUILD_SQL = _ANNOTATIONS_REBUILD_SQL.replace(
+    "__VERDICTS__", _VERDICT_SQL_LIST)
+
+
+def _annotations_verdict_is_current(conn):
+    """True when the live CHECK constraint already names every term in VERDICTS."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'annotations'"
+    ).fetchone()
+    if row is None or row[0] is None:
+        return True
+    return all("'{}'".format(v) in row[0] for v in VERDICTS)
+
+
+def _backup_database(conn, db_path):
+    """Snapshot the database beside itself before anything destructive runs.
+
+    Uses SQLite's own backup API rather than a file copy, so the snapshot is
+    transactionally consistent even with the connection open.
+    """
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = "{}.pre-seed-rebuild-{}.bak".format(db_path, stamp)
+    dest = sqlite3.connect(backup_path)
+    try:
+        conn.backup(dest)
+    finally:
+        dest.close()
+    return backup_path
+
+
+def _migrate_annotations_verdict(conn, db_path=None):
+    """Rebuild `annotations` so its verdict CHECK accepts every term in VERDICTS.
+
+    Idempotent: once the live constraint names all five terms this is one
+    `sqlite_master` read and nothing more — no re-copy, no fresh backup on every
+    startup.
+
+    Returns
+    -------
+    str or None
+        Path of the backup written before the rebuild, or None if no rebuild
+        was needed (or the database is in-memory, where there is no file to
+        back up).
+    """
+    if _annotations_verdict_is_current(conn):
+        return None
+
+    # Indexes and triggers are dropped along with the table and SQLite does not
+    # warn you. Capture them now; recreate them after the rename. `sql IS NOT
+    # NULL` skips the auto-indexes SQLite creates for UNIQUE/PK, which come back
+    # with the new table on their own.
+    dependents = [
+        r[0] for r in conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type IN ('index', 'trigger') "
+            "AND tbl_name = 'annotations' AND sql IS NOT NULL")
+    ]
+
+    backup_path = None
+    if db_path and db_path != ":memory:":
+        backup_path = _backup_database(conn, db_path)
+
+    live_cols = [r["name"] for r in conn.execute("PRAGMA table_info(annotations)")]
+
+    # `PRAGMA foreign_keys` is a no-op inside a transaction, so it has to be set
+    # before BEGIN — hence autocommit and explicit transaction control here.
+    fk_was_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    prior_isolation = conn.isolation_level
+    conn.commit()
+    conn.isolation_level = None
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN")
+        n_rows = conn.execute("SELECT COUNT(*) FROM annotations").fetchone()[0]
+        n_links = conn.execute("SELECT COUNT(*) FROM annotation_tags").fetchone()[0]
+
+        conn.execute(_ANNOTATIONS_REBUILD_SQL)
+        new_cols = {r["name"] for r in
+                    conn.execute("PRAGMA table_info(annotations_rebuild)")}
+        orphans = [c for c in live_cols if c not in new_cols]
+        if orphans:
+            raise RuntimeError(
+                "annotations carries column(s) the rebuild would drop: {}. "
+                "Add them to _ANNOTATIONS_REBUILD_SQL before migrating."
+                .format(", ".join(orphans)))
+
+        cols = ", ".join(live_cols)
+        conn.execute("INSERT INTO annotations_rebuild ({0}) SELECT {0} FROM annotations"
+                     .format(cols))
+        copied = conn.execute("SELECT COUNT(*) FROM annotations_rebuild").fetchone()[0]
+        if copied != n_rows:
+            raise RuntimeError(
+                "rebuild copied {} of {} annotations".format(copied, n_rows))
+
+        conn.execute("DROP TABLE annotations")
+        conn.execute("ALTER TABLE annotations_rebuild RENAME TO annotations")
+        for sql in dependents:
+            conn.execute(sql)
+
+        # Verified inside the transaction, so a mismatch rolls back.
+        final_rows = conn.execute("SELECT COUNT(*) FROM annotations").fetchone()[0]
+        final_links = conn.execute("SELECT COUNT(*) FROM annotation_tags").fetchone()[0]
+        if (final_rows, final_links) != (n_rows, n_links):
+            raise RuntimeError(
+                "rebuild ended with {} rows / {} tag links, expected {} / {}"
+                .format(final_rows, final_links, n_rows, n_links))
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(
+                "rebuild left {} foreign-key violation(s)".format(len(violations)))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.isolation_level = prior_isolation
+        if fk_was_on:
+            conn.execute("PRAGMA foreign_keys = ON")
+
+    print("[schema] annotations verdict constraint rebuilt: {} rows, {} tag links "
+          "preserved; backup at {}".format(n_rows, n_links, backup_path))
+    return backup_path
+
+
 def get_connection(db_path=None):
     """Open a connection with row access by column name and FKs enforced.
 
@@ -365,10 +541,14 @@ def init_db(db_path=None):
     -------
     sqlite3.Connection
     """
+    db_path = DB_PATH if db_path is None else db_path
     conn = get_connection(db_path)
     conn.executescript(_SCHEMA)
     conn.commit()
     _migrate_annotations_columns(conn)
     _migrate_runs_columns(conn)
     _migrate_motifs_columns(conn)
+    # Must run after the column migrations: the rebuild copies whatever columns
+    # the live table has, so they need to be there first.
+    _migrate_annotations_verdict(conn, db_path)
     return conn
