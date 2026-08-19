@@ -12,7 +12,9 @@ from orchestrator.backlog import load_backlog
 from orchestrator.config import load_config
 from orchestrator.report import RunDirectory, render_report
 from orchestrator.state import RunState, TicketRecord
-from orchestrator.status import BLOCKED_UPSTREAM, FAILED, HELD, MERGED, OVERLAP
+from orchestrator.status import (
+    BLOCKED_UPSTREAM, DEFERRED, FAILED, HELD, MERGED, OVERLAP,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -160,3 +162,72 @@ def test_a_run_with_nothing_dispatched_still_renders(state, backlog):
     text = render_report(state, backlog)
 
     assert "REPORT" in text
+
+
+# ------------------------------------------------------- cost, at last (item 4)
+#
+# ORCHESTRATOR_SPEC.md §REPORT.md has specified a `tokens` column since the
+# design was settled, and five runs shipped without one. The consequence was
+# not cosmetic: every model-tier decision in `config.toml` — capping tickets to
+# sonnet, dropping review from opus, marking cards haiku — was made against no
+# measurement whatsoever.
+
+
+def test_the_table_carries_tokens_and_cost_per_ticket(state, backlog):
+    state.tickets["1"] = TicketRecord(
+        status=MERGED, merge_sha="4b7e0c2",
+        gates={"red_proof": "pass", "suite": "pass"},
+        tokens=3_172_932, cost_usd=1.8342)
+
+    text = render_report(state, backlog)
+
+    assert "tokens" in text.lower()
+    assert "3.17M" in text or "3,172,932" in text
+    assert "1.83" in text
+
+
+def test_a_ticket_with_no_usage_recorded_renders_a_dash(state, backlog):
+    """Structured output can fail — an old CLI, a killed agent, a schema shift.
+    A missing measurement must read as missing, never as zero."""
+    state.tickets["2"] = TicketRecord(status=FAILED, gates={"red_proof": "fail"})
+
+    text = render_report(state, backlog)
+
+    row = next(line for line in text.splitlines() if line.startswith("| T02 "))
+    assert "0.00" not in row, "no data is not the same as no cost"
+
+
+def test_the_report_totals_the_night(state, backlog):
+    """The number the human actually acts on: what did last night cost, and
+    what did it cost per landed ticket."""
+    state.tickets["1"] = TicketRecord(status=MERGED, tokens=2_000_000, cost_usd=1.00)
+    state.tickets["2"] = TicketRecord(status=FAILED, tokens=1_000_000, cost_usd=0.50)
+
+    text = render_report(state, backlog)
+
+    assert "1.50" in text, "run total cost"
+    assert "3.00M" in text or "3,000,000" in text, "run total tokens"
+
+
+def test_the_total_names_what_the_failures_cost(state, backlog):
+    """Spend on tickets that did not land is the run's waste figure, and it is
+    the one number that says whether the harness or the backlog is the problem."""
+    state.tickets["1"] = TicketRecord(status=MERGED, tokens=2_000_000, cost_usd=1.00)
+    state.tickets["2"] = TicketRecord(status=FAILED, tokens=1_000_000, cost_usd=0.50)
+    state.tickets["3"] = TicketRecord(status=DEFERRED, tokens=10_000, cost_usd=0.01)
+
+    text = render_report(state, backlog)
+
+    assert "0.50" in text, "cost of work that did not land"
+
+
+def test_deferred_tickets_are_separated_from_quarantined_ones(state, backlog):
+    """A DEFERRED row means rerun; a FAILED row means read the transcript.
+    Conflating them is what made run-20260818-2244 look like a backlog problem."""
+    state.tickets["8"] = TicketRecord(status=DEFERRED, exit_class="infrastructure")
+    state.tickets["9"] = TicketRecord(status=FAILED, exit_class="red-at-exit")
+
+    text = render_report(state, backlog)
+
+    assert "DEFERRED" in text
+    assert "--resume" in text, "the report must say how to pick them back up"

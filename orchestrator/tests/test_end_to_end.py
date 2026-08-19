@@ -23,7 +23,9 @@ from orchestrator.gitops import Git
 from orchestrator.report import RunDirectory
 from orchestrator.runloop import Runner
 from orchestrator.state import RunState
-from orchestrator.status import BLOCKED_UPSTREAM, FAILED, HELD, MERGED
+from orchestrator.status import (
+    BLOCKED_UPSTREAM, DEFERRED, FAILED, HELD, MERGED, PENDING, READY,
+)
 
 # A stand-in for `claude -p`. Reads the prompt out of argv and acts on it.
 FAKE_AGENT = '''
@@ -57,6 +59,18 @@ slug = label.lower()
 # that the two agents resolve by whichever happens to read it last.
 mode = os.environ.get("FAKE_AGENT_MODE_" + label,
                       os.environ.get("FAKE_AGENT_MODE", "good"))
+
+# The environment refusing to work, not the ticket being wrong. The counter
+# lives outside every worktree so `-once` survives the teardown between
+# attempts. See run-20260818-2244, where four agents printed exactly this.
+if mode in ("usage-exhausted", "usage-exhausted-once"):
+    counter = pathlib.Path(os.environ["FAKE_FLAKE_DIR"]) / (label + ".usage")
+    seen = int(counter.read_text()) if counter.exists() else 0
+    counter.write_text(str(seen + 1))
+    if mode == "usage-exhausted" or seen == 0:
+        print("You're out of extra usage \\u00b7 resets 3:30am (Australia/Brisbane)")
+        sys.exit(1)
+    mode = "good"
 
 if mode == "silent":            # exits clean having committed nothing
     print("I have decided to do nothing.")
@@ -152,13 +166,15 @@ cli = {cli}
 extra_args = []
 stall_minutes = 5
 launch_stagger_seconds = {stagger}
+output_format = "{output_format}"
+max_budget_usd = 0.0
 
 [suite]
 command = ["pytest", "-q", "--tb=no", "-rf"]
 timeout_minutes = 5
 
 [retries]
-infrastructure = 2
+infrastructure = {infra_retries}
 infrastructure_backoff_seconds = 0
 stall = {stall_retries}
 
@@ -183,6 +199,8 @@ concurrent_signature = 2
 fast_exit_seconds = 60
 initial_backoff_seconds = 0
 max_backoff_seconds = 0
+max_usage_wait_seconds = {max_usage_wait}
+usage_reset_grace_seconds = 0
 """
 
 STANDARDS = """\
@@ -265,11 +283,15 @@ def world(tmp_path):
             git.create_branch("integration", "main")
             git.checkout("integration")
 
-        def config(self, *, ceiling=2, breaker=3, stall_retries=0, stagger=0.0):
+        def config(self, *, ceiling=2, breaker=3, stall_retries=0, stagger=0.0,
+                   infra_retries=2, max_usage_wait=0, output_format="text"):
             path = tmp_path / "config.toml"
             cli = json.dumps([sys.executable, str(agent)])
             path.write_text(CONFIG.format(cli=cli, ceiling=ceiling, breaker=breaker,
-                                          stall_retries=stall_retries, stagger=stagger),
+                                          stall_retries=stall_retries, stagger=stagger,
+                                          infra_retries=infra_retries,
+                                          max_usage_wait=max_usage_wait,
+                                          output_format=output_format),
                             encoding="utf-8")
             return load_config(path, repo_root=root)
 
@@ -576,3 +598,203 @@ def test_the_overlap_check_holds_the_second_ticket_and_never_resolves_it(world, 
     assert statuses["2"] == "OVERLAP"
     assert runner.state.tickets["2"].overlap_symbols == ["widget"]
     assert not world.git.is_merged("ticket/T02", "integration")
+
+
+# ------------------------------------------- the environment, not the ticket
+#
+# run-20260818-2244 is the run these tests exist for. Four agents printed
+# `You're out of extra usage`, and every one of them was quarantined: the
+# breaker tripped, twenty-odd dependents went BLOCKED_UPSTREAM, and the night
+# ended at 23:00 having merged nothing. ORCHESTRATOR_SPEC.md's failure table
+# has always said an infrastructure failure backs off, retries, and *does not
+# count against the ticket* — that policy was implemented for provisioning and
+# never for the agent.
+
+
+def test_a_usage_exhaustion_defers_the_ticket_rather_than_quarantining_it(
+        world, monkeypatch):
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(infra_retries=2))
+
+    runner.run()
+
+    record = runner.state.tickets["1"]
+    assert record.status == DEFERRED, "the environment failed, not the ticket"
+    assert record.exit_class == "infrastructure"
+    assert record.attempts == 0, "an environment failure is not an attempt at the work"
+
+
+def test_a_deferred_ticket_does_not_block_its_dependents(world, monkeypatch):
+    """BLOCKED_UPSTREAM is a verdict on the blocker's *work*. Nothing was
+    judged here, so the dependent is merely not-yet-runnable."""
+    world.ticket(1)
+    world.ticket(2, blocked_by=[1])
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(ceiling=1, infra_retries=1))
+
+    runner.run()
+
+    assert runner.state.tickets["1"].status == DEFERRED
+    assert runner.state.tickets["2"].status != BLOCKED_UPSTREAM
+    assert runner.state.tickets["2"].status in (PENDING, READY, DEFERRED)
+
+
+def test_infrastructure_failures_never_trip_the_circuit_breaker(world, monkeypatch):
+    """The breaker's question is 'is the base broken?'. A usage cap is not
+    evidence about the base, and tripping on it throws away the whole night."""
+    for i in range(1, 6):
+        world.ticket(i)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(ceiling=1, breaker=3, infra_retries=1))
+
+    runner.run()
+
+    assert not runner.state.circuit_breaker.tripped
+    assert all(r.status == DEFERRED for r in runner.state.tickets.values())
+
+
+def test_a_ticket_recovers_when_the_environment_does(world, monkeypatch):
+    """The whole point of retrying: the usage window reopens and the work lands."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted-once")
+    runner = build_runner(world, world.config(infra_retries=3))
+
+    runner.run()
+
+    assert runner.state.tickets["1"].status == MERGED
+    assert runner.state.tickets["1"].attempts == 1, "the retry was not charged to the ticket"
+
+
+def test_a_deferred_ticket_leaves_no_branch_to_collide_with_the_next_run(
+        world, monkeypatch):
+    """`provision` uses `git worktree add -b`, which fails outright when the
+    branch already exists — the defect that killed the first three dispatches
+    of run 2. A ticket that produced no commits must leave nothing behind."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(infra_retries=1))
+
+    runner.run()
+
+    assert "ticket/T01" not in world.git.branch_names()
+
+
+def test_a_deferred_ticket_keeps_its_branch_when_it_had_committed_work(
+        world, monkeypatch):
+    """The mirror of the rule above. A branch carrying commits is evidence and
+    is never deleted, however the run ended."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted-once")
+    runner = build_runner(world, world.config(infra_retries=3))
+
+    runner.run()
+
+    assert runner.state.tickets["1"].status == MERGED
+    assert "ticket/T01" in world.git.branch_names()
+
+
+def test_deferred_tickets_are_named_in_the_report_as_retryable(world, monkeypatch):
+    """At 8am the difference between 'this ticket is wrong' and 'the plan ran
+    out of usage' is the difference between debugging and rerunning."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(infra_retries=1))
+
+    runner.run()
+
+    report = (runner.run_dir.report_path).read_text(encoding="utf-8")
+    assert "DEFERRED" in report
+    assert "--resume" in report, "the report must say how to pick them back up"
+
+
+def test_a_resumed_run_re_dispatches_deferred_tickets(world, monkeypatch):
+    """A deferred ticket is the one thing a resume exists to retry. Quarantined
+    tickets stay quarantined; deferred ones go back in the queue."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "usage-exhausted")
+    runner = build_runner(world, world.config(infra_retries=1))
+    runner.run()
+    assert runner.state.tickets["1"].status == DEFERRED
+
+    monkeypatch.setenv("FAKE_AGENT_MODE", "good")
+    resumed = Runner(config=world.config(infra_retries=1), backlog=runner.backlog,
+                     git=world.git, state=runner.state, run_dir=runner.run_dir,
+                     baseline_failed=(), deadline=None, poll_seconds=0.05)
+    resumed.run()
+
+    assert resumed.state.tickets["1"].status == MERGED
+
+
+# --------------------------------------------------- the post-mortem (item 6)
+#
+# FOLLOWUPS.md carries a hand-written harness section for runs 1157, 2050 and
+# 0554, and nothing at all for 1114 and 2244 — the two most recent and the two
+# worst. The improvement loop was a habit, and habits lapse. Writing the stub
+# mechanically makes a *missing* post-mortem visible instead of silent.
+
+
+def test_every_run_appends_a_postmortem_stub(world, monkeypatch):
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config())
+
+    runner.run()
+
+    followups = (world.root / "FOLLOWUPS.md").read_text(encoding="utf-8")
+    assert "## Harness —" in followups
+    assert runner.state.run_id in followups
+
+
+def test_the_stub_names_every_ticket_that_did_not_land(world, monkeypatch):
+    """The triage list writes itself: one line per ticket that cost tokens and
+    produced no merge, with the exit class that says which kind of failure it
+    was."""
+    world.ticket(1)
+    world.ticket(2)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE_T02", "no-impl")
+    runner = build_runner(world, world.config())
+
+    runner.run()
+
+    followups = (world.root / "FOLLOWUPS.md").read_text(encoding="utf-8")
+    section = followups.split("## Harness —")[-1]
+    assert "T02" in section
+    assert "red-at-exit" in section
+    assert "T01" not in section, "a ticket that landed is not a post-mortem item"
+
+
+def test_a_clean_run_still_writes_a_stub_saying_so(world):
+    """A night where nothing failed is itself a finding, and the absence of a
+    section must never be ambiguous between 'clean' and 'nobody wrote it up'."""
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config())
+
+    runner.run()
+
+    followups = (world.root / "FOLLOWUPS.md").read_text(encoding="utf-8")
+    section = followups.split("## Harness —")[-1]
+    assert "1 merged" in section or "nothing to triage" in section.lower()
+
+
+def test_the_stub_records_what_the_night_cost(world):
+    """The post-mortem and the cost report answer the same morning question."""
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config())
+
+    runner.run()
+
+    section = (world.root / "FOLLOWUPS.md").read_text(
+        encoding="utf-8").split("## Harness —")[-1]
+    assert "token" in section.lower() or "cost" in section.lower()

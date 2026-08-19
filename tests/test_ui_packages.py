@@ -242,3 +242,78 @@ def test_run_panel_keeps_every_method_it_had():
     }
     missing = sorted(name for name in expected if not hasattr(RunPanel, name))
     assert not missing, f"RunPanel lost methods in the split: {missing}"
+
+
+# ── The entry point is importable without building the application ───────────
+#
+# `UI/app.py` ended with a bare `create_app().servable(...)` at module scope, so
+# `import UI.app` constructed a whole ViewerApp, opened the database and mmap'd
+# a channel `.npy`. Consequences, all of them paid for:
+#
+#   - The ten test files that imported it failed at *collection* whenever the
+#     data was absent, before their own skip guards could run. That is what
+#     quarantined an innocent T01 and put 36 tickets into BLOCKED_UPSTREAM in
+#     run-20260816-1943, and what made a repaired-but-empty channel directory
+#     read as "505 passed" in run-20260817-1157.
+#   - It forced the orchestrator to junction 317 MB of real channel data into
+#     every worktree purely so that `import` would succeed, which is the sole
+#     reason the writable-recordings isolation tradeoff had to be accepted.
+#
+# Raised in FOLLOWUPS.md on 2026-08-16, re-raised as a blocker on 2026-08-17.
+
+def test_importing_the_app_module_does_not_build_the_application():
+    """Importing the entry point must define the app, not construct it."""
+    app_py = os.path.join(UI_DIR, "app.py")
+    with open(app_py, "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=app_py)
+
+    called_at_import = [
+        node for node in tree.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+    ]
+    assert called_at_import == [], (
+        "UI/app.py calls something at module scope: importing it has side "
+        "effects, so every test file that imports it fails at collection "
+        "whenever the data is absent"
+    )
+
+
+def test_a_serve_entry_point_exists_and_is_the_only_thing_that_builds_the_app():
+    """`panel serve` needs a module whose import *does* make a servable app.
+    That module is the one place allowed to have the side effect."""
+    serve_py = os.path.join(UI_DIR, "serve.py")
+    assert os.path.exists(serve_py), (
+        "UI/serve.py missing — `panel serve` has nothing to serve once the "
+        "side effect leaves app.py"
+    )
+    with open(serve_py, "r", encoding="utf-8") as f:
+        source = f.read()
+    assert "servable" in source
+
+
+def test_the_app_module_imports_cleanly_with_no_database_and_no_channel_data(tmp_path):
+    """The property the orchestrator actually depends on, asserted end to end:
+    a subprocess with no DATA/ at all must still be able to import UI.app.
+
+    This is the negative control for the whole worktree-provisioning story. If
+    it passes, `paths.recordings` exists for the suite's benefit rather than
+    the importer's, and dropping it becomes a data question rather than an
+    import-time crash."""
+    import subprocess
+
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import UI.app\n"
+        "assert callable(UI.app.create_app)\n"
+        "print('imported without building')\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, str(probe)],
+        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300,
+        env={**os.environ, "MYCELIUM_DB_PATH": str(tmp_path / "absent.sqlite")},
+    )
+    assert result.returncode == 0, (
+        f"importing UI.app has side effects that need real data:\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
