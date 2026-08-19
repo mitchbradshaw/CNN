@@ -13,6 +13,7 @@ so killing the orchestrator and restarting it resumes rather than restarts.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -880,6 +881,8 @@ def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tu
             f"{', '.join(result.failed[:12])}\n\n{result.output[-4000:]}"
         )
 
+    _refuse_a_baseline_that_skipped_the_data_it_junctioned(result, config)
+
     unattributed = [n for n in result.failed if n.startswith(UNATTRIBUTED_PREFIX)]
     if unattributed:
         raise BaselineError(
@@ -889,3 +892,53 @@ def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tu
             f"pass.\n{unattributed[0]}\n\n{result.output[-4000:]}"
         )
     return result.failed
+
+
+#: `544 passed, 88 skipped in 420.41s` — pytest's own summary line.
+_SUITE_TALLY = re.compile(r"(\d+) passed(?:,\s*(\d+) skipped)?")
+
+#: Above this fraction of the suite, skipping is not "a few tests opted out",
+#: it is a coverage collapse. Measured: a worktree with the junction skips 0 of
+#: 632; one without skips 88, which is 13.9%.
+MAX_BASELINE_SKIP_FRACTION = 0.05
+
+
+def _refuse_a_baseline_that_skipped_the_data_it_junctioned(result, config) -> None:
+    """Stop a run whose baseline measured a fraction of the suite.
+
+    `paths.recordings` exists so that the 88 real-data tests actually execute.
+    If they skipped anyway, the junction is configured but its target is empty
+    or wrong — the run-20260817-1157 failure, where all 16 fixture rows pointed
+    at absent `.npy` files and every worktree ran effectively nothing.
+
+    That used to be caught by accident: `UI/app.py` built the application at
+    import, so the missing file raised at collection. Removing that was right,
+    and it removed the accidental alarm with it. Converting the guards from
+    `return` to `pytest.skip` is what makes the condition visible again; this is
+    what reads it.
+
+    Not applied when `recordings` is empty — in that configuration the guarded
+    tests are supposed to skip, and refusing would make it unstartable.
+    """
+    if not config.paths.recordings:
+        return
+
+    match = _SUITE_TALLY.search(result.output or "")
+    if match is None:
+        return                       # no tally to read; other checks still apply
+
+    passed = int(match.group(1))
+    skipped = int(match.group(2) or 0)
+    total = passed + skipped
+    if not total or skipped / total <= MAX_BASELINE_SKIP_FRACTION:
+        return
+
+    raise BaselineError(
+        f"refusing to start: the baseline skipped {skipped} of {total} tests "
+        f"({skipped / total:.0%}) while paths.recordings is configured. Those "
+        f"tests skip only when the real channel data is unreachable, so the "
+        f"junction is present but its target is empty or wrong — every ticket "
+        f"tonight would be gated against a suite that measured a fraction of "
+        f"itself. Check {', '.join(str(p) for p in config.paths.recordings)}, "
+        f"then rebuild the fixture with `python -m orchestrator.make_fixture`."
+    )

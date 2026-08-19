@@ -201,19 +201,34 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
   instead of `pytest.skip`, so removing the data would make a large part of the suite vacuously green
   rather than honestly skipped. **Fix the guards first, then drop the junction.** Do not do it in the
   other order.
-- [open] **The 88 `_channel_available()` guards still `print` and `return`.** A test that returns early
-  reports as *passed*. Raised 2026-08-17, still true, and now the one thing standing between this repo
-  and a fully isolated worktree.
+- [fixed] **The 88 `_channel_available()` guards now skip instead of returning.** A test that returned
+  early reported as *passed*, so absent data read as green rather than as skipped — and the
+  orchestrator gates every ticket on "no regressions against the baseline" with both sides measuring
+  the same vacuum. All 88 call sites across ten files now call `pytest.skip`. Three things had to move
+  with them: none of the ten files imported pytest; `Skipped` derives from `BaseException` rather than
+  `Exception`, so each file's standalone `_run_all` would have aborted on the first guarded test; and
+  that runner now prints its skip count rather than folding skips into the pass total.
+  `tests/test_channel_guards_are_honest.py` is the standing guarantee — a `return` is one careless
+  edit away from coming back and nothing else in the suite would notice. With the data present the
+  conversion is a no-op: 591 passed before, 632 after (591 + 41 new guard tests), 0 skipped.
 - [open] **`UI/window_matrix_panel.py` still leaks background `_worker` threads** that outlive their
   test and touch SQLite from the wrong thread. Raised 2026-08-18, unchanged.
-- [open] **The stall retry promises a clean worktree and does not provide one.** `RETRY_PREFIX` in
-  `agent.py` tells the agent "you are starting again from a clean worktree, so do not assume any of
-  its work exists", and `_run_agent_with_retry` hands it the same worktree it just stalled in. A
-  stalled agent has no *commits* by definition, but it can easily have left uncommitted files, so the
-  agent is being lied to about the state of its own tree. Pre-existing — the comment and the behaviour
-  have disagreed since the retry was written — and noticed while rewriting that method on 2026-08-19.
-  The fix is a `git reset --hard` plus `git clean -fd` before the retry, and it needs its own test,
-  so it was left rather than smuggled into unrelated work.
+- [fixed] **The stall retry now provides the clean worktree it promises.** `RETRY_PREFIX` told the
+  agent "you are starting again from a clean worktree, so do not assume any of its work exists" while
+  `_run_agent_with_retry` handed it the same half-edited tree the previous attempt stalled in.
+
+  Fixed by teardown-and-reprovision, **not** by the `git reset --hard` plus `git clean -fd` this entry
+  originally proposed. `clean` is a recursive delete aimed at a tree containing a junction to 317 MB of
+  shared recording data. It is safe today only because `DATA/*` is gitignored and `clean` without `-x`
+  honours that — a one-line dependency, in a repo that has already had a near-miss where a recursive
+  walk followed exactly that junction and would have deleted its target. `teardown()` is the code that
+  already knows to unlink junctions before anything recursive runs, so the fix reuses it rather than
+  opening a second route to the same cliff.
+
+  Safe only because a stall means zero commits by construction: `classify_exit` grades a timeout that
+  *did* produce commits as `ok` and sends it to the gates, precisely so the run loop never discards
+  work. That precondition is asserted rather than assumed — with commits present
+  `_reprovision_for_retry` refuses and leaves the worktree alone.
 - [watch] **`agent.output_format = "stream-json"` has not met the real CLI.** The parsers degrade
   deliberately — an unrecognised schema yields "no usage recorded" and returns the transcript
   untouched, so the worst case is the cost column staying empty. But the first real run should be
