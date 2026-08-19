@@ -301,19 +301,19 @@ def test_the_app_module_imports_cleanly_with_no_database_and_no_channel_data(tmp
     import-time crash."""
     import subprocess
 
-    probe = tmp_path / "probe.py"
-    probe.write_text(
-        "import UI.app\n"
-        "assert callable(UI.app.create_app)\n"
-        "print('imported without building')\n",
-        encoding="utf-8",
-    )
+    # Run from an empty directory, not the repo root. `schema.DB_PATH` is the
+    # relative `DATA/db/annotations.sqlite` and resolves against cwd, so a cwd
+    # with no `DATA/` is a process with no database and no channel files —
+    # which is precisely the worktree the orchestrator used to have to junction
+    # 317 MB into. `PYTHONPATH` is what makes `UI` importable from there.
     result = subprocess.run(
-        [sys.executable, str(probe)],
-        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300,
-        env={**os.environ, "MYCELIUM_DB_PATH": str(tmp_path / "absent.sqlite")},
+        [sys.executable, "-c",
+         "import UI.app; assert callable(UI.app.create_app); print('ok')"],
+        cwd=str(tmp_path), capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
     )
     assert result.returncode == 0, (
         f"importing UI.app has side effects that need real data:\n"
         f"{result.stdout}\n{result.stderr}"
     )
+    assert "ok" in result.stdout
