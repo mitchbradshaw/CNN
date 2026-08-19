@@ -206,6 +206,14 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
   and a fully isolated worktree.
 - [open] **`UI/window_matrix_panel.py` still leaks background `_worker` threads** that outlive their
   test and touch SQLite from the wrong thread. Raised 2026-08-18, unchanged.
+- [open] **The stall retry promises a clean worktree and does not provide one.** `RETRY_PREFIX` in
+  `agent.py` tells the agent "you are starting again from a clean worktree, so do not assume any of
+  its work exists", and `_run_agent_with_retry` hands it the same worktree it just stalled in. A
+  stalled agent has no *commits* by definition, but it can easily have left uncommitted files, so the
+  agent is being lied to about the state of its own tree. Pre-existing — the comment and the behaviour
+  have disagreed since the retry was written — and noticed while rewriting that method on 2026-08-19.
+  The fix is a `git reset --hard` plus `git clean -fd` before the retry, and it needs its own test,
+  so it was left rather than smuggled into unrelated work.
 - [watch] **`agent.output_format = "stream-json"` has not met the real CLI.** The parsers degrade
   deliberately — an unrecognised schema yields "no usage recorded" and returns the transcript
   untouched, so the worst case is the cost column staying empty. But the first real run should be

@@ -17,7 +17,7 @@ import json
 import re
 import subprocess
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -334,24 +334,14 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
 
     try:
         if not watch_for_stall:
-            completed = subprocess.run(
-                argv, cwd=str(Path(cwd)), capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=budget_minutes * 60,
-            )
-            exit_code = completed.returncode
-            transcript = completed.stdout + completed.stderr
+            exit_code, transcript, timed_out = _run_to_file(
+                argv, cwd=cwd, budget_minutes=budget_minutes)
         else:
             exit_code, transcript, timed_out, stalled_without_commit = _run_watched(
                 argv, cwd=cwd, budget_minutes=budget_minutes,
                 stall_minutes=stall_minutes, commit_count=commit_count,
                 poll_seconds=poll_seconds,
             )
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        exit_code = 124
-        transcript = _decode(exc.stdout) + _decode(exc.stderr)
-        transcript += (f"\n[orchestrator] agent exceeded its {budget_minutes:g} minute "
-                       f"budget and was killed\n")
     except OSError as exc:
         exit_code = 127
         transcript = f"[orchestrator] agent could not be launched: {exc}\n"
@@ -378,6 +368,43 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
                 result.raw, encoding="utf-8")
 
     return result
+
+
+def _run_to_file(argv, *, cwd, budget_minutes: float):
+    """The unwatched path: no stall detection, but the transcript survives a kill.
+
+    This used to be `subprocess.run(capture_output=True, timeout=...)`, which on
+    Windows returns *no stdout at all* on `TimeoutExpired` — recorded as `[open]`
+    in FOLLOWUPS.md after T35's 69-byte transcript, and never fixed for the
+    review and fix agents because only the watched path was rewritten. A review
+    that hangs burns its full 30 minutes and used to leave nothing to read.
+
+    Output goes to a file rather than a pipe for the same reason it does in
+    `_run_watched`: a process that fills a pipe buffer nobody is draining
+    deadlocks.
+    """
+    import tempfile
+
+    timed_out = False
+    with tempfile.TemporaryDirectory() as scratch:
+        sink_path = Path(scratch) / "transcript"
+        with open(sink_path, "w+b") as sink:
+            process = subprocess.Popen(
+                argv, cwd=str(Path(cwd)), stdout=sink, stderr=subprocess.STDOUT,
+            )
+            try:
+                exit_code = process.wait(timeout=budget_minutes * 60)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                exit_code = 124
+                process.kill()
+                process.wait()
+        transcript = sink_path.read_bytes().decode("utf-8", "replace")
+
+    if timed_out:
+        transcript += (f"\n[orchestrator] agent exceeded its {budget_minutes:g} minute "
+                       f"budget and was killed\n")
+    return exit_code, transcript, timed_out
 
 
 def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
@@ -447,14 +474,6 @@ def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
         exit_code = process.returncode
 
     return exit_code, transcript, timed_out, stalled
-
-
-def _decode(stream) -> str:
-    if stream is None:
-        return ""
-    if isinstance(stream, bytes):
-        return stream.decode("utf-8", "replace")
-    return stream
 
 
 def looks_like_rate_limiting(result: AgentResult, commits_made: int,

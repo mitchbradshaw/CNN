@@ -196,3 +196,38 @@ def test_a_reset_delay_is_never_negative_or_absurd():
     delay = parse_reset_delay_seconds("resets 12:00am", now=datetime(2026, 8, 19, 23, 59))
 
     assert 0 < delay <= 24 * 3600
+
+
+# ── a killed agent still leaves something to read ────────────────────────────
+#
+# `subprocess.run(capture_output=True, timeout=...)` returns no stdout at all on
+# Windows when the timeout fires. That is why T35's transcript was 69 bytes and
+# its diagnosis took a branch inspection rather than a log read. The *watched*
+# path was rewritten to use a file sink; the unwatched one — which is what the
+# review and fix agents use — was left, so a reviewer that hung burned its full
+# thirty minutes and left nothing behind.
+
+def test_a_killed_unwatched_agent_keeps_what_it_printed(tmp_path):
+    """The review and fix agents take this path: no commits to watch, so no
+    stall detection, but the budget can still fire."""
+    import sys
+    import textwrap
+
+    from orchestrator.agent import run_agent
+
+    script = tmp_path / "chatty.py"
+    script.write_text(textwrap.dedent("""
+        import sys, time
+        print("I am about to hang", flush=True)
+        time.sleep(60)
+    """), encoding="utf-8")
+
+    result = run_agent([sys.executable, str(script)], cwd=tmp_path, prompt="p",
+                       model="m", budget_minutes=1 / 60)   # 1 s
+
+    assert result.timed_out
+    assert "I am about to hang" in result.transcript, (
+        "output printed before the kill was lost — the defect FOLLOWUPS.md "
+        "records as [open]"
+    )
+    assert "exceeded its" in result.transcript, "the kill must say so in the log"
