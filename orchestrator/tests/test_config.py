@@ -14,8 +14,11 @@ SHIPPED = REPO_ROOT / "orchestrator" / "config.toml"
 def test_the_shipped_config_loads(tmp_path):
     config = load_config(SHIPPED, repo_root=REPO_ROOT)
 
-    assert config.ceilings.concurrent == 3
-    assert config.ceilings.opus == 2
+    # Two, not three. The binding cap is tokens per rolling usage window, so
+    # concurrency buys speed and not budget — see the ceilings note in
+    # config.toml and `test_the_shipped_config_spreads_the_burn_rather_than_bursting_it`.
+    assert config.ceilings.concurrent == 2
+    assert config.ceilings.opus == 1
     assert config.budget_minutes("S") == 30
     assert config.budget_minutes("M") == 60
     assert config.budget_minutes("L") == 120
@@ -98,7 +101,11 @@ def test_config_hash_is_stable_and_content_sensitive(tmp_path):
     a = tmp_path / "a.toml"
     b = tmp_path / "b.toml"
     a.write_text(SHIPPED.read_text(encoding="utf-8"), encoding="utf-8")
-    b.write_text(SHIPPED.read_text(encoding="utf-8").replace("concurrent = 3", "concurrent = 4"),
+    # Appended rather than substituted: a test that edits a literal silently
+    # stops testing anything the day that literal changes, which is exactly what
+    # happened when `concurrent` moved from 3 to 2 and both files kept hashing
+    # the same.
+    b.write_text(SHIPPED.read_text(encoding="utf-8") + "\n# a change\n",
                  encoding="utf-8")
 
     first = load_config(a, repo_root=REPO_ROOT)

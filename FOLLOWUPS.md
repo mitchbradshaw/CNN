@@ -115,6 +115,103 @@ baseline was empty, the circuit breaker never tripped, and no agent stalled. Two
   was held or blocked — 44 tickets were simply never dispatched. A run started after 07:00 gets the
   next day's stop and a ~20h window.
 
+## Harness — 2026-08-19 (post-run-20260818-1114, written late)
+
+**Written retrospectively on 2026-08-19.** This run and the one after it were never written up at the
+time, which is itself the finding: the improvement loop was a habit rather than a mechanism, and it
+lapsed precisely on the two worst nights. `append_run_postmortem` now writes a stub for every run, so
+a missing post-mortem is visible instead of silent.
+
+Three losses, one merge (T28).
+
+- [fixed] **The red-proof gate ran in a dirty worktree.** T14 and T17 both wrote genuinely failing
+  first commits and both were graded "the first commit's test passed on arrival". The gate checked out
+  the test-only commit without cleaning the tree first, so the implementation from the agent's later
+  commits was still on disk and the tests passed against it. Fixed in `d8be32f`. T17 was subsequently
+  worked by hand and landed; T14 is still open and was innocent.
+- [open] **T08 is the only genuine ticket failure in the run** — red suite at exit, nine failing tests
+  in `tests/test_execution.py`. Not a harness fault. Still to be re-dispatched.
+- [note] **T08's transcript is the usage-cap message**, not a work log: `You're out of extra usage ·
+  resets 3:15pm`. The suite failure above is real, but the agent was also working against a closing
+  window. Worth re-running before concluding anything about the ticket.
+
+## Harness — 2026-08-19 (post-run-20260818-2244, written late)
+
+**Four dispatched, zero merged, breaker tripped, night over at 23:00.** Every one of the four agents
+printed `You're out of extra usage · resets 3:30am` and did nothing else. This is the run that
+motivated the 2026-08-19 harness work below.
+
+- [fixed] **An infrastructure failure quarantined the ticket.** `b051595` had already added
+  `out of extra usage` to `INFRASTRUCTURE_MARKERS`, so the *classification* was right — but
+  `runloop._run_agent_with_retry` quarantined on an `infrastructure` verdict immediately, with no
+  retry, counted it at full weight against the circuit breaker, and set every dependent to
+  `BLOCKED_UPSTREAM`. `ORCHESTRATOR_SPEC.md` has said "backoff, up to 3 retries, does not count
+  against the ticket" since the design was settled; that policy existed only for `provision()`. The
+  fix was one commit away for four days and the label change hid it.
+- [fixed] **Fifteen-minute backoff against an hours-long window.** `rate_limit.max_backoff_seconds =
+  900`. The transcript states its own reset time and nothing read it.
+- [fixed] **A tripped run cannot be resumed.** `--resume` re-enters `Runner.run`, which breaks out
+  immediately on `circuit_breaker.tripped`, and `reconcile` only touches `IN_FLIGHT` records — so the
+  four `FAILED` tickets stayed failed and their dependents stayed blocked. There was no way to pick
+  the night back up.
+
+## Harness — 2026-08-19 (the usage-resilience work)
+
+Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator suite 273 passing with
+4 failures before, 316 passing with 0 after.
+
+- [fixed] **Infrastructure failures now defer rather than quarantine.** New `DEFERRED` status: no
+  circuit-breaker weight, no `BLOCKED_UPSTREAM` for dependents, empty ticket branch deleted so the next
+  dispatch can provision. Terminal for the night, re-queued at the top of the next pass, which is what
+  makes `--resume` worth running once the window reopens.
+- [fixed] **The runner reads the reset time out of the transcript** (`resets 3:30am`) and pauses the
+  whole fleet until then, bounded by `rate_limit.max_usage_wait_seconds` (6h). The blind exponential
+  backoff stays bounded low and is used only when nothing named a time.
+- [fixed] **Token and cost accounting exists.** `agent.output_format = "stream-json"` gives a per-agent
+  usage record; `REPORT.md` gains `tokens` and `cost` columns and a run total that separates spend on
+  work that landed from spend on work that did not. This implements a spec requirement
+  (`ORCHESTRATOR_SPEC.md` §REPORT.md) that five runs shipped without — every model-tier decision in
+  `config.toml` up to now was taken against no measurement. `transcript-N.log` stays prose
+  (reconstructed from the stream, so the review gate still finds its findings block) and the raw
+  stream is kept beside it as `transcript-N.jsonl`.
+- [fixed] **`ceilings.concurrent` 3 → 2.** Concurrency does not reduce token spend, it concentrates
+  it: three agents for an hour and one for three hours cost the same, but only the first shape
+  overruns a usage window and takes everything in flight with it. Projected drain at ceiling 2 is 19h
+  against a ~20h dispatch window.
+- [fixed] **The Opus sub-ceiling counted declared tiers, not effective ones.** With
+  `models.model_cap = "sonnet"` no ticket spends an Opus token, yet 19 of the 41 remaining tickets
+  were still queuing behind an Opus limit — serialisation with no saving. It now counts the tier a
+  ticket will actually launch on. This alone was worth 1.5h of drain.
+- [fixed] **`UI/app.py` no longer builds the application at import.** The servable call moved to a new
+  `UI/serve.py`; `panel serve UI/serve.py` is the documented command now. This is the defect first
+  raised on 2026-08-16 and re-raised as a blocker on 2026-08-17 — root cause of run 1's cascade, of
+  the vacuous "505 passed" in run-20260817-1157, and the sole reason 317 MB of real recordings are
+  junctioned into every worktree.
+- [fixed] **`Ceilings` was declared twice** — once in `config.py`, once in `scheduler.py`. The runtime
+  passed the config one to `schedule()` while the tests exercised the scheduler one, so a field added
+  to either was invisible through the other. Now one definition, re-exported.
+- [fixed] **Four orchestrator tests were pinned to a world where T04 was still an open human gate.**
+  They had been failing since T04 was flagged `done` and were failing on arrival at this work — a red
+  harness suite is exactly what stops anyone trusting the harness. Rewritten to derive from the
+  backlog rather than hardcode a snapshot.
+- [open] **The junction may now be droppable.** `paths.recordings` exists only because `import UI.app`
+  used to need real data. It no longer does, and `test_the_app_module_imports_cleanly_with_no_database
+  _and_no_channel_data` proves it. Dropping it would close the writable-recordings isolation tradeoff
+  in `ORCHESTRATOR_SPEC.md §Isolation` — but the 88 `_channel_available()` guards still `return`
+  instead of `pytest.skip`, so removing the data would make a large part of the suite vacuously green
+  rather than honestly skipped. **Fix the guards first, then drop the junction.** Do not do it in the
+  other order.
+- [open] **The 88 `_channel_available()` guards still `print` and `return`.** A test that returns early
+  reports as *passed*. Raised 2026-08-17, still true, and now the one thing standing between this repo
+  and a fully isolated worktree.
+- [open] **`UI/window_matrix_panel.py` still leaks background `_worker` threads** that outlive their
+  test and touch SQLite from the wrong thread. Raised 2026-08-18, unchanged.
+- [watch] **`agent.output_format = "stream-json"` has not met the real CLI.** The parsers degrade
+  deliberately — an unrecognised schema yields "no usage recorded" and returns the transcript
+  untouched, so the worst case is the cost column staying empty. But the first real run should be
+  checked for a populated `tokens` column before trusting the numbers.
+
+
 ## T01 — 2026-08-17 13:09
 
 - [major] [standards] (rule 6.4) Seven near-identical to_path/from_path bodies and five __eq__ bodies duplicate the same shape across Working/types/*.py

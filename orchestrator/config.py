@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
+#: One definition, re-exported. `Ceilings` used to be declared here *and* in
+#: scheduler.py; the runtime passed this one to `schedule()` while the tests
+#: exercised that one, so a field added to either was invisible to the other.
+from .scheduler import Ceilings  # noqa: F401 — re-exported for callers
+
 REQUIRED_SECTIONS = (
     "run", "ceilings", "budgets", "models", "paths",
     "agent", "suite", "retries", "review", "overlap", "circuit_breaker",
@@ -28,12 +33,6 @@ TIER_ORDER: tuple[str, ...] = ("haiku", "sonnet", "opus")
 
 class ConfigError(Exception):
     """`config.toml` is missing, malformed, or internally inconsistent."""
-
-
-@dataclass(frozen=True)
-class Ceilings:
-    concurrent: int
-    opus: int
 
 
 @dataclass(frozen=True)
@@ -55,6 +54,13 @@ class AgentConfig:
     extra_args: tuple[str, ...]
     stall_minutes: int
     launch_stagger_seconds: float = 0.0
+    #: `text` keeps the old behaviour and reports no cost. `stream-json` is what
+    #: buys the `tokens` column the spec has always asked for, and it survives a
+    #: kill: one JSON line per turn means a killed agent still leaves a
+    #: transcript, where `json` leaves an empty file.
+    output_format: str = "stream-json"
+    #: A hard per-agent ceiling the CLI enforces on itself. 0 disables it.
+    max_budget_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -99,6 +105,13 @@ class RateLimitConfig:
     fast_exit_seconds: int
     initial_backoff_seconds: int
     max_backoff_seconds: int
+    #: The ceiling on a wait the *transcript asked for*, as opposed to one this
+    #: module guessed at. `max_backoff_seconds` bounds the blind exponential
+    #: backoff and stays small; a plan usage cap names its own reset time and
+    #: that reset is hours away, so honouring it needs its own, larger bound.
+    max_usage_wait_seconds: int = 6 * 3600
+    #: Waking at the exact second the window is said to reopen races the reset.
+    usage_reset_grace_seconds: int = 120
 
 
 @dataclass(frozen=True)
@@ -230,6 +243,9 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
         ceilings=Ceilings(
             concurrent=int(_require(data, "ceilings", "concurrent", path)),
             opus=int(_require(data, "ceilings", "opus", path)),
+            # So the opus sub-ceiling throttles opus spend rather than opus
+            # *labels*: under a cap these tickets never launch on opus.
+            capped_tier=models_raw.get("model_cap"),
         ),
         budgets=budgets,
         models=models_raw,
@@ -239,6 +255,11 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             extra_args=tuple(data["agent"].get("extra_args", [])),
             stall_minutes=int(_require(data, "agent", "stall_minutes", path)),
             launch_stagger_seconds=float(data["agent"].get("launch_stagger_seconds", 0.0)),
+            # Defaulted rather than required: these keys arrived after five runs
+            # had already been recorded, and `--resume` must still be able to
+            # read the config those runs started under.
+            output_format=str(data["agent"].get("output_format", "stream-json")),
+            max_budget_usd=float(data["agent"].get("max_budget_usd", 0.0) or 0.0),
         ),
         suite=SuiteConfig(
             command=tuple(_require(data, "suite", "command", path)),
@@ -275,5 +296,9 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             initial_backoff_seconds=int(
                 _require(data, "rate_limit", "initial_backoff_seconds", path)),
             max_backoff_seconds=int(_require(data, "rate_limit", "max_backoff_seconds", path)),
+            max_usage_wait_seconds=int(
+                data["rate_limit"].get("max_usage_wait_seconds", 6 * 3600)),
+            usage_reset_grace_seconds=int(
+                data["rate_limit"].get("usage_reset_grace_seconds", 120)),
         ),
     )

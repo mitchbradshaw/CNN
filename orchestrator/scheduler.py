@@ -26,12 +26,32 @@ from . import status as st
 from .backlog import Backlog
 
 
+#: Cheapest first. Mirrors `config.TIER_ORDER`, duplicated rather than imported
+#: to keep this module free of the config loader — the scheduler is a pure
+#: function and importing config would drag a file reader into it.
+TIER_ORDER: tuple[str, ...] = ("haiku", "sonnet", "opus")
+
+
 @dataclass(frozen=True)
 class Ceilings:
     """Concurrency limits. Configuration, not constants — see config.toml."""
 
     concurrent: int = 3
     opus: int = 2
+    #: `models.model_cap`, if one is set. The opus sub-ceiling exists to bound
+    #: opus *spend*, so it has to count the tier a ticket will actually launch
+    #: on rather than the tier its front-matter declares. Under
+    #: `model_cap = "sonnet"` every opus ticket runs as sonnet and costs no opus
+    #: tokens, and throttling those tickets buys nothing while serialising 19 of
+    #: the 41 remaining — which is how a 13-hour drain became a 20-hour one.
+    capped_tier: str | None = None
+
+    def effective_model(self, declared: str) -> str:
+        """The tier a ticket will really run on, after `model_cap`."""
+        if (self.capped_tier in TIER_ORDER and declared in TIER_ORDER
+                and TIER_ORDER.index(declared) > TIER_ORDER.index(self.capped_tier)):
+            return self.capped_tier
+        return declared
 
 
 @dataclass(frozen=True)
@@ -77,7 +97,8 @@ def schedule(backlog: Backlog, states: Mapping[int, str], ceilings: Ceilings) ->
             states[ticket.id] = st.LANDED
 
     in_flight = [i for i, s in states.items() if s in st.IN_FLIGHT]
-    opus_in_flight = sum(1 for i in in_flight if backlog[i].model == "opus")
+    opus_in_flight = sum(1 for i in in_flight
+                         if ceilings.effective_model(backlog[i].model) == "opus")
     solo_in_flight = any(backlog[i].solo for i in in_flight)
 
     candidates: list[int] = []
@@ -147,13 +168,14 @@ def schedule(backlog: Backlog, states: Mapping[int, str], ceilings: Ceilings) ->
         if slots <= 0:
             holds[ticket_id] = Hold("ceiling", f"global ceiling {ceilings.concurrent}")
             continue
-        if ticket.model == "opus" and opus_slots <= 0:
+        effective_model = ceilings.effective_model(ticket.model)
+        if effective_model == "opus" and opus_slots <= 0:
             holds[ticket_id] = Hold("opus-ceiling", f"opus ceiling {ceilings.opus}")
             continue
 
         dispatch.append(ticket_id)
         slots -= 1
-        if ticket.model == "opus":
+        if effective_model == "opus":
             opus_slots -= 1
 
     return Decision(dispatch=tuple(dispatch), holds=holds)

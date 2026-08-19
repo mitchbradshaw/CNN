@@ -178,23 +178,50 @@ def test_every_live_ticket_is_either_dispatched_or_explained(real, config):
     # was flagged `done`.
 
 
-def test_the_real_backlog_stalls_against_ticket_04(real, config):
+def test_a_human_gate_holds_itself_and_everything_downstream_of_it(real, config):
+    """Was `test_the_real_backlog_stalls_against_ticket_04`, pinned to T04
+    holding exactly 20 tickets. T04 was worked by hand and flagged `done` on
+    2026-08-19, which released all twenty and left the assertion asserting
+    nothing — it failed with a KeyError rather than a diagnosis.
+
+    The property is about the planner, not about which ticket happens to be the
+    bottleneck this week: every remaining human gate must appear as one, and
+    anything genuinely downstream of one must be explained rather than silently
+    dropped."""
     plan = simulate(real, config, ceilings=config.ceilings)
 
-    assert plan.not_dispatched[4].reason == "human-gate"
+    gates = [t.id for t in real if t.human_gate and not t.done]
+    assert gates, "the backlog has no human gates left — delete this test"
+    for gate in gates:
+        assert plan.not_dispatched[gate].reason == "human-gate"
+
     downstream = [i for i, n in plan.not_dispatched.items()
-                  if n.reason == "blocked-downstream" and 4 in n.roots]
-    assert len(downstream) == 20
+                  if n.reason == "blocked-downstream"]
+    for ticket_id in downstream:
+        roots = set(plan.not_dispatched[ticket_id].roots)
+        assert roots, f"T{ticket_id:02d} held downstream of nothing"
 
 
-def test_projected_drain_is_about_six_hours(real, config):
-    """Was "about ten hours" until T17 landed. T17 was the backlog's only
-    `solo` ticket — nothing else dispatches while a solo ticket is draining
-    the field — so finishing it removed the single biggest serialization
-    bottleneck in the DAG, not just 60 minutes of work."""
+def test_the_projected_drain_fits_inside_one_night(real, config):
+    """The assertion that matters is not a number of hours, it is whether the
+    plan fits the dispatch window it will actually be run in.
+
+    Pinning "about six hours" made this test a tripwire for every deliberate
+    change: it broke when T04 landed and released twenty tickets, and again when
+    `ceilings.concurrent` dropped from 3 to 2. Both were intended, and neither
+    was what the test was for.
+
+    A run started after `wall_clock_stop` gets the next day's stop and roughly a
+    twenty-hour window. If the drain no longer fits, that is a real signal —
+    raise the ceiling, or accept that the backlog now needs two nights and a
+    `--resume`."""
     plan = simulate(real, config, ceilings=config.ceilings)
 
-    assert 5 * 60 <= plan.drain_minutes <= 8 * 60, plan.drain_minutes
+    assert plan.drain_minutes > 0
+    assert plan.drain_minutes <= 20 * 60, (
+        f"projected drain {plan.drain_minutes / 60:.1f}h exceeds a night; the "
+        f"backlog now needs two passes at ceiling {config.ceilings.concurrent}"
+    )
 
 
 def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
@@ -206,7 +233,10 @@ def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
     dispatched = sum(len(w.tickets) for w in plan.waves)
 
     assert text.startswith("RUN PLAN")
-    assert "ceiling 3, opus 2" in text
+    # Derived from the config, not pinned: the ceilings are tuning knobs and a
+    # test that hardcodes them fails on every deliberate adjustment.
+    assert (f"ceiling {config.ceilings.concurrent}, opus {config.ceilings.opus}"
+            in text)
     assert "wave 1" in text and "t+0h00" in text
     # Derived, not hardcoded: which ticket leads wave 1 changes as tickets land.
     assert f"T{first.id:02d} {first.model}" in text
@@ -226,9 +256,10 @@ def test_the_rendered_plan_carries_what_the_spec_illustrates(real, config):
     assert "projected drain" in text
     assert f"{dispatched} tickets autonomous · {len(plan.not_dispatched)} held" in text
     assert "NOT DISPATCHED" in text
-    assert "T04  human-gate" in text
-    assert "T49  human-gate" in text
-    assert "20 further tickets held downstream of T04" in text
+    # Derived: T04 was hand-worked and flagged `done`, so it no longer appears
+    # here at all. Whatever gates remain must be named.
+    for gate in (t for t in real if t.human_gate and not t.done):
+        assert f"T{gate.id:02d}  human-gate" in text
 
 
 def test_the_plan_never_violates_a_scheduler_invariant(real, config):

@@ -638,8 +638,11 @@ def test_a_deferred_ticket_does_not_block_its_dependents(world, monkeypatch):
     runner.run()
 
     assert runner.state.tickets["1"].status == DEFERRED
-    assert runner.state.tickets["2"].status != BLOCKED_UPSTREAM
-    assert runner.state.tickets["2"].status in (PENDING, READY, DEFERRED)
+    # Read through `statuses`, not `tickets`: records are created lazily, and a
+    # dependent with no record at all is the strongest form of "nothing was
+    # decided about it" — which is the property under test.
+    assert runner.state.statuses([2])[2] != BLOCKED_UPSTREAM
+    assert runner.state.statuses([2])[2] in (PENDING, READY, DEFERRED)
 
 
 def test_infrastructure_failures_never_trip_the_circuit_breaker(world, monkeypatch):
