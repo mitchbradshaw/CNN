@@ -72,6 +72,27 @@ the recursive delete runs, because a junction sits several levels down and a sca
 immediate children does not see it. Widening `recordings` re-opens this decision and should be argued
 again, not inherited.
 
+**Re-examined and confirmed, 2026-08-19.** Removing the import-time `create_app()` from `UI/app.py`
+meant a worktree no longer needs recording data merely to *import* the application, which appeared to
+make the junction droppable. Measured in real provisioned worktrees, it is not: without it the suite
+scores 544 passed / 88 skipped, and those 88 are 100% of the coverage in eight of their ten files and
+seven of the eight tests in `test_execution.py` — the module five remaining tickets touch. Dropping it
+would exchange this bounded, recorded tradeoff for a silent one in the suite gate.
+
+What changed instead is that the dependency stopped being implicit. The 88 `_channel_available()`
+guards now `pytest.skip` rather than `return`, so a junction whose target is empty produces visible
+skips instead of silent passes — the failure that let `run-20260817-1157` merge T01 on a gate that had
+executed zero tests. `capture_baseline` reads that signal and refuses to start when `recordings` is
+configured and the baseline skipped more than 5% of the suite. A worktree with the junction now scores
+632 passed / 0 skipped, identical to the main repo, which is what makes a baseline measured in one a
+faithful measure of the other.
+
+**Any recursive delete aimed at a worktree must be junction-aware.** `teardown()` is the only code
+that should ever do it. In particular `git clean -fd` is *not* a safe substitute — it happens to spare
+the junction only because `DATA/*` is gitignored and `clean` honours ignore rules without `-x`, which
+is a one-line dependency guarding 317 MB. The stall retry re-provisions through `teardown()` and
+`provision()` for exactly this reason.
+
 `SESSION_STATE_PATH` resolves relative to cwd, so per-worktree UI session state isolates correctly
 provided each agent's cwd is its own worktree.
 

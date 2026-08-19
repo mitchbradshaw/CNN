@@ -73,10 +73,14 @@ Four things, in order.
    **The import-time construction was removed on 2026-08-19** — the servable call moved to
    `UI/serve.py`, and `import UI.app` now defines the factory without calling it. That closes the
    *collection-failure* half of this story but not the fixture obligation: tests still read the
-   database, and a fixture that has drifted from `schema.py` still fails them honestly. It also means
-   `paths.recordings` may now be droppable, which would close the writable-recordings isolation
-   tradeoff — but not before the 88 `_channel_available()` guards are changed from `return` to
-   `pytest.skip`, or removing the data would simply make that part of the suite vacuously green.
+   database, and a fixture that has drifted from `schema.py` still fails them honestly.
+
+   It also removed an alarm. A junction that was present but pointing at an *empty* directory used to
+   be caught because `import UI.app` crashed at collection; now the import succeeds. The replacement
+   is two-part: the 88 `_channel_available()` guards became real `pytest.skip` calls, so absent data
+   shows up as skips rather than silent passes, and `capture_baseline` refuses to start when
+   `paths.recordings` is configured but the baseline skipped more than 5% of the suite. The junction
+   itself is kept — see `FOLLOWUPS.md` for the measurement that settled it.
 4. **Measure the suite.** `pytest -q --durations=15`, twice — the first run pays the import cost for
    torch/kymatio/aeon. Under ~2 min the design holds as written; 2–8 min holds with a lower ceiling;
    over ~15 min the merge gate becomes the bottleneck and the policy needs revisiting.

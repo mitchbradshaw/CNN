@@ -194,13 +194,34 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
   They had been failing since T04 was flagged `done` and were failing on arrival at this work — a red
   harness suite is exactly what stops anyone trusting the harness. Rewritten to derive from the
   backlog rather than hardcode a snapshot.
-- [open] **The junction may now be droppable.** `paths.recordings` exists only because `import UI.app`
-  used to need real data. It no longer does, and `test_the_app_module_imports_cleanly_with_no_database
-  _and_no_channel_data` proves it. Dropping it would close the writable-recordings isolation tradeoff
-  in `ORCHESTRATOR_SPEC.md §Isolation` — but the 88 `_channel_available()` guards still `return`
-  instead of `pytest.skip`, so removing the data would make a large part of the suite vacuously green
-  rather than honestly skipped. **Fix the guards first, then drop the junction.** Do not do it in the
-  other order.
+- [decided: keep] **The junction stays, and it is now a declared dependency rather than a secret.**
+  The earlier entry here said `paths.recordings` "may now be droppable" once the guards were fixed,
+  and recommended dropping it. Measured in real provisioned worktrees, that recommendation was wrong.
+
+  |                       | passed | skipped | failed | errors |
+  |---|---|---|---|---|
+  | with the junction     | 632    | 0       | 0      | 0      |
+  | without the junction  | 544    | 88      | 0      | 0      |
+
+  Dropping it is *safe* — nothing errors, every guarded test skips cleanly. It is the distribution
+  that rules it out. Those 88 tests are **100% of the coverage in eight of their ten files**
+  (`test_ui_selection`, `test_session_persistence`, `test_encoding_view`, `test_run_panel`,
+  `test_filters`, `test_ribbon_panes`, `test_shortcuts_and_view_controls`,
+  `test_run_panel_matrix_profile`), and **seven of the eight tests in `test_execution.py`** — the
+  module T03, T08, T14, T15 and T24 all touch, with T14 and T15 flagged HIGH merge risk against each
+  other. Dropping the junction would trade a recorded, bounded isolation tradeoff (agents can write to
+  regenerable derived data on a held-out-safe recording) for a silent, unbounded one: five remaining
+  tickets gated on an execution engine with a single test.
+
+  The guard fix is what actually removed the danger. The junction was hazardous *because the guards
+  lied*: a broken junction meant 88 silent passes and a gate reporting green on nothing, which is how
+  T01 merged in run-20260817-1157. Now a broken junction is 88 visible skips, and
+  `_refuse_a_baseline_that_skipped_the_data_it_junctioned` stops the run rather than letting it
+  proceed on half a suite.
+
+  Revisit only if the remaining backlog stops touching `Working/execution.py` and `UI/viewer/`, or if
+  an agent actually damages the junctioned data. Reversing is one line in `config.toml`, and the
+  baseline check already handles both configurations.
 - [fixed] **The 88 `_channel_available()` guards now skip instead of returning.** A test that returned
   early reported as *passed*, so absent data read as green rather than as skipped — and the
   orchestrator gates every ticket on "no regressions against the baseline" with both sides measuring

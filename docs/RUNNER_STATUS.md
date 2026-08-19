@@ -93,11 +93,14 @@ cost tokens and did not land, and the diagnosis line is deliberately left empty 
 
 ## Known open items
 
-- **The 88 `_channel_available()` guards `print` and `return` rather than skip.** A test that returns
-  early reports as *passed*. This is now the single highest-value open item: it is the only thing
-  standing between this repo and dropping `paths.recordings` entirely, which would close the
-  writable-recordings isolation tradeoff. **Fix the guards first, then drop the junction** — the other
-  order makes a large part of the suite vacuously green.
+- **The channel guards and the junction are settled — do not re-open them casually.** All 88
+  `_channel_available()` guards now `pytest.skip` instead of returning, so absent data reads as
+  skipped rather than as green. `paths.recordings` is **kept**: measured in real worktrees, those 88
+  tests are 100% of the coverage in eight of their ten files and seven of the eight in
+  `test_execution.py`, which five remaining tickets touch. A worktree with the junction now scores
+  632 passed / 0 skipped — an exact match for the main repo — and `capture_baseline` refuses to start
+  if `recordings` is configured but the baseline skipped more than 5% of the suite. Full reasoning and
+  the measurement table are in `FOLLOWUPS.md`.
 - **`UI/window_matrix_panel.py` leaks background `_worker` threads** that outlive their test and touch
   SQLite from the wrong thread. Passes 20/20 in isolation, fails inside the full suite. Needs a ticket.
 - **`agent.output_format = "stream-json"` has not met the real CLI.** The parsers degrade safely — an
