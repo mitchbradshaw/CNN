@@ -72,6 +72,27 @@ the recursive delete runs, because a junction sits several levels down and a sca
 immediate children does not see it. Widening `recordings` re-opens this decision and should be argued
 again, not inherited.
 
+**Re-examined and confirmed, 2026-08-19.** Removing the import-time `create_app()` from `UI/app.py`
+meant a worktree no longer needs recording data merely to *import* the application, which appeared to
+make the junction droppable. Measured in real provisioned worktrees, it is not: without it the suite
+scores 544 passed / 88 skipped, and those 88 are 100% of the coverage in eight of their ten files and
+seven of the eight tests in `test_execution.py` — the module five remaining tickets touch. Dropping it
+would exchange this bounded, recorded tradeoff for a silent one in the suite gate.
+
+What changed instead is that the dependency stopped being implicit. The 88 `_channel_available()`
+guards now `pytest.skip` rather than `return`, so a junction whose target is empty produces visible
+skips instead of silent passes — the failure that let `run-20260817-1157` merge T01 on a gate that had
+executed zero tests. `capture_baseline` reads that signal and refuses to start when `recordings` is
+configured and the baseline skipped more than 5% of the suite. A worktree with the junction now scores
+632 passed / 0 skipped, identical to the main repo, which is what makes a baseline measured in one a
+faithful measure of the other.
+
+**Any recursive delete aimed at a worktree must be junction-aware.** `teardown()` is the only code
+that should ever do it. In particular `git clean -fd` is *not* a safe substitute — it happens to spare
+the junction only because `DATA/*` is gitignored and `clean` honours ignore rules without `-x`, which
+is a one-line dependency guarding 317 MB. The stall retry re-provisions through `teardown()` and
+`provision()` for exactly this reason.
+
 `SESSION_STATE_PATH` resolves relative to cwd, so per-worktree UI session state isolates correctly
 provided each agent's cwd is its own worktree.
 
@@ -121,11 +142,22 @@ throw the night away with one `git branch -D`.
    file split against four edits to the class it is dismantling) and `45 ↔ 46` (two exporters, same
    module, same level). The full list is in `docs/tickets/README.md`.
 3. **Solo.** Ticket 17 runs alone; nothing else is in flight while it does.
-4. **Ceilings.** Global 3 concurrent agents; Opus sub-ceiling 2.
+4. **Ceilings.** Global concurrent agents; Opus sub-ceiling. Both are in `config.toml` and both were
+   lowered on 2026-08-19 — see "Concurrency does not save budget" below. The Opus sub-ceiling counts
+   the tier a ticket will *actually launch on* after `models.model_cap`, not the tier its front-matter
+   declares: under `model_cap = "sonnet"` no ticket spends an Opus token, and throttling them bought
+   nothing while serialising 19 of the 41 remaining tickets.
 5. **Human gates.** Tickets flagged `human-gate` are never dispatched.
 
 The ceilings are configuration, not constants. The real limits are token throughput, the superlinear
 growth of conflict probability with in-flight branches, and morning review bandwidth — not CPU.
+
+**Concurrency does not save budget.** The cap that binds is tokens per rolling usage window. Three
+agents for an hour and one agent for three hours consume the same budget; the difference is that the
+first shape overruns a single window and takes every in-flight ticket down with it, while the second
+spreads across windows and survives. Since the dispatch window is roughly twenty hours and the
+projected drain is well under that, concurrency was buying speed nobody needed at the price of the
+only resource that was actually scarce. Raise it only when the drain stops fitting the night.
 
 ### Ordering when more tickets are ready than the ceiling allows
 
@@ -180,13 +212,23 @@ Four classes. They are handled differently because they are different events.
 
 | Class | Signature | Policy |
 |---|---|---|
-| **Infrastructure** | API error, rate limit, worktree creation failed, env broken | Exponential backoff, up to 3 retries. Does not count against the ticket. |
+| **Infrastructure** | API error, rate limit, plan usage cap, worktree creation failed, env broken | Back off, retry up to 3 times, **never quarantine**. Does not count against the ticket, does not weigh on the circuit breaker, does not hold dependents. If it still cannot run, the ticket is marked `DEFERRED` and picked up by the next `--resume`. Where the transcript names its own reset time (`resets 3:30am`), that is the wait, bounded by `rate_limit.max_usage_wait_seconds` — not the blind exponential backoff, which is bounded far lower. |
 | **Stall** | No tool call or no commit for N minutes, or the wall-clock budget exceeded | Kill. One retry from a clean worktree with the previous transcript tail injected. Then quarantine. |
 | **Red at exit** | Agent finished; suite is failing, or an existing test regressed | **The agent is never retried.** A second blind attempt at a ticket it believes it finished produces a second wrong answer and burns an hour. The *failing tests* are re-run once — see the flake amendment under gate 2 — and the ticket is quarantined unless they pass. |
 | **Review-rejected** | Tests green, review returned blockers | See below. |
 
 **Quarantine** means: branch preserved, not merged, ticket marked `FAILED`, everything blocked by it
 marked `BLOCKED-UPSTREAM` and never dispatched, run continues with the rest of the DAG.
+
+**Defer** is the deliberate opposite, and only an infrastructure failure produces it: ticket marked
+`DEFERRED`, no circuit-breaker weight, dependents untouched, and an empty ticket branch deleted so the
+next dispatch can provision. Nothing about the *work* was judged, so nothing downstream may be
+concluded from it. `DEFERRED` is terminal for the night that set it and pending again at the top of
+the next pass — which is what makes `--resume` worth running once a usage window reopens.
+
+This distinction was implemented for provisioning and not for the agent until 2026-08-19, and the gap
+cost a whole night: in `run-20260818-2244` four agents printed `You're out of extra usage`, all four
+were quarantined, the breaker tripped on the third, and the run ended having merged nothing.
 
 **Post-merge red** is distinct: the branch was green alone and red merged. Auto-revert the merge,
 quarantine the ticket, continue. The integration branch is never left red, because every subsequent
@@ -370,6 +412,7 @@ T17/
 ```
 
 **`REPORT.md`** is what you read at 8am. One row per ticket: id, model, status, wall-clock, tokens,
+cost,
 red-proof result, suite result, review blockers by axis, scope deviations, overlap flags, merge sha.
 You open a ticket directory only for the rows that are red.
 
@@ -471,7 +514,14 @@ ticket front-matter on every start. `state.json` holds only what is *mutable*, s
 
 **Status values.** `PENDING` → `READY` → `RUNNING` → `GATING` → `MERGING` → `MERGED`. Terminal
 alternatives: `FAILED` (quarantined), `BLOCKED_UPSTREAM` (a blocker was quarantined),
-`OVERLAP` (held by the overlap check), `HELD` (`human-gate`, never dispatched).
+`OVERLAP` (held by the overlap check), `HELD` (`human-gate`, never dispatched), `DEFERRED` (the
+environment could not run it; no verdict was reached, and the next pass re-queues it).
+
+Each record also carries `tokens` and `cost_usd` — what the ticket consumed across its agent, its
+review rounds and any auto-fix round — and `infrastructure_attempts`, counted apart from `attempts`
+because an environment failure is not an attempt at the work. `tokens` and `cost_usd` are `null` when
+nothing was measured; a missing measurement and a free ticket are opposite conclusions and must never
+render the same.
 
 `symbols` is the accumulated top-level function/class name → owning ticket index that the overlap
 check reads. It is rebuildable from git, but carrying it makes the check cheap.

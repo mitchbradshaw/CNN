@@ -28,6 +28,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -91,8 +93,8 @@ def _close(app, db_path, tmpdir, original_results_dir):
 
 def test_gather_display_data_does_not_raise_for_fresh_run():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, tmpdir, original_results_dir, recipe = _fresh_app_and_recipe()
     try:
         out = execute_recipe(recipe, db_path=db_path)
@@ -118,8 +120,8 @@ def test_gather_display_data_does_not_raise_for_fresh_run():
 
 def test_gather_display_data_reused_run_does_not_recompute():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, tmpdir, original_results_dir, recipe = _fresh_app_and_recipe()
     try:
         execute_recipe(recipe, db_path=db_path)
@@ -148,8 +150,8 @@ def test_on_run_finished_does_not_raise(monkeypatch=None):
     'generic_encoding' kind without touching the SAX-only encoding_section
     rendering."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, tmpdir, original_results_dir, recipe = _fresh_app_and_recipe()
     try:
         out = execute_recipe(recipe, db_path=db_path)
@@ -173,7 +175,7 @@ def test_on_run_finished_does_not_raise(monkeypatch=None):
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -182,10 +184,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

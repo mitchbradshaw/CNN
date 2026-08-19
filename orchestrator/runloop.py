@@ -13,6 +13,7 @@ so killing the orchestrator and restarting it resumes rather than restarts.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -20,7 +21,9 @@ from datetime import datetime
 from pathlib import Path
 
 from . import status as st
-from .agent import build_prompt, classify_exit, run_agent
+from .agent import (
+    build_prompt, classify_exit, parse_reset_delay_seconds, run_agent,
+)
 from .backlog import Backlog, Ticket
 from .breaker import BreakerState, note_flaky, note_merged, note_quarantine
 from .config import Config
@@ -33,7 +36,7 @@ from .gates.review import (
 from .gates.scope import check_scope
 from .gates.suite import UNATTRIBUTED_PREFIX, check_suite, run_suite
 from .gitops import Git
-from .merge import append_followups, merge_ticket
+from .merge import append_followups, append_run_postmortem, merge_ticket
 from .report import RunDirectory, render_report
 from .scheduler import schedule
 from .state import RunState, save_state
@@ -86,6 +89,7 @@ class Runner:
     def run(self) -> None:
         self._note(f"run {self.state.run_id} on {self.state.integration_branch}")
         self._mark_human_gates()
+        self._requeue_deferred()
 
         while True:
             if self.state.circuit_breaker.tripped:
@@ -125,6 +129,33 @@ class Runner:
                 if ticket.human_gate:
                     self.state.record(ticket.id).status = st.HELD
             self._commit_state()
+
+    def _requeue_deferred(self) -> None:
+        """A new pass over the backlog re-queues what the environment refused.
+
+        DEFERRED is terminal for the night that set it and pending for the next
+        one, which is what makes `--resume` worth running after a usage window
+        reopens. Quarantined tickets are deliberately left alone: those carry a
+        verdict on the work, and re-running them unchanged just spends the
+        budget again on the same wrong answer.
+
+        Only at the top of `run()`. A ticket deferred mid-run stays deferred for
+        the rest of it, or the loop would re-dispatch it into the same closed
+        door until the deadline.
+        """
+        with self._state_lock:
+            requeued = [key for key, record in self.state.tickets.items()
+                        if record.status == st.DEFERRED]
+            for key in requeued:
+                record = self.state.tickets[key]
+                record.status = st.PENDING
+                record.exit_class = None
+                record.infrastructure_attempts = 0
+            if requeued:
+                self._commit_state()
+        if requeued:
+            self._note("re-queued deferred from a previous pass: "
+                       + ", ".join(f"T{int(k):02d}" for k in sorted(requeued, key=int)))
 
     def _dispatch_wave(self) -> list[int]:
         with self._state_lock:
@@ -188,6 +219,10 @@ class Runner:
                 teardown(self.git, worktree)
             except Exception as exc:                 # noqa: BLE001
                 self._note(f"T{ticket.id:02d} worktree teardown failed: {exc!r}")
+            # Only after the worktree is gone: git refuses to delete a branch
+            # that a live worktree still has checked out.
+            if self.state.record(ticket.id).status == st.DEFERRED:
+                self._clear_empty_branch(ticket, worktree)
 
     # ------------------------------------------------------------ provisioning
 
@@ -221,17 +256,40 @@ class Runner:
     # ------------------------------------------------------------------ agent
 
     def _run_agent_with_retry(self, ticket, worktree) -> bool:
-        """Returns True when the agent produced work worth gating."""
+        """Returns True when the agent produced work worth gating.
+
+        Two counters, deliberately separate. `attempts` counts attempts at the
+        *work* and is what the stall retry spends. `infrastructure_attempts`
+        counts times the environment refused to run at all — a usage cap, a
+        rate limit, a corrupted CLI config — and spends nothing, because none
+        of those is a fact about the ticket.
+
+        ORCHESTRATOR_SPEC.md:183 has always said so ("does not count against
+        the ticket"), and until now that policy existed only for provisioning.
+        The agent path quarantined on the first infrastructure failure, which
+        charged it to the circuit breaker at full weight and put every
+        dependent into BLOCKED_UPSTREAM. run-20260818-2244 lost four tickets
+        and the entire night to exactly that, to a message that said in plain
+        English when it would be able to work again.
+        """
         tail = ""
-        for attempt in range(1, self.config.retries.stall + 2):
+        attempt = 0
+        infrastructure_attempts = 0
+
+        def commits_so_far() -> int:
+            return len(self.git.commits_between(self.state.integration_branch,
+                                                worktree.branch))
+
+        while True:
+            attempt += 1
             with self._state_lock:
                 self.state.record(ticket.id).attempts = attempt
                 self._commit_state()
 
-            def commits_so_far() -> int:
-                return len(self.git.commits_between(self.state.integration_branch,
-                                                    worktree.branch))
-
+            # Transcripts are numbered by launch, not by attempt, so an
+            # infrastructure retry never overwrites the evidence of the one
+            # before it.
+            launch = attempt + infrastructure_attempts
             result = run_agent(
                 list(self.config.agent.cli),
                 cwd=worktree.path,
@@ -239,10 +297,13 @@ class Runner:
                 model=self.config.model_id(ticket.model),
                 budget_minutes=ticket.budget_minutes or self.config.budget_minutes(ticket.size),
                 extra_args=self.config.agent.extra_args,
-                transcript_path=self.run_dir.artifact(ticket.id, f"transcript-{attempt}.log"),
+                transcript_path=self.run_dir.artifact(ticket.id, f"transcript-{launch}.log"),
                 stall_minutes=self.config.agent.stall_minutes,
                 commit_count=commits_so_far,
+                output_format=self.config.agent.output_format,
+                max_budget_usd=self.config.agent.max_budget_usd,
             )
+            self._record_usage(ticket.id, result.usage)
             commits = commits_so_far()
             verdict = classify_exit(result, commits_made=commits, config=self.config)
 
@@ -250,10 +311,28 @@ class Runner:
                 return True
 
             if verdict == "infrastructure":
-                self._register_rate_limit_signature(ticket)
-                self._quarantine(ticket, "infrastructure failure during dispatch",
-                                 exit_class="infrastructure")
-                return False
+                # An environment failure is not an attempt at the work, so the
+                # attempt it just consumed is given back.
+                attempt -= 1
+                infrastructure_attempts += 1
+                with self._state_lock:
+                    record = self.state.record(ticket.id)
+                    record.attempts = attempt
+                    record.infrastructure_attempts = infrastructure_attempts
+                    self._commit_state()
+
+                if infrastructure_attempts > self.config.retries.infrastructure:
+                    self._defer(ticket, "the environment did not recover within "
+                                        f"{self.config.retries.infrastructure} retries",
+                                worktree=worktree)
+                    return False
+
+                wait = self._infrastructure_pause(ticket, result, infrastructure_attempts)
+                if not self._wait_out(wait):
+                    self._defer(ticket, "past the wall-clock stop while waiting for "
+                                        "the usage window to reopen", worktree=worktree)
+                    return False
+                continue
 
             # Stall. One retry from a clean worktree with the transcript tail.
             bound = (f"silent for {self.config.agent.stall_minutes}m"
@@ -265,7 +344,127 @@ class Runner:
                 return False
             tail = result.transcript[-4000:]
 
-        return False
+            fresh = self._reprovision_for_retry(ticket, worktree, commits=commits)
+            if fresh is None:
+                self._quarantine(ticket, "could not reprovision for the stall retry",
+                                 exit_class="infrastructure")
+                return False
+            worktree = fresh
+
+    def _reprovision_for_retry(self, ticket, worktree, *, commits: int):
+        """Replace a stalled worktree with a fresh one, so the retry's prompt is true.
+
+        `RETRY_PREFIX` tells the retrying agent "you are starting again from a
+        clean worktree, so do not assume any of its work exists". It was handed
+        the same half-edited tree the previous attempt stalled in — being lied
+        to about the one thing it cannot cheaply check.
+
+        Teardown-and-reprovision, **not** `git reset --hard` plus `git clean -fd`.
+        `clean` is a recursive delete aimed at a tree that contains a junction to
+        317 MB of shared recording data. It is safe today only because `DATA/*`
+        is in `.gitignore` and `clean` without `-x` honours that — a one-line
+        dependency, in a repo that has already had one near-miss where a
+        recursive walk followed exactly that junction and would have deleted its
+        target (see `teardown`'s reparse-point check, and the test that covers
+        it). `teardown()` is the code that already knows to unlink junctions
+        before anything recursive runs, so this reuses it rather than opening a
+        second path to the same cliff.
+
+        Safe only because a stall means zero commits by construction:
+        `classify_exit` grades a timeout that *did* produce commits as `ok` and
+        sends it to the gates, precisely so the run loop never discards work.
+        Asserted rather than assumed — if that ever stops holding, this refuses
+        instead of deleting.
+        """
+        if commits:
+            self._note(f"T{ticket.id:02d} not reprovisioning: {commits} commit(s) "
+                       f"on the branch would be discarded")
+            return worktree
+
+        try:
+            teardown(self.git, worktree)
+            # `provision` uses `git worktree add -b`, which refuses an existing
+            # branch. Deleting is safe here for the same reason the reprovision
+            # is: the branch carries nothing.
+            self.git.delete_branch(worktree.branch)
+            fresh = provision(
+                self.git, ticket_id=ticket.id,
+                worktrees_root=self.config.paths.worktrees,
+                integration_branch=self.state.integration_branch,
+                branch_prefix=self.config.ticket_branch_prefix,
+                fixture_db=self.config.paths.fixture_db,
+                fixture_db_dest=self.config.paths.fixture_db_dest,
+                recordings=self.config.paths.recordings,
+            )
+        except Exception as exc:                     # noqa: BLE001
+            self._note(f"T{ticket.id:02d} reprovision failed: {exc!r}")
+            return None
+
+        # Path and branch are derived from the ticket id, so the new worktree is
+        # value-identical to the old one. `_pipeline` holds its own reference and
+        # tears down by path; that reference stays correct precisely because of
+        # this. Do not make `provision` allocate unique paths without also
+        # threading the new worktree back out to `_pipeline`.
+        self._note(f"T{ticket.id:02d} reprovisioned a clean worktree for the retry")
+        return fresh
+
+    def _infrastructure_pause(self, ticket, result, attempts: int) -> float:
+        """How long to wait, and pause the whole fleet for it.
+
+        Preference order: what the transcript said, then the exponential
+        backoff. `You're out of extra usage · resets 3:30am` names its own
+        answer, and guessing at it is how a fifteen-minute ceiling came to sit
+        in front of a cap that clears in hours.
+
+        The pause is fleet-wide because the cap is: three agents each backing
+        off independently is three agents discovering the same closed door.
+        """
+        stated = parse_reset_delay_seconds(f"{result.transcript}\n{result.raw}")
+        if stated is not None:
+            wait = min(stated + self.config.rate_limit.usage_reset_grace_seconds,
+                       self.config.rate_limit.max_usage_wait_seconds)
+            self._note(f"T{ticket.id:02d} usage exhausted — the transcript says the "
+                       f"window reopens in {stated / 60:.0f}m; pausing all dispatch "
+                       f"for {wait / 60:.0f}m")
+        else:
+            wait = min(self.config.retries.infrastructure_backoff_seconds * attempts,
+                       self.config.rate_limit.max_backoff_seconds)
+            self._note(f"T{ticket.id:02d} infrastructure failure "
+                       f"({attempts}/{self.config.retries.infrastructure}) — "
+                       f"backing off {wait:.0f}s")
+
+        self._register_rate_limit_signature(ticket)
+        with self._state_lock:
+            self._paused_until = max(self._paused_until, time.monotonic() + wait)
+        return wait
+
+    def _wait_out(self, seconds: float) -> bool:
+        """Sleep in slices. False if the run's night ended while we waited.
+
+        Sliced rather than one long sleep so that a deadline reached mid-wait
+        is noticed then, rather than hours later.
+        """
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if self._past_deadline():
+                return False
+            if self.state.circuit_breaker.tripped:
+                return False
+            time.sleep(min(self.poll_seconds, max(0.0, deadline - time.monotonic())))
+        return not self._past_deadline()
+
+    def _record_usage(self, ticket_id: int, usage) -> None:
+        """Accumulate what a ticket cost, across its agent, reviews and fixes.
+
+        `None` stays `None`: an unmeasured ticket must not read as a free one.
+        """
+        if usage is None:
+            return
+        with self._state_lock:
+            record = self.state.record(ticket_id)
+            record.tokens = (record.tokens or 0) + usage.total_tokens
+            record.cost_usd = round((record.cost_usd or 0.0) + usage.cost_usd, 6)
+            self._commit_state()
 
     def _register_rate_limit_signature(self, ticket: Ticket) -> None:
         """Rate limiting is handled fleet-wide, not per-agent."""
@@ -368,7 +567,14 @@ class Runner:
             result = run_agent(list(self.config.agent.cli), cwd=worktree.path, prompt=prompt,
                                model=self.config.model_id("review"),
                                budget_minutes=self.config.review.timeout_minutes,
-                               extra_args=self.config.agent.extra_args)
+                               extra_args=self.config.agent.extra_args,
+                               output_format=self.config.agent.output_format,
+                               max_budget_usd=self.config.agent.max_budget_usd)
+            # A review is two parallel sub-agents plus an orchestrating session,
+            # and on a two-round ticket it runs twice. Left uncosted, the most
+            # expensive half of a ticket would be invisible in the column that
+            # exists to price it.
+            self._record_usage(ticket.id, result.usage)
             self.run_dir.write(ticket.id, f"review-{round_number}.md", result.transcript)
 
             findings = grade_findings(parse_findings(result.transcript), severities,
@@ -394,6 +600,8 @@ class Runner:
             fix_prompt = _fix_prompt(ticket, verdict.findings)
             fix = run_agent(list(self.config.agent.cli), cwd=worktree.path, prompt=fix_prompt,
                             model=self.config.model_id("fix"),
+                            output_format=self.config.agent.output_format,
+                            max_budget_usd=self.config.agent.max_budget_usd,
                             budget_minutes=ticket.budget_minutes,
                             extra_args=self.config.agent.extra_args)
             self.run_dir.write(ticket.id, "review-fix.log", fix.transcript)
@@ -457,6 +665,44 @@ class Runner:
             for key, value in fields.items():
                 setattr(record, key, value)
             self._commit_state()
+
+    def _defer(self, ticket: Ticket, reason: str, *, worktree=None) -> None:
+        """The environment could not run this. Nothing about the work was judged.
+
+        Everything a quarantine does, this deliberately does not: no circuit
+        breaker weight, because a usage cap is not evidence that the base is
+        broken; no `BLOCKED_UPSTREAM` for dependents, because there is no
+        verdict for them to be downstream of. The ticket simply did not run,
+        and `--resume` will pick it up.
+
+        The empty branch it leaves behind is cleaned up by `_pipeline`, after
+        the worktree comes down — see `_clear_empty_branch`.
+        """
+        self._note(f"T{ticket.id:02d} DEFERRED — {reason}")
+        with self._state_lock:
+            record = self.state.record(ticket.id)
+            record.status = st.DEFERRED
+            record.exit_class = "infrastructure"
+            self._commit_state()
+
+    def _clear_empty_branch(self, ticket: Ticket, worktree) -> None:
+        """Delete a deferred ticket's branch when it carries no commits.
+
+        `provision` uses `git worktree add -b`, which fails outright against a
+        branch that already exists, so a nothing-branch left behind would kill
+        this ticket's next dispatch before it started — the defect that took out
+        the first three dispatches of run 2. A branch carrying commits is
+        evidence and is never deleted, however the run ended.
+
+        Called after teardown: git will not delete a branch a live worktree is
+        still checked out on.
+        """
+        try:
+            if self.git.commits_between(self.state.integration_branch, worktree.branch):
+                return
+            self.git.delete_branch(worktree.branch)
+        except Exception as exc:                     # noqa: BLE001
+            self._note(f"T{ticket.id:02d} could not clear its empty branch: {exc!r}")
 
     def _quarantine(self, ticket: Ticket, reason: str, *, exit_class: str) -> None:
         """Branch preserved, not merged, dependents held, run continues."""
@@ -526,6 +772,13 @@ class Runner:
         self.run_dir.report_path.write_text(render_report(self.state, self.backlog),
                                             encoding="utf-8")
         self._note(f"report written to {self.run_dir.report_path}")
+        try:
+            append_run_postmortem(self.git, state=self.state, backlog=self.backlog,
+                                  filename=self.config.review.followups_file)
+        except Exception as exc:                     # noqa: BLE001
+            # A post-mortem that cannot be written must not be the reason a
+            # night's merges are lost.
+            self._note(f"post-mortem stub not written: {exc!r}")
 
 
 def _fix_prompt(ticket: Ticket, findings) -> str:
@@ -628,6 +881,8 @@ def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tu
             f"{', '.join(result.failed[:12])}\n\n{result.output[-4000:]}"
         )
 
+    _refuse_a_baseline_that_skipped_the_data_it_junctioned(result, config)
+
     unattributed = [n for n in result.failed if n.startswith(UNATTRIBUTED_PREFIX)]
     if unattributed:
         raise BaselineError(
@@ -637,3 +892,53 @@ def capture_baseline(git: Git, config: Config, *, integration_branch: str) -> tu
             f"pass.\n{unattributed[0]}\n\n{result.output[-4000:]}"
         )
     return result.failed
+
+
+#: `544 passed, 88 skipped in 420.41s` — pytest's own summary line.
+_SUITE_TALLY = re.compile(r"(\d+) passed(?:,\s*(\d+) skipped)?")
+
+#: Above this fraction of the suite, skipping is not "a few tests opted out",
+#: it is a coverage collapse. Measured: a worktree with the junction skips 0 of
+#: 632; one without skips 88, which is 13.9%.
+MAX_BASELINE_SKIP_FRACTION = 0.05
+
+
+def _refuse_a_baseline_that_skipped_the_data_it_junctioned(result, config) -> None:
+    """Stop a run whose baseline measured a fraction of the suite.
+
+    `paths.recordings` exists so that the 88 real-data tests actually execute.
+    If they skipped anyway, the junction is configured but its target is empty
+    or wrong — the run-20260817-1157 failure, where all 16 fixture rows pointed
+    at absent `.npy` files and every worktree ran effectively nothing.
+
+    That used to be caught by accident: `UI/app.py` built the application at
+    import, so the missing file raised at collection. Removing that was right,
+    and it removed the accidental alarm with it. Converting the guards from
+    `return` to `pytest.skip` is what makes the condition visible again; this is
+    what reads it.
+
+    Not applied when `recordings` is empty — in that configuration the guarded
+    tests are supposed to skip, and refusing would make it unstartable.
+    """
+    if not config.paths.recordings:
+        return
+
+    match = _SUITE_TALLY.search(result.output or "")
+    if match is None:
+        return                       # no tally to read; other checks still apply
+
+    passed = int(match.group(1))
+    skipped = int(match.group(2) or 0)
+    total = passed + skipped
+    if not total or skipped / total <= MAX_BASELINE_SKIP_FRACTION:
+        return
+
+    raise BaselineError(
+        f"refusing to start: the baseline skipped {skipped} of {total} tests "
+        f"({skipped / total:.0%}) while paths.recordings is configured. Those "
+        f"tests skip only when the real channel data is unreachable, so the "
+        f"junction is present but its target is empty or wrong — every ticket "
+        f"tonight would be gated against a suite that measured a fraction of "
+        f"itself. Check {', '.join(str(p) for p in config.paths.recordings)}, "
+        f"then rebuild the fixture with `python -m orchestrator.make_fixture`."
+    )

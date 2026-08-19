@@ -17,6 +17,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -51,8 +53,8 @@ def _fresh_db_with_recording():
 
 def test_identical_recipe_reuses_prior_run():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         recipe = make_recipe(1, [
@@ -76,8 +78,8 @@ def test_identical_recipe_reuses_prior_run():
 
 def test_force_recomputes_even_when_identical():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         recipe = make_recipe(1, [
@@ -97,8 +99,8 @@ def test_force_recomputes_even_when_identical():
 
 def test_different_params_are_independent_runs():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         r1 = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass",
@@ -117,8 +119,8 @@ def test_different_params_are_independent_runs():
 
 def test_failing_step_marks_run_failed_with_traceback():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         recipe = make_recipe(1, [
@@ -168,8 +170,8 @@ def test_unknown_recording_raises_before_any_run_row():
 
 def test_oversized_span_refused_for_bounded_adapter():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         recipe = make_recipe(1, [
@@ -193,8 +195,8 @@ def test_oversized_span_refused_for_bounded_adapter():
 
 def test_bounded_span_allowed_for_same_adapter():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         recipe = make_recipe(1, [
@@ -209,8 +211,8 @@ def test_bounded_span_allowed_for_same_adapter():
 
 def test_unbounded_adapter_accepts_large_span():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     db_path = _fresh_db_with_recording()
     try:
         # lowpass has no max_span_samples -- a large span must not be refused.
@@ -228,7 +230,7 @@ def test_unbounded_adapter_accepts_large_span():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -237,10 +239,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

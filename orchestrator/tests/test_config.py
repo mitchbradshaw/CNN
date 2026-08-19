@@ -14,8 +14,11 @@ SHIPPED = REPO_ROOT / "orchestrator" / "config.toml"
 def test_the_shipped_config_loads(tmp_path):
     config = load_config(SHIPPED, repo_root=REPO_ROOT)
 
-    assert config.ceilings.concurrent == 3
-    assert config.ceilings.opus == 2
+    # Two, not three. The binding cap is tokens per rolling usage window, so
+    # concurrency buys speed and not budget — see the ceilings note in
+    # config.toml and `test_the_shipped_config_spreads_the_burn_rather_than_bursting_it`.
+    assert config.ceilings.concurrent == 2
+    assert config.ceilings.opus == 1
     assert config.budget_minutes("S") == 30
     assert config.budget_minutes("M") == 60
     assert config.budget_minutes("L") == 120
@@ -98,7 +101,11 @@ def test_config_hash_is_stable_and_content_sensitive(tmp_path):
     a = tmp_path / "a.toml"
     b = tmp_path / "b.toml"
     a.write_text(SHIPPED.read_text(encoding="utf-8"), encoding="utf-8")
-    b.write_text(SHIPPED.read_text(encoding="utf-8").replace("concurrent = 3", "concurrent = 4"),
+    # Appended rather than substituted: a test that edits a literal silently
+    # stops testing anything the day that literal changes, which is exactly what
+    # happened when `concurrent` moved from 3 to 2 and both files kept hashing
+    # the same.
+    b.write_text(SHIPPED.read_text(encoding="utf-8") + "\n# a change\n",
                  encoding="utf-8")
 
     first = load_config(a, repo_root=REPO_ROOT)
@@ -134,3 +141,53 @@ def test_an_unknown_size_is_an_error(tmp_path):
 
     with pytest.raises(ConfigError, match="XL"):
         config.budget_minutes("XL")
+
+
+# ------------------------------------------- what the night is allowed to cost
+
+
+def test_the_shipped_config_waits_out_a_usage_window_not_fifteen_minutes():
+    """`max_backoff_seconds = 900` was the value run-20260818-2244 met: a plan
+    usage cap resets in *hours*, and a fifteen-minute ceiling guarantees the
+    runner gives up long before the environment recovers."""
+    config = load_config(REPO_ROOT / "orchestrator" / "config.toml", repo_root=REPO_ROOT)
+
+    assert config.rate_limit.max_usage_wait_seconds >= 4 * 3600
+    assert config.rate_limit.usage_reset_grace_seconds > 0, (
+        "waking exactly on the stated boundary races the reset")
+
+
+def test_the_shipped_config_asks_the_cli_for_structured_output():
+    """No `--output-format` is why five runs produced no cost data at all."""
+    config = load_config(REPO_ROOT / "orchestrator" / "config.toml", repo_root=REPO_ROOT)
+
+    assert config.agent.output_format in ("json", "stream-json")
+
+
+def test_the_shipped_config_spreads_the_burn_rather_than_bursting_it():
+    """The cap is tokens per rolling window, not wall-clock. Three concurrent
+    agents do not cost less than one — they spend the same budget three times
+    faster, which is how a 20-hour dispatch window became a 6.5-hour burst that
+    overran a single usage window and took the whole night with it."""
+    config = load_config(REPO_ROOT / "orchestrator" / "config.toml", repo_root=REPO_ROOT)
+
+    assert config.ceilings.concurrent <= 2
+    assert config.ceilings.opus <= config.ceilings.concurrent
+
+
+def test_a_missing_usage_setting_takes_a_safe_default_rather_than_failing(tmp_path):
+    """These keys arrived after five runs had already been recorded. An old
+    config must still load, or `--resume` cannot read its own run."""
+    source = (REPO_ROOT / "orchestrator" / "config.toml").read_text(encoding="utf-8")
+    stripped = "\n".join(
+        line for line in source.splitlines()
+        if not line.startswith(("max_usage_wait_seconds", "usage_reset_grace_seconds",
+                                "output_format", "max_budget_usd"))
+    )
+    path = tmp_path / "config.toml"
+    path.write_text(stripped, encoding="utf-8")
+
+    config = load_config(path, repo_root=REPO_ROOT)
+
+    assert config.rate_limit.max_usage_wait_seconds > 0
+    assert config.agent.output_format

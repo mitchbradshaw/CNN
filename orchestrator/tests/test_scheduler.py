@@ -294,3 +294,50 @@ def test_already_terminal_tickets_are_not_redispatched(write_ticket, ticket_dir,
     states = all_pending(backlog, {1: MERGED, 2: FAILED})
 
     assert schedule(backlog, states, ceilings).dispatch == ()
+
+
+# ---------------------------------------- the opus sub-ceiling, under a cap
+#
+# `models.model_cap = "sonnet"` maps every opus ticket onto sonnet before it is
+# ever launched, so no opus tokens are spent. The sub-ceiling that exists to
+# bound opus spend was still counting the ticket's *declared* tier, so nineteen
+# tickets that were all going to run as sonnet queued behind an opus limit
+# nobody was paying for — pure serialisation, no saving.
+
+
+def test_the_opus_ceiling_counts_the_tier_a_ticket_will_actually_run_on(
+        write_ticket, ticket_dir):
+    for i in (1, 2, 3):
+        write_ticket(i, model="opus")
+    backlog = load_backlog(ticket_dir)
+
+    capped = Ceilings(concurrent=3, opus=1, capped_tier="sonnet")
+    decision = schedule(backlog, all_pending(backlog), capped)
+
+    assert len(decision.dispatch) == 3, (
+        "under a sonnet cap these are sonnet tickets; the opus ceiling must not "
+        "throttle spend that is not happening"
+    )
+
+
+def test_the_opus_ceiling_still_binds_when_no_cap_is_set(write_ticket, ticket_dir):
+    """The mirror: remove the cap and the limit must do its job again."""
+    for i in (1, 2, 3):
+        write_ticket(i, model="opus")
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog), Ceilings(concurrent=3, opus=1))
+
+    assert len(decision.dispatch) == 1
+    assert any(h.reason == "opus-ceiling" for h in decision.holds.values())
+
+
+def test_a_haiku_cap_frees_the_opus_ceiling_too(write_ticket, ticket_dir):
+    for i in (1, 2, 3):
+        write_ticket(i, model="opus")
+    backlog = load_backlog(ticket_dir)
+
+    decision = schedule(backlog, all_pending(backlog),
+                        Ceilings(concurrent=3, opus=1, capped_tier="haiku"))
+
+    assert len(decision.dispatch) == 3

@@ -23,6 +23,8 @@ import tempfile
 import threading
 import time
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -101,8 +103,8 @@ def _db_counts(db_path):
 
 def test_running_csax_populates_encoding_section():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -133,8 +135,8 @@ def test_switching_to_non_encoding_algorithm_hides_stale_section_immediately():
     algorithm has been run at all (the same "no stale state" rule as the
     pre-run preview, Part 5 A2)."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -154,8 +156,8 @@ def test_switching_to_non_encoding_algorithm_hides_stale_section_immediately():
 
 def test_running_non_encoding_algorithm_hides_section():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -174,8 +176,8 @@ def test_running_non_encoding_algorithm_hides_section():
 
 def test_preprocessing_prepends_a_real_recipe_step():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -198,8 +200,8 @@ def test_preprocessing_prepends_a_real_recipe_step():
 
 def test_no_preprocessing_means_single_step_recipe():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -219,8 +221,8 @@ def test_no_preprocessing_means_single_step_recipe():
 
 def test_derived_table_populates_without_running():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -241,8 +243,8 @@ def test_switching_to_algorithm_without_derive_clears_stale_table():
     must still clear a PREVIOUS algorithm's stale derive() table, not
     leave it showing indefinitely."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -263,8 +265,8 @@ def test_switching_to_algorithm_without_derive_clears_stale_table():
 
 def test_auto_preview_shows_encoding_without_recording_a_run():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -288,8 +290,8 @@ def test_auto_preview_shows_encoding_without_recording_a_run():
 
 def test_save_encoding_as_motif_seed():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -315,8 +317,8 @@ def test_save_encoding_as_motif_seed():
 
 def test_reused_run_recomputes_encoding_for_display():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -344,7 +346,7 @@ def test_reused_run_recomputes_encoding_for_display():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -353,10 +355,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

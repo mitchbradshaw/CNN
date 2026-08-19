@@ -116,7 +116,7 @@ python Pipelines/materialize_channels/materialize_channels.py
 python Pipelines/import_labels/import_10min_labels.py
 
 # browse a channel, see existing labels, and add new ones
-panel serve UI/app.py --show
+panel serve UI/serve.py --show
 ```
 
 See [`UI/README.md`](UI/README.md) for the viewer, and the `database`
@@ -138,7 +138,7 @@ python Pipelines/run_recipe/run_recipe.py --config path/to/recipe.json
 
 # interactively: pick a stage/algorithm, auto-generated parameter controls,
 # background execution with cancel, before/after comparison, save as motif
-panel serve UI/app.py --show   # "Run algorithm" / "Run history" tabs
+panel serve UI/serve.py --show   # "Run algorithm" / "Run history" tabs
 ```
 
 Saved plots follow one naming convention

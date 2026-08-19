@@ -13,9 +13,12 @@ to judge.
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .backlog import Ticket
@@ -73,6 +76,57 @@ starting again from a clean worktree, so do not assume any of its work exists.
 """
 
 
+#: `You're out of extra usage · resets 3:30am (Australia/Brisbane)`, and the
+#: several ways the CLI says the same thing. The hour is the only part worth
+#: reading: the timezone is the machine's own, and a run that guesses at a UTC
+#: offset waits for the wrong dawn.
+RESET_TIME = re.compile(r"resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class AgentUsage:
+    """What one `claude -p` session actually consumed.
+
+    Recorded because `ORCHESTRATOR_SPEC.md` §REPORT.md has always asked for it
+    and five runs shipped without it. Every model-tier decision in `config.toml`
+    — capping tickets to sonnet, moving review off opus — was taken against no
+    measurement at all.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
+    cost_usd: float = 0.0
+    num_turns: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        """Every class of token, because every class of token is billed.
+
+        Cache reads dominate a long agent session by an order of magnitude.
+        Reporting `input_tokens` alone would show four thousand against a
+        session that moved three million, which is worse than showing nothing.
+        """
+        return (self.input_tokens + self.output_tokens
+                + self.cache_creation_tokens + self.cache_read_tokens)
+
+    def __add__(self, other: "AgentUsage | None") -> "AgentUsage":
+        """A ticket costs its agent plus its reviews plus its fix rounds."""
+        if other is None:
+            return self
+        return AgentUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_creation_tokens=self.cache_creation_tokens + other.cache_creation_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cost_usd=self.cost_usd + other.cost_usd,
+            num_turns=self.num_turns + other.num_turns,
+        )
+
+    __radd__ = __add__
+
+
 @dataclass(frozen=True)
 class AgentResult:
     exit_code: int
@@ -84,6 +138,144 @@ class AgentResult:
     #: and it says nothing about whether the work so far is any good — an agent
     #: that finished and then hung trips this having done everything asked.
     stalled_without_commit: bool = False
+    #: `None` when the CLI emitted nothing parseable — an older binary, a killed
+    #: agent that never reached its result line, a schema that has moved on.
+    #: A missing measurement must read as missing and never as zero.
+    usage: AgentUsage | None = None
+    #: The raw bytes the CLI produced, kept when `transcript` is a reconstruction
+    #: of them. This is what a human reads when the reconstruction looks wrong.
+    raw: str = ""
+
+
+def extract_usage(raw: str) -> AgentUsage | None:
+    """Pull the cost record out of `--output-format json` or `stream-json`.
+
+    Deliberately forgiving. The CLI's output schema is not ours, and a harness
+    that hard-fails on an unrecognised line is worse than one that reports
+    nothing: the cost column is a convenience, and the run is not.
+    """
+    record = _last_result_record(raw)
+    if record is None:
+        return None
+
+    usage = record.get("usage") or {}
+    if not isinstance(usage, dict):
+        usage = {}
+
+    def count(*keys) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+        return 0
+
+    return AgentUsage(
+        input_tokens=count("input_tokens"),
+        output_tokens=count("output_tokens"),
+        cache_creation_tokens=count("cache_creation_input_tokens", "cache_creation_tokens"),
+        cache_read_tokens=count("cache_read_input_tokens", "cache_read_tokens"),
+        cost_usd=float(record.get("total_cost_usd") or record.get("cost_usd") or 0.0),
+        num_turns=int(record.get("num_turns") or 0),
+    )
+
+
+def extract_text(raw: str) -> str:
+    """Reconstruct readable prose from a structured session.
+
+    Everything downstream reads prose: the review gate greps the transcript for
+    a fenced ```findings``` block, the stall retry injects the tail into the next
+    prompt, and a human reads it at 8am. If structured output buried the findings
+    block inside a JSON string literal, every review would silently return zero
+    findings and every ticket would merge unreviewed — so this is load-bearing,
+    not cosmetic.
+
+    Text that is not structured comes back untouched, which is what keeps the
+    `output_format = "text"` path and every existing test working.
+    """
+    lines = raw.splitlines()
+    records = [parsed for parsed in (_json_object(line) for line in lines)
+               if parsed is not None]
+    if not records:
+        return raw
+
+    chunks: list[str] = []
+    for record in records:
+        kind = record.get("type")
+        if kind == "assistant":
+            message = record.get("message") or {}
+            for block in message.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    chunks.append(str(block.get("text", "")))
+        elif kind == "result":
+            result = record.get("result")
+            if isinstance(result, str) and result:
+                chunks.append(result)
+
+    if not chunks:
+        return raw
+
+    # Anything the CLI printed outside the JSON stream — an orchestrator note
+    # appended after a kill, a stray stderr line — is kept. It is usually the
+    # most important line in the file.
+    unstructured = [line for line in lines
+                    if line.strip() and _json_object(line) is None]
+    return "\n\n".join(chunks + unstructured) + "\n"
+
+
+def parse_reset_delay_seconds(transcript: str, *, now: datetime | None = None
+                              ) -> float | None:
+    """Seconds until the usage window the transcript names reopens.
+
+    `rate_limit.max_backoff_seconds` was fifteen minutes against a cap that
+    resets in hours, so the runner gave up long before the environment
+    recovered. The CLI prints the answer; this reads it.
+
+    Returns `None` when no reset time is named — a plain 429 carries no such
+    sentence, and the caller must fall back to exponential backoff rather than
+    invent a wait.
+    """
+    match = RESET_TIME.search(transcript)
+    if match is None:
+        return None
+
+    now = now or datetime.now()
+    hour = int(match.group(1)) % 12
+    minute = int(match.group(2) or 0)
+    if match.group(3).lower() == "pm":
+        hour += 12
+
+    if not (0 <= minute < 60):
+        return None
+
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)   # `resets 3:30am` read at 4am means tomorrow
+    return (target - now).total_seconds()
+
+
+def _last_result_record(raw: str) -> dict | None:
+    """The final `{"type":"result"}` object, whichever output format produced it."""
+    for line in reversed(raw.splitlines()):
+        record = _json_object(line)
+        if record is not None and record.get("type") == "result":
+            return record
+    # `--output-format json` may pretty-print across several lines rather than
+    # emitting one object per line.
+    whole = _json_object(raw)
+    if whole is not None and whole.get("type") == "result":
+        return whole
+    return None
+
+
+def _json_object(text: str) -> dict | None:
+    text = text.strip()
+    if not text.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def build_prompt(ticket: Ticket, config: Config, *,
@@ -103,7 +295,8 @@ def build_prompt(ticket: Ticket, config: Config, *,
 def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: float,
               extra_args=(), transcript_path: Path | str | None = None,
               stall_minutes: float | None = None, commit_count=None,
-              poll_seconds: float = 5.0) -> AgentResult:
+              poll_seconds: float = 5.0, output_format: str = "text",
+              max_budget_usd: float = 0.0) -> AgentResult:
     """Run one agent to completion, its budget, or its death.
 
     With `stall_minutes` and `commit_count` supplied, the agent is also killed
@@ -114,8 +307,25 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
     then hung, which produced everything it was asked for. Killing is not a
     verdict on either — the commits go to the gates regardless, and the gates
     decide.
+
+    `output_format` buys the cost record. `stream-json` is preferred over `json`
+    for one reason: it emits a line per turn, so an agent that is killed still
+    leaves a transcript behind. Under `json` a killed agent leaves nothing at
+    all, which is the defect FOLLOWUPS.md records as `[open]` after T35's
+    69-byte transcript.
+
+    `max_budget_usd` is a hard ceiling the CLI enforces on itself. Zero means
+    no ceiling.
     """
-    argv = [*cli, "-p", prompt, "--model", model, *extra_args]
+    argv = [*cli, "-p", prompt, "--model", model]
+    if output_format and output_format != "text":
+        argv += ["--output-format", output_format]
+        if output_format == "stream-json":
+            # The CLI refuses stream-json without it.
+            argv += ["--verbose"]
+    if max_budget_usd and max_budget_usd > 0:
+        argv += ["--max-budget-usd", str(max_budget_usd)]
+    argv += list(extra_args)
     started = time.monotonic()
     timed_out = False
     stalled_without_commit = False
@@ -124,42 +334,77 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
 
     try:
         if not watch_for_stall:
-            completed = subprocess.run(
-                argv, cwd=str(Path(cwd)), capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=budget_minutes * 60,
-            )
-            exit_code = completed.returncode
-            transcript = completed.stdout + completed.stderr
+            exit_code, transcript, timed_out = _run_to_file(
+                argv, cwd=cwd, budget_minutes=budget_minutes)
         else:
             exit_code, transcript, timed_out, stalled_without_commit = _run_watched(
                 argv, cwd=cwd, budget_minutes=budget_minutes,
                 stall_minutes=stall_minutes, commit_count=commit_count,
                 poll_seconds=poll_seconds,
             )
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        exit_code = 124
-        transcript = _decode(exc.stdout) + _decode(exc.stderr)
-        transcript += (f"\n[orchestrator] agent exceeded its {budget_minutes:g} minute "
-                       f"budget and was killed\n")
     except OSError as exc:
         exit_code = 127
         transcript = f"[orchestrator] agent could not be launched: {exc}\n"
 
     result = AgentResult(
         exit_code=exit_code,
-        transcript=transcript,
+        transcript=extract_text(transcript),
         duration_seconds=time.monotonic() - started,
         timed_out=timed_out,
         stalled_without_commit=stalled_without_commit,
+        usage=extract_usage(transcript),
+        raw=transcript,
     )
 
     if transcript_path is not None:
         transcript_path = Path(transcript_path)
         transcript_path.parent.mkdir(parents=True, exist_ok=True)
         transcript_path.write_text(result.transcript, encoding="utf-8")
+        # The structured stream is kept beside the prose rather than instead of
+        # it: the prose is what gets read, and the stream is what gets believed
+        # when the prose looks wrong.
+        if result.raw and result.raw != result.transcript:
+            transcript_path.with_suffix(".jsonl").write_text(
+                result.raw, encoding="utf-8")
 
     return result
+
+
+def _run_to_file(argv, *, cwd, budget_minutes: float):
+    """The unwatched path: no stall detection, but the transcript survives a kill.
+
+    This used to be `subprocess.run(capture_output=True, timeout=...)`, which on
+    Windows returns *no stdout at all* on `TimeoutExpired` — recorded as `[open]`
+    in FOLLOWUPS.md after T35's 69-byte transcript, and never fixed for the
+    review and fix agents because only the watched path was rewritten. A review
+    that hangs burns its full 30 minutes and used to leave nothing to read.
+
+    Output goes to a file rather than a pipe for the same reason it does in
+    `_run_watched`: a process that fills a pipe buffer nobody is draining
+    deadlocks.
+    """
+    import tempfile
+
+    timed_out = False
+    with tempfile.TemporaryDirectory() as scratch:
+        sink_path = Path(scratch) / "transcript"
+        with open(sink_path, "w+b") as sink:
+            process = subprocess.Popen(
+                argv, cwd=str(Path(cwd)), stdout=sink, stderr=subprocess.STDOUT,
+            )
+            try:
+                exit_code = process.wait(timeout=budget_minutes * 60)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                exit_code = 124
+                process.kill()
+                process.wait()
+        transcript = sink_path.read_bytes().decode("utf-8", "replace")
+
+    if timed_out:
+        transcript += (f"\n[orchestrator] agent exceeded its {budget_minutes:g} minute "
+                       f"budget and was killed\n")
+    return exit_code, transcript, timed_out
 
 
 def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
@@ -231,14 +476,6 @@ def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
     return exit_code, transcript, timed_out, stalled
 
 
-def _decode(stream) -> str:
-    if stream is None:
-        return ""
-    if isinstance(stream, bytes):
-        return stream.decode("utf-8", "replace")
-    return stream
-
-
 def looks_like_rate_limiting(result: AgentResult, commits_made: int,
                              config: Config) -> bool:
     """The fleet-wide signature: fast exit, non-zero code, no commits.
@@ -272,7 +509,10 @@ def classify_exit(result: AgentResult, *, commits_made: int, config: Config) -> 
     # The `exit_code != 0` guard stays: an agent that finished cleanly and merely
     # *mentioned* a rate limit in its output has not hit one, and quarantining it
     # for the word would be worse than the bug this reordering fixes.
-    lowered = result.transcript.lower()
+    # Both, because they are not always the same text: a CLI that dies before
+    # emitting a single JSON line leaves only `raw`, and a reconstruction that
+    # dropped a stderr line would silently lose the marker with it.
+    lowered = (result.transcript + "\n" + result.raw).lower()
     if result.exit_code != 0 and any(m in lowered for m in INFRASTRUCTURE_MARKERS):
         return "infrastructure"
 

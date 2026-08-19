@@ -97,6 +97,25 @@ def _duration(record) -> str:
     return f"{minutes // 60}h{minutes % 60:02d}"
 
 
+def _tokens(value: int | None) -> str:
+    """`3.17M`, or a dash. Never `0`.
+
+    A missing measurement and a free ticket are opposite conclusions, and the
+    column exists to be trusted at 8am when nobody is going to cross-check it.
+    """
+    if not value:
+        return "—"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.2f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.0f}k"
+    return str(value)
+
+
+def _cost(value: float | None) -> str:
+    return "—" if value is None else f"${value:.2f}"
+
+
 def _gates(record) -> str:
     return " ".join(
         f"{letter}{GATE_MARK.get(record.gates.get(name, 'not-run'), '?')}"
@@ -129,6 +148,7 @@ def render_report(state: RunState, backlog: Backlog) -> str:
 
     lines += _flake_section(state)
     lines += _table_section(state, backlog)
+    lines += _deferred_section(state, backlog)
     lines += _human_verify_section(state, backlog)
     lines += _waiting_section(state, backlog)
 
@@ -159,9 +179,9 @@ def _table_section(state: RunState, backlog: Backlog) -> list[str]:
         "Gates: R=red-proof S=suite C=scope V=review O=overlap · "
         "`✓` pass `!` warn `✗` fail `~` flaky `H` hold `-` not run",
         "",
-        "| # | model | status | wall | gates | review (std/spec) | scope deviations | "
-        "overlap | merge |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| # | model | status | wall | tokens | cost | gates | review (std/spec) | "
+        "scope deviations | overlap | merge |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     dispatched = [
@@ -180,6 +200,8 @@ def _table_section(state: RunState, backlog: Backlog) -> list[str]:
             f"| {ticket.model if ticket else '—'} "
             f"| {record.status} "
             f"| {_duration(record)} "
+            f"| {_tokens(record.tokens)} "
+            f"| {_cost(record.cost_usd)} "
             f"| {_gates(record)} "
             f"| {review} "
             f"| {', '.join(record.scope_deviations) or '—'} "
@@ -188,9 +210,70 @@ def _table_section(state: RunState, backlog: Backlog) -> list[str]:
         )
 
     if not dispatched:
-        lines.append("| — | — | nothing dispatched | — | — | — | — | — | — |")
+        lines.append(
+            "| — | — | nothing dispatched | — | — | — | — | — | — | — | — |")
 
+    lines += _cost_summary(dispatched)
     lines.append("")
+    return lines
+
+
+def _cost_summary(dispatched) -> list[str]:
+    """What the night cost, and what it cost to learn nothing.
+
+    Spend on tickets that did not land is the run's waste figure. It is the one
+    number that distinguishes "the backlog is hard" from "the harness is broken"
+    — five runs' worth of that distinction had to be reconstructed by hand from
+    transcripts, because nothing recorded it.
+    """
+    costed = [record for _, record in dispatched if record.cost_usd is not None]
+    if not costed:
+        return []
+
+    total_cost = sum(r.cost_usd or 0.0 for r in costed)
+    total_tokens = sum(r.tokens or 0 for r in costed)
+    landed = [r for r in costed if r.status == st.MERGED]
+    wasted = sum(r.cost_usd or 0.0 for r in costed if r.status != st.MERGED)
+
+    lines = ["", f"**Run total:** {_tokens(total_tokens)} tokens · "
+                 f"{_cost(total_cost)} across {len(costed)} dispatched."]
+    if landed:
+        per = sum(r.cost_usd or 0.0 for r in landed) / len(landed)
+        lines.append(f"{len(landed)} landed at {_cost(per)} each.")
+    lines.append(f"{_cost(wasted)} went on work that did not land.")
+    return lines
+
+
+def _deferred_section(state: RunState, backlog: Backlog) -> list[str]:
+    """Tickets the environment refused, separated from tickets that were wrong.
+
+    A `FAILED` row means read the transcript; a `DEFERRED` row means run it
+    again. Conflating the two is what made run-20260818-2244 read as a backlog
+    problem when every one of its four losses was a plan usage cap.
+    """
+    deferred = sorted(int(k) for k, r in state.tickets.items()
+                      if r.status == st.DEFERRED)
+    if not deferred:
+        return []
+
+    lines = [
+        "## Deferred — the environment, not the ticket", "",
+        "Nothing here was judged. These agents met a usage cap, a rate limit or "
+        "an API error, so no work was attempted and no verdict was reached. They "
+        "cost the run nothing but time and they hold no dependents.", "",
+    ]
+    for ticket_id in deferred:
+        title = backlog[ticket_id].title if ticket_id in backlog else ""
+        record = state.tickets[str(ticket_id)]
+        detail = f" ({record.exit_class})" if record.exit_class else ""
+        lines.append(f"- **T{ticket_id:02d}**{detail} — {title}")
+    lines += [
+        "",
+        f"Pick them up with `python -m orchestrator.run --resume runs/{state.run_id}` "
+        f"once the usage window has reopened. A resume re-dispatches deferred "
+        f"tickets and leaves quarantined ones alone.",
+        "",
+    ]
     return lines
 
 

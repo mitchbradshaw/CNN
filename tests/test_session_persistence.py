@@ -22,6 +22,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -68,8 +70,8 @@ def _close_and_unlink(app, db_path):
 
 def test_no_session_file_constructs_with_defaults():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file():
         db = _fresh_db_with_two_channels("defaults")
         app = appmod.ViewerApp(db_path=db)
@@ -82,8 +84,8 @@ def test_no_session_file_constructs_with_defaults():
 
 def test_save_then_restore_round_trip():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("roundtrip")
         app1 = appmod.ViewerApp(db_path=db)
@@ -119,8 +121,8 @@ def test_restoring_a_session_does_not_immediately_resave_it():
     overwritten by whatever transient intermediate state __init__ passes
     through while restoring."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("noresave")
         app1 = appmod.ViewerApp(db_path=db)
@@ -142,8 +144,8 @@ def test_restoring_a_session_does_not_immediately_resave_it():
 
 def test_corrupt_session_file_does_not_crash_startup():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         with open(session_path, "w") as f:
             f.write("{not valid json")
@@ -160,8 +162,8 @@ def test_stale_channel_in_session_is_ignored():
     source_file (e.g. a re-materialized recording with fewer channels)
     must degrade to the default, not crash or set an invalid param."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("stale")
         with open(session_path, "w") as f:
@@ -178,8 +180,8 @@ def test_stale_channel_shows_a_visible_notice():
     must produce a status-line notice, or a broken/misleading assumption
     ("this IS the session I saved") could go unnoticed."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("stalenotice")
         with open(session_path, "w") as f:
@@ -198,8 +200,8 @@ def test_stale_recording_shows_a_visible_notice():
     and that must also produce a visible notice, not just a silent
     fall-back to the first available recording."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("stalerecording")
         with open(session_path, "w") as f:
@@ -219,8 +221,8 @@ def test_valid_session_shows_no_stale_notice():
     """A session that matches a real recording/channel must NOT show the
     stale-session warning -- it's specifically for the mismatch case."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file() as session_path:
         db = _fresh_db_with_two_channels("validnotice")
         with open(session_path, "w") as f:
@@ -236,8 +238,8 @@ def test_valid_session_shows_no_stale_notice():
 
 def test_switching_channel_with_pending_span_warns():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file():
         db = _fresh_db_with_two_channels("warn")
         app = appmod.ViewerApp(db_path=db)
@@ -252,8 +254,8 @@ def test_switching_channel_with_pending_span_warns():
 
 def test_switching_channel_without_pending_span_does_not_warn():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     with scratch_session_file():
         db = _fresh_db_with_two_channels("nowarn")
         app = appmod.ViewerApp(db_path=db)
@@ -270,7 +272,7 @@ def test_switching_channel_without_pending_span_does_not_warn():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -279,10 +281,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

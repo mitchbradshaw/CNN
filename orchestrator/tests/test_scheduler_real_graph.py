@@ -49,11 +49,19 @@ def test_a_full_drain_lands_every_autonomous_ticket(real):
     landed = [i for wave in drain(real, Ceilings(3, 2)) for i in wave]
 
     assert len(landed) == len(set(landed)), "a ticket was dispatched twice"
-    # Everything except the two human gates, the 21 held downstream of T04, and
-    # anything already flagged `done` — that work is in the base, not the night.
-    held_downstream = real.dependents(4) | {49}
+    # Everything except the human gates still open, anything downstream of one,
+    # and anything already flagged `done` — that work is in the base, not the
+    # night.
+    #
+    # Was pinned to `real.dependents(4) | {49}`, which stopped being true the
+    # day T04 was hand-worked and flagged `done`: its twenty dependents became
+    # dispatchable and the expected set was twenty tickets short. Derived now,
+    # so the next ticket to land does not break it.
+    open_gates = {t.id for t in real if t.human_gate and not t.done}
+    held_downstream = set().union(*(real.dependents(i) for i in open_gates))         if open_gates else set()
     already_done = {t.id for t in real if t.done}
-    assert set(landed) == set(real.ids) - HUMAN_GATE - held_downstream - already_done
+    assert set(landed) == (set(real.ids) - open_gates - held_downstream
+                           - already_done)
 
 
 def test_human_gated_tickets_are_never_dispatched_at_any_tick(real):

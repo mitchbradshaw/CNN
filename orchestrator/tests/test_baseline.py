@@ -134,3 +134,71 @@ def test_a_genuinely_red_baseline_is_returned_not_refused(scratch, config, monke
     failed = capture_baseline(scratch, config, integration_branch="integration")
 
     assert failed == ("tests/test_a.py::test_x", "tests/test_b.py::test_y")
+
+
+# ------------------------- the junction is a dependency, not a secret
+#
+# Until 2026-08-19 a worktree whose junctioned channel directory was *present
+# but empty* was caught by accident: `UI/app.py` built the whole application at
+# import, so the missing `.npy` raised at collection and the run refused to
+# start. Removing that import-time construction was right, and it closed that
+# accidental alarm. Converting the 88 `_channel_available()` guards to real
+# skips is what replaces it — absent data now shows up as skips instead of as
+# silent passes — but only if something is actually reading the skip count.
+#
+# This is that something. `paths.recordings` is configured precisely so those
+# tests run; a baseline where they all skipped is a baseline measuring a
+# fraction of the suite, and every ticket that night would be gated on it.
+
+
+def _suite_output(passed: int, skipped: int) -> str:
+    return f"{passed} passed, {skipped} skipped in 420.41s (0:07:00)\n"
+
+
+@pytest.fixture
+def config_with_recordings(scratch, config):
+    """The shipped `config` fixture zeroes `recordings`; this check is only
+    about the configuration that asks for real data."""
+    channels = scratch.root / "DATA" / "derived" / "channels" / "M2_aug_concat_fs1"
+    channels.mkdir(parents=True)
+    return dataclasses.replace(
+        config, paths=dataclasses.replace(config.paths, recordings=(channels,)))
+
+
+def test_a_baseline_that_skipped_the_real_data_tests_refuses_to_start(
+        scratch, config_with_recordings, monkeypatch):
+    """Junction configured, data not actually reachable."""
+    _stub_suite(monkeypatch, SuiteResult(0, (), _suite_output(544, 88), 1.0), {})
+
+    with pytest.raises(BaselineError, match="skip"):
+        capture_baseline(scratch, config_with_recordings,
+                         integration_branch="integration")
+
+
+def test_a_baseline_with_no_skips_starts_normally(
+        scratch, config_with_recordings, monkeypatch):
+    """The healthy case: the junction is doing its job and everything ran."""
+    _stub_suite(monkeypatch, SuiteResult(0, (), _suite_output(632, 0), 1.0), {})
+
+    assert capture_baseline(scratch, config_with_recordings,
+                            integration_branch="integration") == ()
+
+
+def test_a_handful_of_skips_is_tolerated(
+        scratch, config_with_recordings, monkeypatch):
+    """Ordinary skips exist and must not stop a run — only a collapse in
+    coverage does. The bound is a fraction of the suite, not zero."""
+    _stub_suite(monkeypatch, SuiteResult(0, (), _suite_output(628, 4), 1.0), {})
+
+    assert capture_baseline(scratch, config_with_recordings,
+                            integration_branch="integration") == ()
+
+
+def test_skips_are_expected_when_no_recordings_are_configured(
+        scratch, config, monkeypatch):
+    """The mirror. With `recordings = []` the guarded tests are *supposed* to
+    skip, and refusing on that would make the isolated configuration
+    unstartable."""
+    _stub_suite(monkeypatch, SuiteResult(0, (), _suite_output(544, 88), 1.0), {})
+
+    assert capture_baseline(scratch, config, integration_branch="integration") == ()

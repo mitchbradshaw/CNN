@@ -16,9 +16,17 @@ ticket_branch_prefix = "ticket/"
 # tickets are allowed to finish.
 wall_clock_stop = "07:00"
 
+# The cap that actually binds is tokens per rolling usage window, not CPU and
+# not wall-clock. Three concurrent agents therefore do not cost less than one —
+# they spend the same budget three times faster. Run-20260818-2244 projected a
+# 6.5-hour drain into a 20-hour dispatch window and still died at 23:00, because
+# the burst overran a single usage window and every agent hit the cap at once.
+#
+# Two is the compromise: the night still has far more wall-clock than it needs,
+# and the burn is spread across windows rather than piled into one.
 [ceilings]
-concurrent = 3
-opus = 2
+concurrent = 2
+opus = 1
 
 # Budgets come from the ticket's size flag. Exceeding one is a stall.
 [budgets]
@@ -104,6 +112,23 @@ extra_args = ["--dangerously-skip-permissions"]
 # run-20260817-2050 this was configured and never implemented, so T35 committed
 # its work in twelve minutes, hung for forty-eight, and was thrown away twice.
 stall_minutes = 20
+# Ask the CLI for a structured session so the run can be costed. This is what
+# implements the `tokens` column ORCHESTRATOR_SPEC.md has specified since the
+# design settled and five runs shipped without: with `text`, the transcript is
+# the final message and nothing else, which is why every model-tier decision in
+# [models] below was taken against no measurement at all.
+#
+# `stream-json` rather than `json`: it emits one line per turn, so an agent that
+# is killed still leaves a transcript. Under `json` a killed agent leaves an
+# empty file — the defect FOLLOWUPS.md records as [open] after T35's 69 bytes.
+# The prose transcript is reconstructed from the stream, so `transcript-N.log`
+# still reads as prose and the review gate still finds its findings block; the
+# raw stream is kept beside it as `transcript-N.jsonl`.
+output_format = "stream-json"
+# A hard per-agent ceiling enforced by the CLI itself. 0 disables it. Set this
+# once a few runs have been costed and the real per-ticket figure is known —
+# guessing a ceiling before measuring just kills tickets mid-flight.
+max_budget_usd = 0.0
 # The CLI rewrites a global `~/.claude.json` at startup. Agents launched in the
 # same instant race on it — in run-20260817-2050 all three started at 20:56:35,
 # two read the file mid-write, and both burned a full 60-minute budget printing
@@ -166,4 +191,15 @@ flaky_weight = 0.5
 concurrent_signature = 2
 fast_exit_seconds = 60
 initial_backoff_seconds = 60
+# Bounds the *blind* exponential backoff, where nothing told us how long to
+# wait. It stays small on purpose.
 max_backoff_seconds = 900
+# Bounds a wait the transcript explicitly asked for. `You're out of extra usage
+# · resets 3:30am` is not a rate limit that clears in seconds; it is a plan
+# usage window, and the reset is hours away. Fifteen minutes against that
+# guarantees the runner gives up long before the environment recovers — which
+# is exactly what run-20260818-2244 did, four times, before the breaker tripped.
+# Six hours covers the longest window and still cannot outlast a night.
+max_usage_wait_seconds = 21600
+# Waking at the exact second the window is said to reopen races the reset.
+usage_reset_grace_seconds = 120

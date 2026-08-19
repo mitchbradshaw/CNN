@@ -28,6 +28,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -89,8 +91,8 @@ def test_shortcut_buttons_are_not_zero_sized():
     making `.click()` silently no-op. Every hidden shortcut button must
     have real (non-zero) dimensions and rely on opacity instead."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         assert len(app._shortcut_buttons) >= 12
@@ -107,8 +109,8 @@ def test_escape_button_clears_annotation_selection():
     selection. Verified at the Python handler level (click -> handler),
     not via a real browser keydown -- see module docstring."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         aid = q.list_annotations(app.conn, app._recording_id)[0]["id"]
@@ -134,8 +136,8 @@ def test_all_shortcut_buttons_reach_their_handler():
     indirectly by test_ui_selection.py / the smoke test since they need
     a pending span / viewport."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         by_class = {}
@@ -169,8 +171,8 @@ def test_reset_full_view_button_restores_full_extent():
     whole channel -- this is the explicit, always-whole-channel
     alternative the brief asked for."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         full = app._full_extent
@@ -194,8 +196,8 @@ def test_vertical_pan_shifts_rendered_y_range():
     curve DATA's own min/max, not the `ylim` display override -- a
     distinction that caused false negatives earlier in development)."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         import holoviews as hv
@@ -225,7 +227,7 @@ def test_vertical_pan_shifts_rendered_y_range():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -234,10 +236,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

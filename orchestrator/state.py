@@ -41,6 +41,17 @@ class TicketRecord:
     started_at: str | None = None
     ended_at: str | None = None
     exit_class: str | None = None
+    #: What this ticket cost, summed across its agent, its review rounds and any
+    #: auto-fix round. `None` means no measurement was taken — an older CLI, a
+    #: killed agent, `agent.output_format = "text"` — and must never be rendered
+    #: as zero, because "free" and "unmeasured" are opposite conclusions.
+    tokens: int | None = None
+    cost_usd: float | None = None
+    #: Environment failures met while trying to run this ticket. Counted apart
+    #: from `attempts`, which counts attempts at the *work*: a usage cap is not
+    #: an attempt, and charging one against the ticket is what quarantined four
+    #: innocent tickets in run-20260818-2244.
+    infrastructure_attempts: int = 0
 
 
 @dataclass

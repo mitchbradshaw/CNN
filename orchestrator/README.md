@@ -30,7 +30,7 @@ touching git. It is the same code path the run uses, so it is evidence about the
 second implementation of it.
 
 ```
-RUN PLAN — integration/run-20260815-2130  (ceiling 3, opus 2, stop 07:00)
+RUN PLAN — integration/run-20260815-2130  (ceiling 2, opus 1, stop 07:00)
 
 wave 1     t+0h00   T01 sonnet M  60m  Seven interchange types with disk serialisat
                     T02 sonnet M  60m  Schema extension: new tables, new columns, u
@@ -63,12 +63,24 @@ Four things, in order.
    find the real database, and the builder now refuses to emit a row whose `.npy` is not on disk.
 
    That last check is not hypothetical. In run-20260817-1157 the channel directory named in
-   `paths.recordings` was empty, so all 16 fixture rows pointed at files that did not exist.
-   `UI/app.py` builds a `ViewerApp` at import time, the load raised `FileNotFoundError`, and the ten
-   test files that import `UI.app` failed at *collection* — which aborts the whole pytest session.
-   Every worktree ran zero tests all night while the suite gate reported green. Rebuild the fixture
-   after any change to `paths.recordings`, after a schema migration, and any time
-   `DATA/derived/channels/` has been cleared.
+   `paths.recordings` was empty, so all 16 fixture rows pointed at files that did not exist. `UI/app.py`
+   built a `ViewerApp` at import time, the load raised `FileNotFoundError`, and the ten test files
+   that import the app package failed at *collection* — which aborts the whole pytest session. Every
+   worktree ran zero tests all night while the suite gate reported green. Rebuild the fixture after
+   any change to `paths.recordings`, after a schema migration, and any time `DATA/derived/channels/`
+   has been cleared.
+
+   **The import-time construction was removed on 2026-08-19** — the servable call moved to
+   `UI/serve.py`, and `import UI.app` now defines the factory without calling it. That closes the
+   *collection-failure* half of this story but not the fixture obligation: tests still read the
+   database, and a fixture that has drifted from `schema.py` still fails them honestly.
+
+   It also removed an alarm. A junction that was present but pointing at an *empty* directory used to
+   be caught because `import UI.app` crashed at collection; now the import succeeds. The replacement
+   is two-part: the 88 `_channel_available()` guards became real `pytest.skip` calls, so absent data
+   shows up as skips rather than silent passes, and `capture_baseline` refuses to start when
+   `paths.recordings` is configured but the baseline skipped more than 5% of the suite. The junction
+   itself is kept — see `FOLLOWUPS.md` for the measurement that settled it.
 4. **Measure the suite.** `pytest -q --durations=15`, twice — the first run pays the import cost for
    torch/kymatio/aeon. Under ~2 min the design holds as written; 2–8 min holds with a lower ceiling;
    over ~15 min the merge gate becomes the bottleneck and the policy needs revisiting.
@@ -113,7 +125,18 @@ get to stop a merge at 3am.
 ### When something goes wrong
 
 **Quarantine** preserves the branch, marks the ticket `FAILED`, holds everything downstream as
-`BLOCKED_UPSTREAM`, and continues with the rest of the DAG.
+`BLOCKED_UPSTREAM`, and continues with the rest of the DAG. It is a verdict on the ticket's *work*,
+and only the gates produce it.
+
+**Defer** is what happens when the environment, not the ticket, is the problem — a usage cap, a rate
+limit, an API error. The ticket is marked `DEFERRED`: no circuit-breaker weight, no dependents held,
+and its branch deleted if it carries no commits so the next dispatch can provision. Nothing was
+judged, so nothing may be concluded. Deferred tickets are terminal for the night and re-queued at the
+top of the next pass, which is what `--resume` is for.
+
+The distinction is load-bearing. Until 2026-08-19 an infrastructure failure quarantined: in
+`run-20260818-2244` four agents hit a plan usage cap, all four were quarantined, the breaker tripped
+on the third, and a twenty-hour night ended at 23:00 having merged nothing.
 
 **The circuit breaker** halts the run after three consecutive quarantines, or when more than 40% of
 dispatched tickets are quarantined. That is the difference between "one ticket was wrong" and "the
@@ -122,7 +145,14 @@ on their *own* streak — a flaky ticket merges, and a merge clears the quaranti
 one counter would let every flake erase its own contribution.
 
 **Rate limiting is handled fleet-wide.** When the signature — fast exit, non-zero code, no commits —
-appears on two or more agents, *all* dispatch pauses and backs off exponentially to a 15-minute cap.
+appears on two or more agents, *all* dispatch pauses. Three agents each backing off independently is
+three agents discovering the same closed door.
+
+How long it pauses depends on whether anything told it. A plan usage cap prints its own reset time
+(`You're out of extra usage · resets 3:30am`); the runner reads that and waits for it, bounded by
+`rate_limit.max_usage_wait_seconds` (6h). Where nothing names a time, it falls back to blind
+exponential backoff bounded by `max_backoff_seconds` (15m) — small on purpose, because a guess should
+not cost hours.
 
 ---
 
