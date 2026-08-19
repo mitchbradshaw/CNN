@@ -43,6 +43,8 @@ import sys
 import tempfile
 import time
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -663,8 +665,8 @@ def _show_fixture(rp, x, sps, **kwargs):
 
 def test_dsax_appears_in_the_run_panel_algorithm_list():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -683,8 +685,8 @@ def test_dsax_appears_in_the_run_panel_algorithm_list():
 
 def test_running_dsax_populates_the_encoding_section():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -712,8 +714,8 @@ def test_running_dsax_populates_the_encoding_section():
 
 def test_csax_still_renders_in_the_amplitude_domain_through_the_panel():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -740,8 +742,8 @@ def test_persisted_string_matches_the_displayed_string():
     """The cached `.txt` and the run panel must agree, or a morphology
     regex saved against one silently fails against the other."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     from Working.database import runs as R
     from Working.encoding_cache import read_encoding_file
 
@@ -769,8 +771,8 @@ def test_long_encoding_defaults_to_visible_range_and_still_renders():
     ENCODING_STRING_INLINE_THRESHOLD symbols -- which auto-selects
     'Visible range only' -- raised. See UI_INTEGRATION_NOTES.md."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     from Working.config import ENCODING_STRING_INLINE_THRESHOLD
 
     app, db_path, _rid = _fresh_app()
@@ -787,8 +789,8 @@ def test_long_encoding_defaults_to_visible_range_and_still_renders():
 
 def test_morphology_search_finds_the_sharkfin_and_steps_through_matches():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -817,8 +819,8 @@ def test_morphology_search_finds_the_sharkfin_and_steps_through_matches():
 
 def test_morphology_search_steps_and_recentres_the_view():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -845,8 +847,8 @@ def test_morphology_search_steps_and_recentres_the_view():
 
 def test_morphology_search_reports_an_invalid_regex_without_raising():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -863,8 +865,8 @@ def test_morphology_search_reports_an_invalid_regex_without_raising():
 
 def test_morphology_search_announces_the_highlight_cap():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -884,8 +886,8 @@ def test_morphology_search_announces_the_highlight_cap():
 
 def test_morphology_search_survives_an_empty_result_and_a_clear():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -908,8 +910,8 @@ def test_morphology_search_survives_an_empty_result_and_a_clear():
 
 def test_noise_floor_button_reports_and_does_not_recompute():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -944,8 +946,8 @@ def test_noise_floor_button_reports_and_does_not_recompute():
 
 def test_noise_floor_controls_hidden_and_gated_appropriately():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     from Adapters.detection_sax_dsax import NOISE_FLOOR_MAX_SAMPLES
 
     app, db_path, _rid = _fresh_app()
@@ -970,8 +972,8 @@ def test_noise_floor_controls_hidden_and_gated_appropriately():
 
 def test_even_alphabet_legend_says_so_and_disables_the_halfwidth_control():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, _rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -994,8 +996,8 @@ def test_even_alphabet_legend_says_so_and_disables_the_halfwidth_control():
 
 def test_motif_seed_records_the_matching_pattern():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     from Working.database import runs as R
 
     app, db_path, _rid = _fresh_app()
@@ -1024,7 +1026,7 @@ def test_motif_seed_records_the_matching_pattern():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -1033,10 +1035,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

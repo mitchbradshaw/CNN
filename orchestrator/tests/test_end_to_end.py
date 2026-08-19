@@ -76,6 +76,27 @@ if mode == "silent":            # exits clean having committed nothing
     print("I have decided to do nothing.")
     sys.exit(0)
 
+# Stalls once, having dirtied the worktree without committing anything, then
+# reports on its second run whether that mess was still there. RETRY_PREFIX
+# promises the retry "a clean worktree"; this is what checks the promise.
+if mode == "dirty-stall":
+    scratch = pathlib.Path(os.environ["FAKE_FLAKE_DIR"])
+    marker = scratch / (label + ".attempt")
+    seen = int(marker.read_text()) if marker.exists() else 0
+    marker.write_text(str(seen + 1))
+    if seen == 0:
+        (cwd / "half_written.py").write_text("garbage the agent left behind\\n")
+        (cwd / "tests" / "test_base.py").write_text("def test_base(): assert False\\n")
+        print("I got confused and stopped.")
+        sys.exit(0)
+    dirt = []
+    if (cwd / "half_written.py").exists():
+        dirt.append("untracked-leftover")
+    if "assert False" in (cwd / "tests" / "test_base.py").read_text():
+        dirt.append("modified-tracked")
+    (scratch / (label + ".sawdirt")).write_text(",".join(dirt) or "clean")
+    mode = "good"
+
 if mode == "impl-first":        # first commit touches implementation
     (cwd / "pkg").mkdir(exist_ok=True)
     (cwd / "pkg" / "__init__.py").write_text("")
@@ -876,3 +897,66 @@ def test_review_rounds_are_costed_too(world, monkeypatch):
     # usage — but the ticket agent's must still have been recorded, and the
     # accumulator must not have been clobbered by the uncosted review.
     assert runner.state.tickets["1"].tokens == 100 + 900 + 1000 + 98000
+
+
+# ------------------------------- the retry's clean worktree, actually clean
+#
+# `RETRY_PREFIX` tells the retrying agent: "you are starting again from a clean
+# worktree, so do not assume any of its work exists." That was never true —
+# `_run_agent_with_retry` handed it the same worktree the previous attempt
+# stalled in, half-edited. The agent was being lied to about the state of its
+# own tree, which is the one thing it cannot check cheaply.
+
+
+def test_the_retry_gets_the_clean_worktree_its_prompt_promises(world, monkeypatch):
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "dirty-stall")
+    runner = build_runner(world, world.config(stall_retries=1))
+
+    runner.run()
+
+    saw = (Path(os.environ["FAKE_FLAKE_DIR"]) / "T01.sawdirt").read_text()
+    assert saw == "clean", (
+        f"the retry inherited the stalled attempt's mess ({saw}) while its "
+        f"prompt told it the worktree was clean"
+    )
+    assert runner.state.tickets["1"].status == MERGED
+
+
+def test_a_stall_retry_still_lands_on_the_same_branch(world, monkeypatch):
+    """Re-provisioning must not strand the ticket: same branch name, and the
+    merge still happens from it."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_AGENT_MODE", "dirty-stall")
+    runner = build_runner(world, world.config(stall_retries=1))
+
+    runner.run()
+
+    assert runner.state.tickets["1"].branch == "ticket/T01"
+    assert "ticket/T01" in world.git.branch_names()
+    subjects = [c.subject for c in world.git.merge_commits("integration")]
+    assert subjects == ["T01: Fake ticket 1"]
+
+
+def test_a_stall_that_committed_work_is_never_wiped(world, monkeypatch):
+    """The safety bound on the whole idea. Re-provisioning is only safe because
+    a stall means zero commits by construction — `classify_exit` returns `ok`
+    for a timeout that produced commits, precisely so the gates judge the work
+    rather than the run loop discarding it. If that ever stops holding, this
+    test is what says so."""
+    world.ticket(1)
+    world.commit()
+    # `no-impl` commits its failing test and then exits: real work, red suite.
+    monkeypatch.setenv("FAKE_AGENT_MODE", "no-impl")
+    runner = build_runner(world, world.config(stall_retries=1))
+
+    runner.run()
+
+    record = runner.state.tickets["1"]
+    assert record.exit_class == "red-at-exit", "committed work went to the gates"
+    assert record.attempts == 1, "a ticket that produced work is not re-run blind"
+    assert world.git.commits_between("integration", "ticket/T01"), (
+        "the committed work is still on the branch as evidence"
+    )

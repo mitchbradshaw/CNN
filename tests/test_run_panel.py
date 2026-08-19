@@ -17,6 +17,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -76,8 +78,8 @@ def _curve_x_extent(curve):
 
 def test_preview_renders_on_arrival_with_a_staged_span():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -102,8 +104,8 @@ def test_result_pane_never_shows_stale_single_plot_alongside_before_after():
     (not the earlier single Curve); switching span context afterwards
     reverts it to a fresh single-plot preview, never leaving both."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -126,8 +128,8 @@ def test_result_pane_never_shows_stale_single_plot_alongside_before_after():
 
 def test_preview_updates_on_span_mode_change():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -153,8 +155,8 @@ def test_preview_updates_on_span_mode_change():
 
 def test_preview_updates_on_staged_row_selection():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -183,8 +185,8 @@ def test_preview_updates_on_staged_row_selection():
 
 def test_independent_yaxis_gives_each_panel_its_own_tight_range():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -217,8 +219,8 @@ def test_independent_yaxis_gives_each_panel_its_own_tight_range():
 
 def test_shared_yaxis_gives_both_panels_the_identical_combined_range():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -241,8 +243,8 @@ def test_shared_yaxis_gives_both_panels_the_identical_combined_range():
 
 def test_yaxis_toggle_rerenders_last_result_without_rerunning():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -266,8 +268,8 @@ def test_yaxis_toggle_rerenders_last_result_without_rerunning():
 
 def test_detections_placeholder_shown_before_first_run():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -282,8 +284,8 @@ def test_detections_placeholder_shown_before_first_run():
 
 def test_motif_buttons_disabled_until_run_or_valid_span():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, rid = _fresh_app()
     try:
         rp = app.run_panel
@@ -307,7 +309,7 @@ def test_motif_buttons_disabled_until_run_or_valid_span():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -316,10 +318,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

@@ -343,6 +343,70 @@ class Runner:
                 return False
             tail = result.transcript[-4000:]
 
+            fresh = self._reprovision_for_retry(ticket, worktree, commits=commits)
+            if fresh is None:
+                self._quarantine(ticket, "could not reprovision for the stall retry",
+                                 exit_class="infrastructure")
+                return False
+            worktree = fresh
+
+    def _reprovision_for_retry(self, ticket, worktree, *, commits: int):
+        """Replace a stalled worktree with a fresh one, so the retry's prompt is true.
+
+        `RETRY_PREFIX` tells the retrying agent "you are starting again from a
+        clean worktree, so do not assume any of its work exists". It was handed
+        the same half-edited tree the previous attempt stalled in — being lied
+        to about the one thing it cannot cheaply check.
+
+        Teardown-and-reprovision, **not** `git reset --hard` plus `git clean -fd`.
+        `clean` is a recursive delete aimed at a tree that contains a junction to
+        317 MB of shared recording data. It is safe today only because `DATA/*`
+        is in `.gitignore` and `clean` without `-x` honours that — a one-line
+        dependency, in a repo that has already had one near-miss where a
+        recursive walk followed exactly that junction and would have deleted its
+        target (see `teardown`'s reparse-point check, and the test that covers
+        it). `teardown()` is the code that already knows to unlink junctions
+        before anything recursive runs, so this reuses it rather than opening a
+        second path to the same cliff.
+
+        Safe only because a stall means zero commits by construction:
+        `classify_exit` grades a timeout that *did* produce commits as `ok` and
+        sends it to the gates, precisely so the run loop never discards work.
+        Asserted rather than assumed — if that ever stops holding, this refuses
+        instead of deleting.
+        """
+        if commits:
+            self._note(f"T{ticket.id:02d} not reprovisioning: {commits} commit(s) "
+                       f"on the branch would be discarded")
+            return worktree
+
+        try:
+            teardown(self.git, worktree)
+            # `provision` uses `git worktree add -b`, which refuses an existing
+            # branch. Deleting is safe here for the same reason the reprovision
+            # is: the branch carries nothing.
+            self.git.delete_branch(worktree.branch)
+            fresh = provision(
+                self.git, ticket_id=ticket.id,
+                worktrees_root=self.config.paths.worktrees,
+                integration_branch=self.state.integration_branch,
+                branch_prefix=self.config.ticket_branch_prefix,
+                fixture_db=self.config.paths.fixture_db,
+                fixture_db_dest=self.config.paths.fixture_db_dest,
+                recordings=self.config.paths.recordings,
+            )
+        except Exception as exc:                     # noqa: BLE001
+            self._note(f"T{ticket.id:02d} reprovision failed: {exc!r}")
+            return None
+
+        # Path and branch are derived from the ticket id, so the new worktree is
+        # value-identical to the old one. `_pipeline` holds its own reference and
+        # tears down by path; that reference stays correct precisely because of
+        # this. Do not make `provision` allocate unique paths without also
+        # threading the new worktree back out to `_pipeline`.
+        self._note(f"T{ticket.id:02d} reprovisioned a clean worktree for the retry")
+        return fresh
+
     def _infrastructure_pause(self, ticket, result, attempts: int) -> float:
         """How long to wait, and pause the whole fleet for it.
 

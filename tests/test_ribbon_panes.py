@@ -35,6 +35,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -124,8 +126,8 @@ def test_x_ranges_stay_synchronised_across_pan_and_zoom():
     representative of the live app and must not be reintroduced here.
     """
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -170,8 +172,8 @@ def test_x_ranges_stay_synchronised_across_pan_and_zoom():
 
 def test_ribbon_panes_render_non_empty_when_data_in_view():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -195,8 +197,8 @@ def test_ribbon_panes_render_something_even_with_no_data_in_view():
     tint, not zero renderers, so "no data" and "broken pane" can never
     look identical."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -218,8 +220,8 @@ def test_ribbon_panes_render_something_even_with_no_data_in_view():
 
 def test_ribbon_bucket_coordinates_fall_within_curve_x_range():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -249,8 +251,8 @@ def test_ribbon_bucket_coordinates_fall_within_curve_x_range():
 
 def test_ribbon_panes_have_fixed_height_and_hidden_axes_and_no_toolbar():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -270,8 +272,8 @@ def test_ribbon_panes_share_left_border_with_the_curve():
     starting at a different pixel x-position than the curve's, which
     would visibly offset every bucket from the region it annotates."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         renderer = hv.renderer("bokeh")
@@ -289,8 +291,8 @@ def test_ribbon_panes_share_left_border_with_the_curve():
 
 def test_toggling_annotations_off_collapses_the_annotation_pane():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         assert app.annotation_ribbon_pane.visible is True
@@ -304,8 +306,8 @@ def test_toggling_annotations_off_collapses_the_annotation_pane():
 
 def test_toggling_reviewed_ribbon_off_collapses_its_pane():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         assert app.reviewed_ribbon_pane.visible is True
@@ -322,7 +324,7 @@ def test_toggling_reviewed_ribbon_off_collapses_its_pane():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -331,10 +333,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 

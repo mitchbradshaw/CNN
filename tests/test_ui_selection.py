@@ -21,6 +21,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
         and os.path.dirname(PROJECT_ROOT) != PROJECT_ROOT:
@@ -77,8 +79,8 @@ def _close_and_unlink(app, db_path):
 
 def test_subsample_drag_snaps_to_exact_sample_boundary():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         app._set_pending_bounds(100.37, 250.91)  # fs=1.0Hz -> not sample-aligned
@@ -89,8 +91,8 @@ def test_subsample_drag_snaps_to_exact_sample_boundary():
 
 def test_snapped_bounds_produce_integer_sample_indices_in_saved_annotation():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         app._set_pending_bounds(1000.2, 1100.8)
@@ -117,8 +119,8 @@ def test_saved_indices_identical_regardless_of_display_unit():
     axis unit is), must produce byte-identical stored sample indices.
     """
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         app.drag_mode.value = "New span"
@@ -141,8 +143,8 @@ def test_saved_indices_identical_regardless_of_display_unit():
 
 def test_stepper_step_size_matches_one_sample_period():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         assert app.start_time_input.step == 1.0 / app._fs  # fs=1.0Hz here -> 1.0s
@@ -154,8 +156,8 @@ def test_stepper_step_size_matches_one_sample_period():
 
 def test_zero_or_negative_width_after_snapping_clears_pending_bounds():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         # Both ends round to the same sample -> zero-width, must not be saved as a span.
@@ -174,8 +176,8 @@ def test_table_to_model_sync_does_not_reenter_infinitely():
     already-built instance's class afterward doesn't reach an already-bound
     Param watcher reference."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     calls = {"n": 0}
     orig = ViewerApp._on_table_selection_changed
 
@@ -212,8 +214,8 @@ def test_table_to_model_sync_does_not_reenter_infinitely():
 
 def test_selection_persists_across_filter_change_with_hidden_count():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         rows = app._filtered_annotation_rows()
@@ -244,8 +246,8 @@ def test_selection_persists_across_filter_change_with_hidden_count():
 
 def test_annotation_toggle_selection_via_box_select():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         rows = app._filtered_annotation_rows()
@@ -293,8 +295,8 @@ def test_plot_selection_repins_table_not_just_checkbox():
     LATER page) never actually reached page 1 and didn't show a pin icon
     even where it was already visible."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, ids = _fresh_app_many_annotations(30)
     try:
         # Annotation index 25 -- with 30 rows sorted by start_idx and a
@@ -330,8 +332,8 @@ def test_plot_selection_of_two_annotations_both_reach_page_one():
     """The exact reported symptom: 2 selected via the plot, but only one
     pin marker visible. Both must be pinned and both must be on page 1."""
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path, ids = _fresh_app_many_annotations(30)
     try:
         row_a = q.get_annotation(app.conn, ids[10])
@@ -359,8 +361,8 @@ def test_plot_selection_of_two_annotations_both_reach_page_one():
 
 def test_staged_spans_survive_tab_switch():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         app.drag_mode.value = "New span"
@@ -384,8 +386,8 @@ def test_staged_spans_survive_tab_switch():
 
 def test_stage_from_selected_annotations():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         rows = app._filtered_annotation_rows()
@@ -404,8 +406,8 @@ def test_stage_from_selected_annotations():
 
 def test_remove_and_clear_staged_spans():
     if not _channel_available():
-        print("  (skipped: real channel data not present)")
-        return
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         app._stage_span(100, 200, annotation_id=None)
@@ -429,7 +431,7 @@ def test_remove_and_clear_staged_spans():
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
-    passed, failed = 0, []
+    passed, skipped, failed = 0, 0, []
     for fn in fns:
         try:
             fn()
@@ -438,10 +440,22 @@ def _run_all():
         except AssertionError as e:
             print(f"[FAIL] {fn.__name__}: {e}")
             failed.append(fn.__name__)
+        except pytest.skip.Exception as e:
+            # `Skipped` derives from BaseException, not Exception, so it would
+            # sail past the handler below and abort the whole standalone run on
+            # the first guarded test. Absent data is a skip here too, not a pass.
+            print(f"[SKIP] {fn.__name__}: {e}")
+            skipped += 1
         except Exception as e:
             print(f"[ERROR] {fn.__name__}: {e!r}")
             failed.append(fn.__name__)
-    print(f"\n{passed}/{len(fns)} passed")
+    tally = f"{passed}/{len(fns)} passed"
+    if skipped:
+        # Never fold skips into the pass count: "all green" and "the data
+        # was not there" are the two readings this file exists to keep
+        # apart.
+        tally += f", {skipped} skipped (real channel data absent)"
+    print(f"\n{tally}")
     if failed:
         raise SystemExit(1)
 
