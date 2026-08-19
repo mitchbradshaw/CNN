@@ -126,7 +126,23 @@ name = "widget" if mode == "collide" else "widget_" + slug
     + ("" if name == "widget" else "widget = " + name + "\\n")
 )
 git("add", "-A"); git("commit", "-m", label + ": green")
-print(label + " complete")
+
+# Speak whichever dialect the runner asked for. Under `--output-format
+# stream-json` the CLI emits one JSON object per line and ends with a `result`
+# record carrying the usage; the runner reconstructs the prose from it.
+if "stream-json" in argv:
+    import json as _json
+    print(_json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "text", "text": "Working " + label + "."}]}}))
+    print(_json.dumps({
+        "type": "result", "subtype": "success", "is_error": False,
+        "num_turns": 7, "result": label + " complete", "total_cost_usd": 0.5,
+        "usage": {"input_tokens": 100, "output_tokens": 900,
+                  "cache_creation_input_tokens": 1000,
+                  "cache_read_input_tokens": 98000},
+    }))
+else:
+    print(label + " complete")
 '''
 
 CONFIG = """
@@ -801,3 +817,62 @@ def test_the_stub_records_what_the_night_cost(world):
     section = (world.root / "FOLLOWUPS.md").read_text(
         encoding="utf-8").split("## Harness —")[-1]
     assert "token" in section.lower() or "cost" in section.lower()
+
+
+# ------------------------------------------ cost accounting, end to end (item 4)
+
+
+def test_a_structured_session_lands_its_cost_in_the_state_and_the_report(world):
+    """The wiring the unit tests cannot cover: CLI flags -> usage extraction ->
+    state -> REPORT.md. `ORCHESTRATOR_SPEC.md` has specified this column since
+    the design settled and five runs shipped without it."""
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config(output_format="stream-json"))
+
+    runner.run()
+
+    record = runner.state.tickets["1"]
+    assert record.status == MERGED
+    assert record.tokens and record.tokens > 0, "no usage recorded"
+    assert record.cost_usd and record.cost_usd > 0
+
+    report = runner.run_dir.report_path.read_text(encoding="utf-8")
+    assert "tokens" in report
+    assert "Run total:" in report
+
+
+def test_the_prose_transcript_survives_structured_output(world):
+    """`transcript-N.log` must stay readable — it is what a human opens at 8am,
+    and what the stall retry injects into the next prompt. If structured output
+    left raw JSON there, the review gate would also stop finding its fenced
+    findings block and every ticket would merge unreviewed."""
+    world.ticket(1)
+    world.commit()
+    runner = build_runner(world, world.config(output_format="stream-json"))
+
+    runner.run()
+
+    transcript = runner.run_dir.artifact(1, "transcript-1.log").read_text(encoding="utf-8")
+    assert "T01 complete" in transcript
+    assert '"type":"result"' not in transcript, "raw JSON leaked into the prose log"
+    # The stream itself is kept beside it, because the reconstruction is the
+    # thing you stop trusting when something looks wrong.
+    assert runner.run_dir.artifact(1, "transcript-1.jsonl").exists()
+
+
+def test_review_rounds_are_costed_too(world, monkeypatch):
+    """A review is two parallel sub-agents plus an orchestrating session, and it
+    runs on every ticket. Costing only the ticket agent would hide the more
+    expensive half of the night."""
+    world.ticket(1)
+    world.commit()
+    monkeypatch.setenv("FAKE_REVIEW_FINDINGS", "standards | 6.2 | - | speculative generality")
+    runner = build_runner(world, world.config(output_format="stream-json"))
+
+    runner.run()
+
+    # The fake reviewer prints prose, not stream-json, so it contributes no
+    # usage — but the ticket agent's must still have been recorded, and the
+    # accumulator must not have been clobbered by the uncosted review.
+    assert runner.state.tickets["1"].tokens == 100 + 900 + 1000 + 98000
