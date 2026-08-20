@@ -231,13 +231,31 @@ class LayoutMixin:
         )
 
         viewer_tab = pn.Row(controls, viewer_main, sizing_mode="stretch_width")
-        self.tabs = pn.Tabs(
-            ("Viewer", viewer_tab),
-            ("Run algorithm", self.run_panel.layout()),
-            ("Run history", self.run_history.layout()),
-            ("Motif browser", self.motif_browser.layout()),
+        
+        # T18: Four-workspace shell — seven tabs become four workspaces plus Admin group
+        # Explore is the existing viewer (behaviorally unchanged)
+        # Analyse, Review, Library are mount points that register content without editing the shell
+        explore_tab = viewer_tab
+        analyse_tab = self.run_panel.layout()
+        
+        # Review is an empty mount point for now (to be filled by future tickets T20/T21)
+        review_tab = pn.pane.Markdown("### Review workspace\n\n*Content to be added by ticket T20/T21*")
+        
+        # Library contains the motif browser (T18: moved from standalone tab to Library workspace)
+        library_tab = self.motif_browser.layout()
+        
+        # Admin group holds vocabulary administration and recording import
+        admin_group = pn.Tabs(
             ("Vocabulary admin", self.admin.layout()),
             ("Import recording", self.file_import.layout()),
+        )
+        
+        self.tabs = pn.Tabs(
+            ("Explore", explore_tab),
+            ("Analyse", analyse_tab),
+            ("Review", review_tab),
+            ("Library", library_tab),
+            ("Admin", admin_group),
             sizing_mode="stretch_width",
         )
         # Part 5 A1: arriving on the Run algorithm tab (index 1) — whether
