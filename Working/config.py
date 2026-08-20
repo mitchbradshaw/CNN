@@ -376,3 +376,12 @@ WM_COVERAGE_RIBBON_BUCKETS = 300
 # catches.
 SIMILARITY_IOU_THRESHOLD = 0.8
 SIMILARITY_WIDTH_RATIO_THRESHOLD = 1.5
+
+# ── Held-out recording lock ────────────────────────────────────────────────
+#
+# The evaluation recording is refused by both the viewer and the runner unless
+# explicitly unlocked, so "untouched until the freeze" is true by construction.
+# The lock keys on source file, so every materialised channel of the held-out
+# recording is covered by one config entry.
+HELD_OUT_RECORDING_FILE = "M4_aug_concat_fs1.mat"
+HELD_OUT_UNLOCK = False  # Set to True to temporarily allow access for evaluation

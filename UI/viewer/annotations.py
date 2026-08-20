@@ -177,12 +177,12 @@ class AnnotationsMixin:
 
     def _switch_to_run_tab(self):
         if self.tabs is not None:
-            self.tabs.active = 1  # "Run algorithm" — see layout()
+            self.tabs.active = 1  # "Analyse" — see layout() (T18: index 1 is now Analyse workspace)
 
     def _on_tab_changed(self, event):
-        if event.new == 1 and self.run_panel is not None:  # "Run algorithm"
+        if event.new == 1 and self.run_panel is not None:  # "Analyse" (T18: index 1 is now Analyse workspace)
             self.run_panel._on_span_context_changed()
-        if event.new == 3 and self.motif_browser is not None:  # "Motif browser"
+        if event.new == 3 and self.motif_browser is not None:  # "Library" (T18: index 3 is now Library workspace with motif browser)
             self.motif_browser.on_tab_activated()
 
     def _on_save_and_run(self, _event=None):

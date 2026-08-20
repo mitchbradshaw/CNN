@@ -62,6 +62,21 @@ class SignalViewMixin:
             self.channel = channels[0]
 
     def _on_source_file_change(self):
+        from Working.config import HELD_OUT_RECORDING_FILE, HELD_OUT_UNLOCK
+        
+        # Guard against loading the held-out recording unless explicitly unlocked
+        if not HELD_OUT_UNLOCK and self.source_file == HELD_OUT_RECORDING_FILE:
+            self.status.object = (
+                f"**Access to held-out recording '{HELD_OUT_RECORDING_FILE}' is locked.** "
+                f"Set HELD_OUT_UNLOCK=True in Working/config.py to temporarily allow access."
+            )
+            # Revert to a safe selection
+            source_files = sorted({r["source_file"] for r in q.list_recordings(self.conn)})
+            safe_files = [f for f in source_files if f != HELD_OUT_RECORDING_FILE]
+            if safe_files:
+                self.source_file = safe_files[0]
+            return
+        
         had_pending_span = bool(self._pending_bounds and self._pending_bounds[0] is not None)
         self._refresh_channel_options()
         self._load_recording()

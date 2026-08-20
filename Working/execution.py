@@ -43,6 +43,11 @@ class RecipeCancelled(RuntimeError):
     status='failed' with a note, not left half-written."""
 
 
+class HeldOutRecordingLocked(RuntimeError):
+    """Raised when attempting to execute a recipe on the held-out recording
+    without explicitly unlocking it first."""
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -133,9 +138,18 @@ def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_c
 
 
 def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, run_kwargs=None):
+    from Working.config import HELD_OUT_RECORDING_FILE, HELD_OUT_UNLOCK
+    
     recording = q.get_recording_by_id(conn, recipe["recording_id"])
     if recording is None:
         raise ValueError(f"No recording with id={recipe['recording_id']}")
+
+    # Guard against accessing the held-out recording unless explicitly unlocked
+    if not HELD_OUT_UNLOCK and recording["source_file"] == HELD_OUT_RECORDING_FILE:
+        raise HeldOutRecordingLocked(
+            f"Access to held-out recording '{HELD_OUT_RECORDING_FILE}' is locked. "
+            f"Set HELD_OUT_UNLOCK=True in Working/config.py to temporarily allow access."
+        )
 
     # Hard-fail before any computation (or run row) — a hand-edited or
     # cluster-generated recipe that bypassed `Working.recipes.make_recipe`
