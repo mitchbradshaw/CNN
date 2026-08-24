@@ -297,10 +297,17 @@ def _shipped_adapter_specs():
 
 def test_every_shipped_adapter_registers_without_modification():
     specs = _shipped_adapter_specs()
-    assert len(specs) == 19, f"expected the nineteen shipped adapters, got {sorted(specs)}"
+    assert len(specs) == 20, f"expected the twenty shipped adapters, got {sorted(specs)}"
+    # Ticket 08 remaps detection_matrix_profile (encoding -> scores) and
+    # preprocessing_window_matrix (encoding -> windowset) to their correct
+    # types, and adds detection_threshold, a typed (input_kind='scores')
+    # adapter. The other seventeen are untouched by that ticket and still
+    # use the legacy vocabulary this test was written to guard.
+    remapped_by_ticket_08 = {"detection_matrix_profile", "preprocessing_window_matrix",
+                              "detection_threshold"}
     for module_name, spec in specs.items():
-        # None of the nineteen was edited by this ticket, so each must still
-        # declare a legacy output_kind and take the new fields' defaults.
+        if module_name in remapped_by_ticket_08:
+            continue
         assert spec.output_kind in LEGACY_OUTPUT_KINDS, module_name
         assert spec.input_kind is None, module_name
         assert spec.side_inputs == [], module_name

@@ -131,14 +131,19 @@ class ExecutionMixin:
             dets = R.list_detections(conn_w, out["run_id"])
             return {"kind": "intervals", "detections": [dict(d) for d in dets]}
 
-        if spec.output_kind == "encoding":
-            # Not every 'encoding' adapter is SAX-shaped (a details dict +
-            # x/t + a discrete symbol array) -- matrix profile is also
-            # output_kind='encoding' but is a continuous distance profile
-            # with its own dedicated exploration UI (the Motif browser
-            # tab). Same `algorithm_short.startswith("sax_")` convention
-            # `_persist_sax_encoding`'s caller already uses below to keep
-            # SAX-only behaviour SAX-only.
+        # Not every adapter that reaches here is SAX-shaped (a details dict +
+        # x/t + a discrete symbol array). `detection.matrix_profile` and
+        # `preprocessing.window_matrix` are also routed to the generic path
+        # -- a continuous/tabular result with its own dedicated exploration
+        # UI (the Motif browser tab), not the SAX 4-panel view. T08 remapped
+        # their `output_kind` from the legacy 'encoding' to 'scores'/
+        # 'windowset' respectively; `_gather_generic_encoding_display_data`
+        # reads the persisted artifact from disk either way, so the routing
+        # here only needs to keep recognising them by kind. Same
+        # `algorithm_short.startswith("sax_")` convention
+        # `_persist_sax_encoding`'s caller already uses below to keep
+        # SAX-only behaviour SAX-only.
+        if spec.output_kind in ("encoding", "scores", "windowset"):
             if last_step["algorithm"].startswith("sax_"):
                 return self._gather_encoding_display_data(conn_w, out, recipe, spec, result)
             return self._gather_generic_encoding_display_data(conn_w, out, recipe, spec, result)

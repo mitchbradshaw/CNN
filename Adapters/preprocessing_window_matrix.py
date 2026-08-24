@@ -6,9 +6,11 @@ Adapter for `Working.Preprocessing.window_matrix.build.build_window_matrix`
 controls automatically and the HPC path goes through `run_recipe.py` rather
 than a script with per-job source edits (WINDOW_MATRIX_UI_PROMPT.md §6.3).
 
-`output_kind='encoding'`: the matrix is what gets cached. Dendrogram
-clustering over the matrix is a separate downstream step, not part of this
-adapter.
+`output_kind='windowset'`: the per-window feature matrix rides as attached
+features on a `WindowSet`, with no timepoint alignment (CODING_STANDARDS
+3.2 — a per-window feature table is not `Scores`). It is what gets cached.
+Dendrogram clustering over the matrix is a separate downstream step, not
+part of this adapter.
 
 `persist` is declared (see `Adapters.base.AdapterSpec`), so a headless
 `run_recipe.py` invocation writes the v1 `.npz` and registers an
@@ -43,11 +45,13 @@ own per-STEP `on_progress`, not the same one reused.
 import os
 
 import numpy as np
+import pandas as pd
 
 from Adapters.base import AdapterResult, AdapterSpec, ParamSpec
 from Adapters.registry import register
 from Working.config import WM_MIN_WINDOW_SAMPLES, WM_MIN_WINDOWS
 from Working.database import window_matrix_store as store
+from Working.types import WindowSet
 from Working.Preprocessing.window_matrix.build import (
     DEFAULT_CNN_MODEL_DIR, build_window_matrix,
 )
@@ -117,9 +121,12 @@ def _run(x, t, fs, window_min=10.0, step_frac=1.0, catch22=True,
         on_progress=on_progress, should_cancel=should_cancel,
     )
 
+    features = pd.DataFrame(built["values"], columns=list(built["columns"]))
+    window_set = WindowSet(starts=built["start_idx"], length=m, fs=fs, features=features)
+
     return AdapterResult(
-        output_kind="encoding",
-        encoding=built["values"],
+        output_kind="windowset",
+        value=window_set,
         meta={k: v for k, v in built.items() if k != "values"},
     )
 
@@ -132,7 +139,7 @@ def _persist(conn, run_id, config_hash, recording, span_start, span_end, params,
             if os.path.isfile(recording["npy_path"]) else "")
 
     return store.save_wm(
-        result.encoding, meta["computed"], meta["columns"], meta["start_idx"],
+        result.value.features.to_numpy(), meta["computed"], meta["columns"], meta["start_idx"],
         m=meta["m"], step=meta["step"], fs=recording["fs"],
         window_min=params["window_min"], step_frac=params["step_frac"],
         span_start=span_start, span_end=span_end,
@@ -206,7 +213,7 @@ SPEC = register(AdapterSpec(
                   "comparable to the rest of its column and is not."),
     ],
     run=_run,
-    output_kind="encoding",
+    output_kind="windowset",
     plot=None,
     # Derived from this machine's calibration at REGISTRATION time, so the
     # headless path cannot be handed a job the UI would have refused. None
