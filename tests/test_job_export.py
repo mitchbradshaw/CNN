@@ -51,6 +51,7 @@ def test_recipe_json_is_loadable_by_run_recipe():
             assert recipe["steps"] == [{
                 "stage": "detection", "algorithm": "matrix_profile",
                 "params": {"window_min": 10.0, "backend": "auto"},
+                "side_inputs": {},
             }]
     finally:
         conn.close()
