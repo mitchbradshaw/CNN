@@ -6,7 +6,7 @@ size: M
 blocked_by: [18, 28]
 mutex: [13, 17, 28, 30, 31, 32, 34]
 files: ["UI/analyse/chain_state.py", "UI/workspaces/analyse/builder.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 4
 unblocks: 8
 budget_minutes: 60

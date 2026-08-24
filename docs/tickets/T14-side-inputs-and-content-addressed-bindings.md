@@ -6,7 +6,7 @@ size: M
 blocked_by: [5, 13]
 mutex: [12, 13, 15, 30, 47]
 files: ["Working/execution.py", "Working/recipes.py", "Working/side_inputs.py", "tests/test_recipes.py", "tests/test_side_inputs.py"]
-flags: []
+flags: ['done']
 level: 3
 unblocks: 15
 budget_minutes: 60

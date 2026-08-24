@@ -6,7 +6,7 @@ size: M
 blocked_by: [5]
 mutex: [3, 5, 7, 13, 15, 24]
 files: ["Adapters/detection_matrix_profile.py", "Adapters/preprocessing_window_matrix.py", "Working/execution.py", "tests/test_execution.py", "tests/test_matrix_profile_store.py", "tests/test_window_matrix_store.py"]
-flags: []
+flags: ['done']
 level: 2
 unblocks: 15
 budget_minutes: 60
