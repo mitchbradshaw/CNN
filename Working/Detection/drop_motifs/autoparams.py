@@ -77,21 +77,46 @@ import numpy as np
 # refinement pass usually rescues them - but the report flags them.
 CONFIDENCE_GATE = 0.50
 
-# Segments per period. The binding constraint is the RISE, which must span
-# several segments for a rise-then-fall rule to see it as a rise at all;
-# eight puts ~6 segments across a sharkfin's rise and ~2 across its fall.
-SEGMENTS_PER_PERIOD = 8.0
+# Both time-scaled parameters key off the FEATURE WIDTH, not the period.
+#
+# This was measured against the six hand-tuned presets and the period lost
+# badly. Segment length as a fraction of each quantity:
+#
+#     span                  width  seg_hand  seg/width   seg/period
+#     mushroom_icicles         10         2       0.20       0.0014
+#     m2aug am16              235       120       0.51       0.041
+#     m2aug sharkfin14         81        20       0.25       0.039
+#     m2aug furrycaterpillar  159        20       0.13       0.020
+#     m2aug growing           759       120       0.16       0.022
+#     m2aug troughtrain       378        60       0.16       0.072
+#
+# Against the period the ratio spreads 51x and is not a rule; against the
+# width it spreads 4x and clusters at ~0.2. The reason is structural: a
+# period is the spacing BETWEEN events and a segment has to resolve the
+# INSIDE of one. The two coincide only at a high duty cycle. Mushroom is
+# the counter-example that makes it obvious - ~50 s icicles spaced ~1400 s
+# apart, where period/8 gives a 175 s segment, the icicle is smaller than
+# one segment, and the detector returns zero events on a recording with
+# twenty-six of them.
+SEGMENTS_PER_FEATURE = 5.0          # width / 5; reproduces Mushroom's 2.0 s
 
-# Detrend window as a multiple of the period. Below ~1 period the rolling
-# mean tracks the event and removes it; far above it the slow drift
-# survives into the trend alphabet. Two and a half is the middle of the
-# range the shipped hand-tuned spans actually occupy when their windows
-# are re-expressed in periods (am16: 1800/2250 = 0.8; sharkfin14:
-# 1013/509 = 2.0; furrycaterpillar: 120/102 = 1.2; troughtrain and
-# growing both near 1.3), rounded up because the failure at the short end
-# (the event is deleted) is silent and the failure at the long end (some
-# drift survives) is visible in the figure.
-DETREND_PERIODS = 2.5
+# Detrend window as a multiple of the same width. The constraint is
+# one-sided and asymmetric in cost: too short and the rolling mean tracks
+# the event and deletes it, which is SILENT; too long and some drift
+# survives into the trend alphabet, which is visible in the figure. The
+# hand-tuned spans sit at 4.7x to 19x the width (median 12.5), excluding
+# furrycaterpillar at 0.75x, whose width is inflated by the rolling hill
+# it rides on rather than measuring its own 0.3 mV tooth.
+DETREND_FEATURES = 10.0
+
+# Where the autocorrelation is judged to have left its central lobe. Half
+# height is the standard reading of a lobe width and needs no tuning.
+FEATURE_LEVEL = 0.5
+
+# A segment must also be small against the SPACING, or a whole cycle lands
+# in one symbol. Only binds where the width estimate is inflated by
+# structure slower than the event.
+SEGMENTS_PER_INTERVAL = 8.0
 
 # Bounds on the search for a period, as fractions of the span. Below the
 # lower bound a "period" is a few samples of noise; above the upper the
@@ -159,36 +184,80 @@ def dominant_period(x, fs, min_period_s=None, max_frac=MAX_PERIOD_FRAC):
     return float((lo + best) / fs), float(segment[best])
 
 
-def derive_params(period_s, fs, n_samples, **overrides):
-    """The parameter dict implied by one period.
+def feature_width(x, fs, level=FEATURE_LEVEL):
+    """Width of the autocorrelation's central lobe, in seconds.
 
-    Only the two parameters that are genuinely time-scaled are derived.
-    Everything else in `Detect5Params` is dimensionless by construction -
+    How wide the typical FEATURE is, as distinct from how far apart
+    features are. The lag at which the ACF has fallen to half height is
+    the standard reading of a lobe width and takes no parameter beyond
+    the level itself.
+
+    This is the quantity both derived parameters key off; see the
+    `SEGMENTS_PER_FEATURE` comment for the measurement that chose it over
+    the period.
+    """
+    x = np.asarray(x, dtype=float).ravel()
+    fs = float(fs)
+    n = len(x)
+    if n < 16:
+        return float("nan")
+
+    x = x - _rolling_mean(x, max(3, n // 10))
+    x = x - x.mean()
+    size = 1 << (2 * n - 1).bit_length()
+    spectrum = np.fft.rfft(x, size)
+    acf = np.fft.irfft(spectrum * np.conj(spectrum), size)[:n]
+    if acf[0] <= 0:
+        return float("nan")
+    acf = acf / acf[0]
+
+    below = np.flatnonzero(acf <= level)
+    return float(below[0] / fs) if below.size else float(n / fs)
+
+
+def derive_params(feature_width_s, fs, n_samples, interval_s=None,
+                  **overrides):
+    """The parameter dict implied by one feature width.
+
+    Only the two genuinely time-scaled parameters are derived. Everything
+    else in `Detect5Params` is dimensionless by construction -
     `slope_sigma` is a multiple of the noise, `min_depth_frac` a fraction
     of the deepest fall, the window multipliers fractions of the fall -
     which is precisely why those did NOT need per-recording tuning in the
     shipped detector and these two did.
+
+    `interval_s`, when known, caps the segment from the other side: a
+    segment must be small against the spacing as well as against the
+    event, and on a span whose width estimate is inflated by slow
+    structure the spacing is the binding constraint.
     """
     fs = float(fs)
     span_s = n_samples / fs
 
-    if not np.isfinite(period_s) or period_s <= 0:
-        # No period was measurable. Fall back on the span itself, which is
-        # the only length scale left, and let the caller's confidence
-        # reading say why the answer is weak.
-        period_s = span_s / 10.0
+    if not np.isfinite(feature_width_s) or feature_width_s <= 0:
+        # Nothing measurable. The span is the only length scale left; the
+        # caller's confidence reading is what says the answer is weak.
+        feature_width_s = span_s / 50.0
 
-    segment_seconds = max(1.0 / fs, period_s / SEGMENTS_PER_PERIOD)
+    segment_seconds = feature_width_s / SEGMENTS_PER_FEATURE
+    if interval_s and np.isfinite(interval_s) and interval_s > 0:
+        segment_seconds = min(segment_seconds,
+                              interval_s / SEGMENTS_PER_INTERVAL)
 
-    # At least eight segments over the span or the trend string is too
-    # short for a run-length rule to find anything in.
+    # Never below TWO samples - a trend estimator needs two points to fit
+    # a slope through and dSAX raises rather than guessing. Never so large
+    # that the trend string is too short for a run-length rule to find
+    # anything in.
+    segment_seconds = max(2.0 / fs, segment_seconds)
     segment_seconds = min(segment_seconds, span_s / 8.0)
 
-    detrend_window_s = DETREND_PERIODS * period_s
-    # A detrend window at or beyond half the span stops being a high pass
+    detrend_window_s = DETREND_FEATURES * feature_width_s
+    # At or beyond half the span a detrend window stops being a high pass
     # and becomes a mean subtraction.
     detrend_window_s = min(detrend_window_s, span_s / 2.0)
-    detrend_window_s = max(detrend_window_s, 3.0 / fs)
+    # And it must stay well above the segment, or the trend it removes is
+    # the trend the encoder is trying to read.
+    detrend_window_s = max(detrend_window_s, 4.0 * segment_seconds, 3.0 / fs)
 
     derived = dict(segment_seconds=float(segment_seconds),
                    detrend_window_s=float(detrend_window_s))
@@ -205,6 +274,8 @@ class AutotuneResult:
     """
     period_s: float
     confidence: float
+    feature_width_s: float = float("nan")
+    seed_width_s: float = float("nan")
     params: object = None
     events: list = field(default_factory=list)
     morphology: str = None
@@ -220,18 +291,34 @@ class AutotuneResult:
 
 def autotune(x, fs, max_passes=3, tol=CONVERGENCE_TOL, params_factory=None,
              **overrides):
-    """Seed the period from the ACF, then refine it from the detections.
+    """Choose a scale by trying several and measuring, then refine it.
 
-    Each pass: derive parameters from the current period, detect, and
-    replace the period with the median interval between consecutive
-    onsets. Stop when the period moves by less than `tol` relatively, or
-    when a pass finds fewer than two events (one interval is not a median
-    and iterating on it would be superstition).
+    Two phases, because they answer different questions.
 
-    Imported late because `detect5` imports nothing from here and the
-    dependency would otherwise be circular; keeping the arrow one-way
-    means `detect5` stays usable with hand-set parameters, which is what
-    the tests assert against.
+    PHASE 1 - which scale. The ACF lobe width and the ACF period are two
+    independent readings of the signal's scale and the ratio between them
+    is not a constant: measured across the shipped spans it runs 2.2x
+    (troughtrain) to 140x (mushroom, whose icicles are tiny against their
+    spacing). A single seed is therefore a bet, and on catalogue ID 20 the
+    width bet loses outright - four sharkfins in the span, an ACF high
+    pass that is a large fraction of one period, a lobe width of 61 s
+    against a real event of several hundred, and zero events found on a
+    recording annotated "4x sharkfin sequence". So all three candidates
+    are tried and the scorer picks.
+
+    PHASE 2 - refine it. From the best seed's own measured event extent,
+    iterating until the width stops moving. This is what handles a
+    frequency-modulated train, where no stationary estimator can be right
+    and a median measured extent still can.
+
+    Keeping them separate matters: an earlier version ran the seeds and
+    the refinement out of one budget, so three seeds consumed all three
+    passes and NO refinement ever ran. Two spans that had been exact
+    (16/16 and 14/14) dropped to 11 and 13.
+
+    Scoring is by event count among ADMISSIBLE passes only - see the
+    admissibility note below. Imported late because `detect5` imports
+    nothing from here and the dependency would otherwise be circular.
     """
     from .detect5 import Detect5Params, detect_drops5
 
@@ -239,71 +326,113 @@ def autotune(x, fs, max_passes=3, tol=CONVERGENCE_TOL, params_factory=None,
     fs = float(fs)
 
     seed_period, confidence = dominant_period(x, fs)
-    period = seed_period
+    seed_width = feature_width(x, fs)
     factory = params_factory or (lambda **kw: Detect5Params(**kw))
 
     trace = []
     passes = []
-    converged = False
 
-    for index in range(max(1, int(max_passes))):
-        params = factory(**derive_params(period, fs, len(x), **overrides))
+    def run(width, interval, phase, index):
+        params = factory(**derive_params(width, fs, len(x),
+                                         interval_s=interval, **overrides))
         result = detect_drops5(x, fs, params)
 
         onsets = np.array([e.onset_idx for e in result.events], dtype=float)
-        if onsets.size >= 2:
-            measured = float(np.median(np.diff(onsets)) / fs)
-        else:
-            measured = float("nan")
+        measured_interval = (float(np.median(np.diff(onsets)) / fs)
+                             if onsets.size >= 2 else float("nan"))
+        # The event's own core extent - the same kind of quantity the ACF
+        # lobe width estimates, measured directly instead of inferred from
+        # the shape of a correlogram.
+        extents = [(e.trough_idx - e.up_region_start_idx)
+                   if e.up_region_start_idx >= 0
+                   else 2 * (e.trough_idx - e.onset_idx)
+                   for e in result.events]
+        measured_width = (float(np.median(extents) / fs)
+                          if extents else float("nan"))
 
-        entry = dict(
-            pass_index=index,
-            period_s=float(period),
-            segment_seconds=params.segment_seconds,
-            detrend_window_s=params.detrend_window_s,
-            n_events=len(result.events),
-            measured_interval_s=measured,
-            morphology=result.morphology,
-        )
+        # Events must not overlap each other. If the typical spacing is
+        # shorter than the typical event, the "events" are fragments of
+        # one thing and the pass is describing its own segmentation rather
+        # than the signal - which is what a too-fine segment produces, and
+        # which would otherwise WIN the scoring by returning the most of
+        # them. Measured on the modulated fixture, an inadmissible pass
+        # reported a 3 s median spacing against a 122 s event.
+        admissible = bool(result.events) and (
+            len(result.events) < 2
+            or not np.isfinite(measured_interval)
+            or measured_interval >= measured_width)
+
+        entry = dict(phase=phase, pass_index=index,
+                     feature_width_s=float(width),
+                     segment_seconds=params.segment_seconds,
+                     detrend_window_s=params.detrend_window_s,
+                     n_events=len(result.events),
+                     measured_width_s=measured_width,
+                     measured_interval_s=measured_interval,
+                     morphology=result.morphology,
+                     admissible=admissible)
         trace.append(entry)
         passes.append((entry, params, result))
+        return entry
 
-        if not np.isfinite(measured) or measured <= 0:
-            # Fewer than two events. The period cannot be refined and
-            # re-running the same parameters would only repeat this, so
-            # stop rather than burn the remaining passes.
+    def best_of(items):
+        """Most events, among admissible passes; earliest breaks a tie.
+
+        Count is a sound score because the gates do not move between
+        passes: the same slope threshold, rise gate and dominance gate
+        reject the same junk whatever the segmentation, so more events
+        past identical gates means more found rather than more admitted.
+        """
+        usable = [i for i in items if i[0]["admissible"]] or items
+        return max(usable, key=lambda i: (i[0]["n_events"],
+                                          -i[0]["pass_index"]))
+
+    # -- phase 1: the candidate scales ------------------------------------
+    seeds = []
+    for value in [seed_width, seed_period / 6.0 if seed_period > 0 else None,
+                  seed_period / 12.0 if seed_period > 0 else None]:
+        if (value is not None and np.isfinite(value) and value > 0
+                and not any(abs(value - kept) < 1e-9 for kept in seeds)):
+            seeds.append(float(value))
+    if not seeds:
+        seeds = [len(x) / fs / 50.0]
+
+    for index, width in enumerate(seeds):
+        run(width, None, "seed", index)
+
+    # -- phase 2: refine from the best seed --------------------------------
+    entry = best_of(passes)[0]
+    width = entry["measured_width_s"]
+    interval = entry["measured_interval_s"]
+    converged = False
+
+    for step in range(max(0, int(max_passes) - 1)):
+        if not np.isfinite(width) or width <= 0:
             break
-
-        relative_change = abs(measured - period) / max(period, 1e-12)
-        period = measured
+        entry = run(width, interval, "refine", len(seeds) + step)
+        nxt = entry["measured_width_s"]
+        if not np.isfinite(nxt) or nxt <= 0:
+            break
+        relative_change = abs(nxt - width) / max(width, 1e-12)
+        width, interval = nxt, entry["measured_interval_s"]
         if relative_change < tol:
             converged = True
             break
 
-    # The BEST pass wins, not the last one.
-    #
-    # The iteration is not guaranteed to have a fixed point and on a
-    # strongly modulated train it demonstrably does not: on an eight-cycle
-    # train ramped 700 s -> 350 s the event count goes 2, 7, 3, 7, 6 as the
-    # period ping-pongs between two basins. Taking the last pass there
-    # returns whichever half of the oscillation the budget happened to end
-    # on, which is arbitrary in the worst way - it looks like an answer.
-    #
-    # Event count is the right score because the gates do not move between
-    # passes: the same slope threshold, the same rise gate and the same
-    # dominance gate reject the same junk whatever the segment length, so
-    # a pass that returns MORE events past identical gates has found more
-    # real events rather than been more permissive.
-    best_entry, best_params, best_result = max(
-        passes, key=lambda item: (item[0]["n_events"], -item[0]["pass_index"]))
-
-    refined = best_entry["measured_interval_s"]
-    if not np.isfinite(refined) or refined <= 0:
-        refined = best_entry["period_s"]
+    best_entry, best_params, best_result = best_of(passes)
     best_entry["selected"] = True
 
+    refined_interval = best_entry["measured_interval_s"]
+    if not np.isfinite(refined_interval) or refined_interval <= 0:
+        refined_interval = seed_period
+    refined_width = best_entry["measured_width_s"]
+    if not np.isfinite(refined_width) or refined_width <= 0:
+        refined_width = best_entry["feature_width_s"]
+
     return AutotuneResult(
-        period_s=float(refined),
+        period_s=float(refined_interval),
+        feature_width_s=float(refined_width),
+        seed_width_s=float(seed_width),
         confidence=float(confidence),
         params=best_params,
         events=list(best_result.events),

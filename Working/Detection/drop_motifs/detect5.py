@@ -327,9 +327,28 @@ def up_runs(letters):
     return [(m.start(), m.end()) for m in _UP_RUN.finditer(letters)]
 
 
-def fast_down_segments(letters):
-    """Index of every FAST_DOWN segment - the bare fall trigger's inputs."""
-    return [i for i, c in enumerate(letters) if c == FAST_DOWN]
+def fall_runs(letters):
+    """Every maximal run of falling segments that contains a FAST one,
+    as `(start, end)` half-open in SEGMENT indices.
+
+    RUNS and not segments, which is the exact mirror of `up_runs` and is
+    load-bearing rather than tidiness. One fall spans as many segments as
+    the segment length divides it into, and taking each `d` as its own
+    trigger finds the same physical fall once per segment: measured on a
+    clean eight-cycle train at a 9.6 s segment, one 60 s fall produced
+    onsets at 501, 510 and 520 and the span came back with 26 events
+    instead of 8.
+
+    A run may include plain `D` segments - the shoulders of a fall are
+    shallower than its middle, and a fall is not two falls because its
+    steepest part is in the centre. It must contain at least one `d`,
+    which is what distinguishes a fall from a gentle decline.
+    """
+    out = []
+    for match in _DOWN_RUN.finditer(letters):
+        if FAST_DOWN in match.group(0):
+            out.append((match.start(), match.end()))
+    return out
 
 
 # ===========================================================================
@@ -352,17 +371,18 @@ def choose_morphology(x, fs, params):
         return params.morphology
 
     letters, _ = stage_letters(x, fs, params)
-    falls = fast_down_segments(letters)
+    falls = fall_runs(letters)
     if not falls:
         return MORPHOLOGY_SHARKFIN
 
     rises = up_runs(letters)
     preceded = 0
-    for fall in falls:
-        # A rise "precedes" a fall if it ends at or just before it. One
-        # segment of slack absorbs the case where the peak sample lands in
-        # the fall's own segment rather than the rise's last.
-        if any(0 <= fall - end <= 1 for _, end in rises):
+    for start, _ in falls:
+        # A rise "precedes" a fall if it ends at or just before the fall
+        # begins. One segment of slack absorbs the case where the peak
+        # sample lands in the fall's own segment rather than the rise's
+        # last.
+        if any(0 <= start - end <= 1 for _, end in rises):
             preceded += 1
 
     return (MORPHOLOGY_SHARKFIN if preceded * 2 >= len(falls)
@@ -461,7 +481,7 @@ def detect_drops5(x, fs, params):
     fs = float(fs)
 
     counts = dict(
-        segments=0, up_runs=0, fast_down_segments=0,
+        segments=0, up_runs=0, fall_runs=0,
         candidates=0, rejected_no_fall=0, rejected_no_rise=0,
         rejected_not_dominant=0, rejected_shallow=0, rejected_duplicate=0,
         fall_trigger_suppressed=0, drops_confirmed=0,
@@ -483,9 +503,9 @@ def detect_drops5(x, fs, params):
 
     counts["segments"] = len(letters)
     rises = up_runs(letters)
-    falls = fast_down_segments(letters)
+    falls = fall_runs(letters)
     counts["up_runs"] = len(rises)
-    counts["fast_down_segments"] = len(falls)
+    counts["fall_runs"] = len(falls)
 
     derivative = np.gradient(x_detrended) * fs
 
@@ -507,9 +527,13 @@ def detect_drops5(x, fs, params):
         rise_candidates[onset] = dict(onset=onset, trigger=TRIGGER_RISE,
                                       up_start=rise_start, up_end=rise_end)
 
-    for segment in falls:
-        at = segment * sps
-        onset = _first_crossing(derivative, at, slope_threshold, sps + 1)
+    for start_seg, end_seg in falls:
+        at = start_seg * sps
+        # One candidate per RUN, scanned across the whole run: the first
+        # segment of a fall can be its shoulder, so the qualifying sample
+        # need not be inside it.
+        onset = _first_crossing(derivative, at, slope_threshold,
+                                (end_seg - start_seg + 1) * sps)
         if onset is None or onset in fall_candidates:
             continue
         fall_candidates[onset] = dict(onset=onset, trigger=TRIGGER_FALL,
