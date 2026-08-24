@@ -372,7 +372,7 @@ def test_staged_spans_survive_tab_switch():
         assert app.tabs.active == 1  # switched to "Run algorithm"
 
         app.tabs.active = 0  # switch back to Viewer
-        app.tabs.active = 2  # and to Run history
+        app.tabs.active = 2  # and to Review
         app.tabs.active = 1  # back to Run algorithm
 
         assert len(app._staged_spans) == 1, "staged span was lost across tab switches"

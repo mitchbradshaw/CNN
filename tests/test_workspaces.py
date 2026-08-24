@@ -264,6 +264,36 @@ def test_a_registered_section_reaches_the_shell_without_editing_it():
         workspaces.reset()
 
 
+def test_activate_workspace_selects_the_section_too():
+    """Reopen must land on the run panel, not merely on the workspace holding
+    it. Switching only the outer tab leaves whichever section the user last
+    looked at on screen."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        analyse.active = _tab_names(analyse).index("Run history")
+        app.activate_workspace("Analyse", "Run algorithm")
+        assert app.tabs.active == EXPECTED_TABS.index("Analyse")
+        assert _tab_names(analyse)[analyse.active] == "Run algorithm"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_activate_workspace_tolerates_a_workspace_without_sub_tabs():
+    """Library holds one section, so it renders directly and has no sub-tab to
+    select. Naming that section must switch workspace, not raise."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        app.activate_workspace("Library", "Motif browser")
+        assert app.tabs.active == EXPECTED_TABS.index("Library")
+    finally:
+        _close_and_unlink(app, db_path)
+
+
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]

@@ -1,18 +1,24 @@
 """
-The seven-tab layout. Assembles widgets the other modules built; it does not
-build any of its own, so a change to what a control *does* never has to be
+The four-workspace shell. Assembles widgets the other modules built; it does
+not build any of its own, so a change to what a control *does* never has to be
 made here as well.
+
+This assembly is frozen (ticket 18). Eight tickets mount surfaces into it, so
+what belongs in Analyse, Review and Library is asked of `UI.workspaces` rather
+than named here -- otherwise every one of those tickets would conflict with the
+other seven over this one function.
 """
 
 import panel as pn
 
 from Working.config import OVERLAY_DENSITY_THRESHOLD
 
+from UI import workspaces
 from UI.viewer.constants import SECTION_HEADER_STYLE
 
 
 class LayoutMixin:
-    """Assembles the seven-tab Panel layout. Mixed into `ViewerApp`."""
+    """Assembles the four-workspace Panel layout. Mixed into `ViewerApp`."""
 
     # ── Layout ───────────────────────────────────────────────────────────
 
@@ -231,30 +237,22 @@ class LayoutMixin:
         )
 
         viewer_tab = pn.Row(controls, viewer_main, sizing_mode="stretch_width")
-        
-        # T18: Four-workspace shell — seven tabs become four workspaces plus Admin group
-        # Explore is the existing viewer (behaviorally unchanged)
-        # Analyse, Review, Library are mount points that register content without editing the shell
-        explore_tab = viewer_tab
-        analyse_tab = self.run_panel.layout()
-        
-        # Review is an empty mount point for now (to be filled by future tickets T20/T21)
-        review_tab = pn.pane.Markdown("### Review workspace\n\n*Content to be added by ticket T20/T21*")
-        
-        # Library contains the motif browser (T18: moved from standalone tab to Library workspace)
-        library_tab = self.motif_browser.layout()
-        
-        # Admin group holds vocabulary administration and recording import
+
+        # Explore is the viewer, behaviourally unchanged. Analyse, Review and
+        # Library are mount points: their content comes from `UI.workspaces`,
+        # so a workspace ticket registers a surface instead of editing this
+        # function. Admin is a group rather than a workspace -- it holds the
+        # two housekeeping surfaces that are not part of the research loop.
         admin_group = pn.Tabs(
             ("Vocabulary admin", self.admin.layout()),
             ("Import recording", self.file_import.layout()),
+            sizing_mode="stretch_width",
         )
-        
         self.tabs = pn.Tabs(
-            ("Explore", explore_tab),
-            ("Analyse", analyse_tab),
-            ("Review", review_tab),
-            ("Library", library_tab),
+            ("Explore", workspaces.build("Explore", self, base=viewer_tab)),
+            ("Analyse", workspaces.build("Analyse", self)),
+            ("Review", workspaces.build("Review", self)),
+            ("Library", workspaces.build("Library", self)),
             ("Admin", admin_group),
             sizing_mode="stretch_width",
         )
@@ -265,3 +263,23 @@ class LayoutMixin:
         # the last time this tab was visited.
         self.tabs.param.watch(self._on_tab_changed, "active")
         return self.tabs
+
+    def activate_workspace(self, workspace, section=None):
+        """Bring `workspace` to the front, and `section` within it if named.
+
+        Callers used to write `self.tabs.active = 1` and rely on the tab order.
+        That is no longer sufficient on its own: the run panel is a section
+        inside Analyse now, so a caller that switches only the outer tab can
+        land on Analyse with Run history showing and its own surface hidden.
+
+        Silently does nothing for a section that is not mounted -- a workspace
+        holding a single section renders it directly rather than as sub-tabs,
+        so "no sub-tab to select" is the normal case, not an error.
+        """
+        names = list(self.tabs._names)
+        self.tabs.active = names.index(workspace)
+        if section is None:
+            return
+        pane = self.tabs.objects[names.index(workspace)]
+        if isinstance(pane, pn.Tabs) and section in pane._names:
+            pane.active = list(pane._names).index(section)

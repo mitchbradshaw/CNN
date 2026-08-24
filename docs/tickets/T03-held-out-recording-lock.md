@@ -6,7 +6,7 @@ size: S
 blocked_by: []
 mutex: [8, 15, 17]
 files: ["UI/app.py", "Working/config.py", "Working/execution.py", "tests/test_heldout_lock.py"]
-flags: []
+flags: ['done']
 level: 0
 unblocks: 1
 budget_minutes: 30

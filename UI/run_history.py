@@ -144,7 +144,9 @@ class RunHistoryBrowser:
             self.app._refresh_view()
 
         if self.app.tabs is not None:
-            self.app.tabs.active = 1  # "Run algorithm" tab
+            # Analyse, with the run panel showing rather than whichever
+            # section the user happened to leave selected.
+            self.app.activate_workspace("Analyse", "Run algorithm")
         self.status.object = (
             f"Reopened run_id={run_id}'s last step ({adapter_full_name}) in the Run panel."
         )

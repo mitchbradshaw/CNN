@@ -6,7 +6,7 @@ size: M
 blocked_by: [4, 17]
 mutex: [27]
 files: ["UI/admin.py", "UI/viewer/layout.py", "UI/workspaces/__init__.py", "tests/test_session_persistence.py", "tests/test_shortcuts_and_view_controls.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 2
 unblocks: 18
 budget_minutes: 60
