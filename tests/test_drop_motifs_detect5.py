@@ -86,6 +86,7 @@ from Working.Detection.drop_motifs.detect5 import (
     Detect5Params,
     choose_morphology,
     detect_drops5,
+    refine_onset,
     stage_letters,
     window_purity,
 )
@@ -485,6 +486,44 @@ def test_morphology_is_chosen_once_per_span_and_reported():
     assert res.morphology == MORPHOLOGY_TROUGH
     assert len({ev.trigger for ev in res.events}) == 1, (
         "a span must not mix triggers once its morphology is decided")
+
+
+def test_onset_ignores_a_minor_dip_just_before_the_real_drop():
+    """Reported on Mushroom_260720: onsets landing "slightly before the
+    actual larger drop, at a smaller deviation in the signal before it".
+
+    Measured there, 8 of 24 onsets sat 3-4 samples early on a wobble whose
+    slope was 1-2% of the real fall's. The onset is the first sample past
+    a GLOBAL noise threshold, so any dip steeper than noise claims it.
+    `refine_onset` walks back from the steepest sample instead - the same
+    knee rule `find_trough` walks forward with.
+    """
+    x = np.concatenate([
+        np.zeros(400),
+        np.linspace(0.0, -0.25, 4),      # the decoy: 2% of the real fall
+        np.full(6, -0.25),
+        np.linspace(-0.25, -12.0, 12),   # the real drop
+        np.linspace(-12.0, 0.0, 120),
+        np.zeros(260),
+    ])
+    real_drop_starts = 410
+
+    derivative = np.gradient(noisy(x, sigma=0.005)) * FS
+    trough = 422
+    refined = refine_onset(derivative, 400, trough, knee_frac=0.05)
+    assert abs(refined - real_drop_starts) <= 3, (
+        f"onset refined to {refined}, real drop starts at "
+        f"{real_drop_starts}")
+
+
+def test_refine_onset_never_moves_the_onset_earlier():
+    """It may decline to start early on a wobble; it may not invent a
+    start before the first qualifying sample."""
+    x = np.concatenate([np.zeros(100), np.linspace(0.0, -10.0, 30),
+                        np.zeros(100)])
+    derivative = np.gradient(x) * FS
+    for onset in (100, 105, 110):
+        assert refine_onset(derivative, onset, 130) >= onset
 
 
 def test_a_tiny_overshoot_before_a_big_fall_is_a_trough_not_a_sharkfin():

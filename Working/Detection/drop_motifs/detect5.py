@@ -84,7 +84,7 @@ returned events are in mV, matching `detect.py`.
 
 import re
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 import numpy as np
 
@@ -115,6 +115,13 @@ MORPHOLOGIES = (MORPHOLOGY_SHARKFIN, MORPHOLOGY_TROUGH)
 
 TRIGGER_RISE = "rise"
 TRIGGER_FALL = "fall"
+
+# Successive relaxations of `min_rise_frac`, applied to ONE event at a
+# time when its window holds more than one fall. Geometric so each step is
+# a real change rather than a nudge, and floored at 2% because a boundary
+# admitted below that is a noise segment and would cut the window
+# arbitrarily.
+TIGHTEN_STEPS = (1.0, 0.5, 0.25, 0.1, 0.04)
 
 # Any run of rising segments, either magnitude. The whole point of case
 # encoding magnitude is that this stays a one-character class.
@@ -174,6 +181,10 @@ class Detect5Params:
     # or the event is incidental.
 
     # -- morphology -------------------------------------------------------
+    tighten_windows: bool = True
+    # Shrink a window that holds more than one fall by admitting smaller
+    # rises as boundaries, for that event alone. See `tighten_window`.
+
     morphology: str = "auto"
     # "auto" decides per span by which trigger fires more; the explicit
     # values force it. Decided ONCE per span so every window in a span
@@ -209,6 +220,7 @@ class Drop5Event:
     fall_duration_s: float
     peak_to_peak_mv: float
     fall_dominance: float
+    rise_frac_used: float
     detrend_window_s: float
     segment_seconds: float
     same_fraction: float
@@ -607,6 +619,15 @@ def detect_drops5(x, fs, params):
         if trough <= onset:
             continue
 
+        # The trough is found first and is unaffected by this: it is
+        # anchored on the steepest sample onward, which is the same sample
+        # the refinement walks back from.
+        onset = refine_onset(derivative, onset, trough,
+                             knee_frac=params.trough_knee_frac)
+        candidate["onset"] = onset
+        if trough <= onset:
+            continue
+
         depth = float(x_detrended[onset] - x_detrended[trough])
         if depth <= 0:
             continue
@@ -649,9 +670,16 @@ def detect_drops5(x, fs, params):
     # -- window, then Gate B, which needs the window ----------------------
     events = []
     for candidate in kept:
-        start, end = window_bounds(
-            candidate["onset"], candidate["trough"], rises, sps,
-            morphology, params, x_detrended, candidate["depth"])
+        if params.tighten_windows:
+            start, end, rise_frac_used, _ = tighten_window(
+                candidate["onset"], candidate["trough"], rises, sps,
+                morphology, params, x_detrended, candidate["depth"],
+                derivative, slope_threshold)
+        else:
+            start, end = window_bounds(
+                candidate["onset"], candidate["trough"], rises, sps,
+                morphology, params, x_detrended, candidate["depth"])
+            rise_frac_used = params.min_rise_frac
 
         window = x_detrended[start:end]
         peak_to_peak = float(np.ptp(window)) if window.size else 0.0
@@ -678,6 +706,7 @@ def detect_drops5(x, fs, params):
             fall_duration_s=(trough - onset) / fs,
             peak_to_peak_mv=peak_to_peak * 1000.0,
             fall_dominance=float(dominance),
+            rise_frac_used=float(rise_frac_used),
             detrend_window_s=params.detrend_window_s,
             segment_seconds=params.segment_seconds,
             same_fraction=params.same_fraction,
@@ -703,6 +732,53 @@ def detect_drops5(x, fs, params):
             elapsed_s=round(time.time() - started, 3),
         ),
     )
+
+
+def refine_onset(derivative, onset, trough, knee_frac=0.05, hysteresis=2):
+    """Move the onset onto the shoulder of the STEEPEST fall it precedes.
+
+    `_first_crossing` returns the first sample past the slope threshold,
+    and that threshold is a global noise floor - so ANY wobble steeper
+    than noise claims the onset, including one that is nothing to do with
+    the drop behind it. Measured on Mushroom_260720: 8 of 24 onsets landed
+    3-4 samples early on a dip whose slope was 1-2% of the real fall's
+    (-0.06 mV/s against -4.1), which is exactly the "identified slightly
+    before the actual larger drop, at a smaller deviation" the operator
+    reported.
+
+    The fix is `find_trough`'s own knee rule read BACKWARDS. That function
+    walks forward from the steepest sample until the slope recovers to
+    `knee_frac` of it; this walks back from the same sample until the
+    slope was last shallower than that, and takes the first steep sample
+    after it. Same rule, same parameter, same scale-freedom - the knee is
+    a fraction of THIS fall's own steepest, so it means the same thing on
+    a 5 s icicle and a 200 s sharkfin.
+
+    It can only ever move the onset LATER, because the first crossing is
+    by construction the earliest candidate. So this cannot lose the start
+    of a genuine drop; it can only decline to start early on a wobble.
+    """
+    hi = min(int(trough) + 1, len(derivative))
+    if hi <= onset + 1:
+        return onset
+
+    window = derivative[onset:hi]
+    steepest = int(np.argmin(window))
+    if steepest == 0:
+        return onset                      # already on the steepest sample
+
+    threshold = knee_frac * float(window[steepest])   # negative x fraction
+    hysteresis = max(1, min(int(hysteresis), max(1, steepest // 2)))
+
+    run = 0
+    for i in range(steepest - 1, -1, -1):
+        if window[i] > threshold:         # shallower than the knee
+            run += 1
+            if run >= hysteresis:
+                return onset + i + run
+        else:
+            run = 0
+    return onset
 
 
 def _fall_limit(onset, rises, sps, n_samples):
@@ -747,6 +823,59 @@ def _first_crossing(derivative, from_idx, slope_threshold, lookahead):
 # the grade
 # ===========================================================================
 
+def count_falls(derivative, start, end, slope_threshold, gap):
+    """Qualifying falls inside `[start, end)`.
+
+    RUNS, not samples: a single 60 s fall is one fall, so samples closer
+    together than one segment are one event seen twice. Shared by
+    `window_purity` and by the window tightening below so the two cannot
+    disagree about what they are counting.
+    """
+    segment = derivative[start:end]
+    if segment.size == 0:
+        return 0
+    below = np.flatnonzero(segment <= slope_threshold)
+    if below.size == 0:
+        return 0
+    return int(np.flatnonzero(np.diff(below) > gap).size + 1)
+
+
+def tighten_window(onset, trough, rises, sps, morphology, params,
+                   x_detrended, depth, derivative, slope_threshold,
+                   steps=TIGHTEN_STEPS):
+    """Shrink a window until it holds one fall, by admitting smaller rises.
+
+    The operator's suggestion, and it maps onto a parameter that already
+    exists. A window holds a neighbour when no rise BETWEEN the two events
+    was large enough to count as a boundary - `significant_rises` keeps
+    only those climbing `min_rise_frac x depth`. So the remedy for a
+    window with several falls is to lower that bar for this event alone
+    until a boundary appears between it and its neighbour.
+
+    Deliberately per-EVENT and one-directional. Lowering the bar globally
+    would fragment the spans that are already clean, and raising it can
+    only widen a window. Each event keeps the loosest threshold that still
+    leaves it with one fall, and the value used is recorded on the event
+    so a span's spread of thresholds is visible rather than hidden - a
+    span needing 0.05 everywhere is a span whose scale is wrong, which is
+    a different problem from one event sitting inside a burst.
+
+    Returns `(start, end, rise_frac_used, falls)`.
+    """
+    best = None
+    for factor in steps:
+        trial = replace(params, min_rise_frac=params.min_rise_frac * factor)
+        start, end = window_bounds(onset, trough, rises, sps, morphology,
+                                   trial, x_detrended, depth)
+        falls = count_falls(derivative, start, end, slope_threshold,
+                            max(1, sps))
+        if best is None:
+            best = (start, end, trial.min_rise_frac, falls)
+        if falls <= 1:
+            return start, end, trial.min_rise_frac, falls
+    return best
+
+
 def window_purity(x, fs, result):
     """How many qualifying falls each stored window actually holds.
 
@@ -768,17 +897,8 @@ def window_purity(x, fs, result):
     threshold = -result.params.slope_sigma * sigma
     gap = max(1, int(round(result.params.segment_seconds * fs)))
 
-    scores = []
-    for event in result.events:
-        segment = derivative[event.window_start_idx:event.window_end_idx]
-        below = np.flatnonzero(segment <= threshold)
-        if below.size == 0:
-            scores.append(0)
-            continue
-        # Count RUNS, not samples: a single 60-second fall is one fall.
-        breaks = np.flatnonzero(np.diff(below) > gap)
-        scores.append(int(breaks.size + 1))
-    return scores
+    return [count_falls(derivative, e.window_start_idx, e.window_end_idx,
+                        threshold, gap) for e in result.events]
 
 
 def params_as_dict(params):
