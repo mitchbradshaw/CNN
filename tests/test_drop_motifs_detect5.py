@@ -437,11 +437,14 @@ def test_fall_with_no_preceding_rise_is_rejected_under_sharkfin_morphology():
 def test_fall_that_does_not_dominate_its_window_is_rejected():
     """Gate B. If the biggest thing in the window is not this fall, the
     window is not a picture of this event."""
+    # The small fall has to be STEEP as well as small, or it encodes as
+    # part of the rise it sits on and never becomes a candidate at all -
+    # in which case this test would pass while measuring nothing.
     x = np.concatenate([
         np.zeros(300),
         np.linspace(0.0, 40.0, 200),     # a huge rise
-        np.linspace(40.0, 39.0, 30),     # a tiny fall on top of it
-        np.linspace(39.0, 40.0, 30),
+        np.linspace(40.0, 35.0, 5),      # a small, sharp notch in it
+        np.linspace(35.0, 40.0, 45),
         np.linspace(40.0, 0.0, 100),     # the real event
         np.zeros(600),
     ])
@@ -482,6 +485,34 @@ def test_morphology_is_chosen_once_per_span_and_reported():
     assert res.morphology == MORPHOLOGY_TROUGH
     assert len({ev.trigger for ev in res.events}) == 1, (
         "a span must not mix triggers once its morphology is decided")
+
+
+def test_a_tiny_overshoot_before_a_big_fall_is_a_trough_not_a_sharkfin():
+    """Mushroom_260720's morphology, engineered.
+
+    Its icicles carry a one-to-two-sample overshoot before the drop - a
+    ~0.6 mV rise in front of a ~12 mV fall. A morphology test that asks
+    only whether a rise is PRESENT calls that a sharkfin, and then every
+    event fails Gate A because the rise is 5% of the fall. Measured on the
+    real recording: 136 of 171 falls read as "preceded", the span was
+    called sharkfin, and the run returned 0.15-0.63 mV ripples instead of
+    the 2-14 mV icicles that are there.
+
+    The morphology test and Gate A must therefore use the SAME criterion,
+    or the detector can commit a span to a trigger whose own gate then
+    rejects everything it finds.
+    """
+    cycle = np.concatenate([
+        np.zeros(160),
+        np.linspace(0.0, 0.6, 4),        # the overshoot: 5% of the fall
+        np.linspace(0.6, -11.4, 12),     # the icicle
+        np.linspace(-11.4, 0.0, 90),     # recovery
+        np.zeros(40),
+    ])
+    x = np.concatenate([np.zeros(200)] + [cycle] * 4)
+
+    assert choose_morphology(noisy(x), FS, params5()) == MORPHOLOGY_TROUGH, (
+        "a 5% overshoot in front of a fall made the span read as sharkfin")
 
 
 def test_rise_trigger_wins_where_both_triggers_fire():
@@ -572,6 +603,33 @@ def test_derive_params_caps_the_segment_by_the_event_spacing():
     assert capped["segment_seconds"] <= 400.0 / 8 + 1e-9
 
 
+def test_dedup_is_applied_after_the_pass_is_chosen_not_during_scoring():
+    """One event can generate several onsets - an overshoot, then bumps on
+    the recovery - and the separation that collapses them is a fraction of
+    the measured SPACING, which only exists once a pass has been chosen.
+
+    It must NOT be part of a scored pass. Scoring is by event count and
+    deduplication exists to reduce that count, so a deduplicated pass
+    loses to its own un-deduplicated twin every time: on Mushroom_260720
+    the search selected a 35-event pass over the 24-event deduplication of
+    it, and the derived separation had no effect at all.
+    """
+    assert "min_separation_s" not in derive_params(
+        feature_width_s=40.0, fs=FS, n_samples=8000, interval_s=400.0), (
+        "dedup must not enter a scored pass")
+
+    x, _ = sharkfin_train(n_cycles=8)
+    result = autotune(noisy(x), FS, max_passes=3)
+    assert result.params.min_separation_s > 0, (
+        "no separation was derived for the chosen pass")
+    assert result.params.min_separation_s < result.period_s, (
+        "the separation is not shorter than the spacing it derives from")
+
+    # And an explicit setting still wins over the derivation.
+    forced = autotune(noisy(x), FS, max_passes=3, min_separation_s=0.0)
+    assert forced.params.min_separation_s == 0.0
+
+
 def test_feature_width_measures_the_feature_not_the_spacing():
     """The distinction the whole derivation rests on: two trains with the
     SAME event shape and very different spacing must report the same
@@ -597,10 +655,11 @@ def test_autotune_converges_and_reports_every_pass():
     x, onsets = sharkfin_train(n_cycles=8)
     result = autotune(noisy(x), FS, max_passes=3)
     assert result.converged
-    # Two phases: up to three candidate scales, then up to `max_passes - 1`
-    # refinements from the best of them.
-    assert 1 <= len(result.trace) <= 5
-    assert {p["phase"] for p in result.trace} == {"seed", "refine"}
+    # Three phases: up to three candidate scales, up to `max_passes - 1`
+    # refinements from the best of them, then one deduplication of the
+    # winner.
+    assert 1 <= len(result.trace) <= 6
+    assert {p["phase"] for p in result.trace} == {"seed", "refine", "dedup"}
     for pass_info in result.trace:
         assert {"phase", "feature_width_s", "n_events",
                 "measured_interval_s", "admissible"} <= set(pass_info)

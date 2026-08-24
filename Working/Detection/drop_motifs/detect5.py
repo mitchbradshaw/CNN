@@ -360,8 +360,24 @@ def choose_morphology(x, fs, params):
 
     The discriminator is what comes BEFORE each fall. A sharkfin's fall is
     preceded by its own rise; a trough's is preceded by quiet. So: for
-    every fast-down segment, ask whether a rise ends within one lookahead
-    of it. The majority wins.
+    every fall, ask whether a SUBSTANTIAL rise ends just before it, and
+    let the majority win.
+
+    "Substantial" is `min_rise_frac x this fall's depth` - the same test
+    Gate A applies, deliberately. The two must agree or the detector
+    contradicts itself: calling a span sharkfin commits every event to the
+    rise trigger, and if those rises then fail Gate A the span returns
+    nothing at all. Sharing the criterion makes that impossible by
+    construction.
+
+    Requiring the rise to be substantial rather than merely present is
+    what Mushroom_260720 forces. Its icicles carry a one-to-two-sample,
+    ~0.6 mV overshoot before a ~12 mV fall, so at the 2 s segment the
+    recording needs, 136 of 171 falls have SOME rising segment in front of
+    them and a presence test calls the span sharkfin. It is not: the
+    overshoot is 5% of the fall, every one of those rises fails Gate A,
+    and the run came back with 0.15-0.63 mV ripples in place of the
+    2-14 mV icicles that are actually there.
 
     Deliberately not "which trigger finds more events" - that would be
     circular, because the rise trigger's gate depends on the morphology
@@ -370,20 +386,32 @@ def choose_morphology(x, fs, params):
     if params.morphology in MORPHOLOGIES:
         return params.morphology
 
-    letters, _ = stage_letters(x, fs, params)
+    letters, details = stage_letters(x, fs, params)
     falls = fall_runs(letters)
     if not falls:
         return MORPHOLOGY_SHARKFIN
 
     rises = up_runs(letters)
+    x_detrended = details["x_detrended"]
+    sps = int(details["samples_per_symbol"])
+    last = len(x_detrended) - 1
+
     preceded = 0
-    for start, _ in falls:
-        # A rise "precedes" a fall if it ends at or just before the fall
-        # begins. One segment of slack absorbs the case where the peak
-        # sample lands in the fall's own segment rather than the rise's
-        # last.
-        if any(0 <= start - end <= 1 for _, end in rises):
-            preceded += 1
+    for start_seg, end_seg in falls:
+        start = min(start_seg * sps, last)
+        depth = float(x_detrended[start] - x_detrended[min(end_seg * sps, last)])
+        if depth <= 0:
+            continue
+        # One segment of slack absorbs the case where the peak sample lands
+        # in the fall's own segment rather than the rise's last.
+        for rise_start, rise_end in rises:
+            if not 0 <= start_seg - rise_end <= 1:
+                continue
+            climb = float(x_detrended[min(rise_end * sps, last)]
+                          - x_detrended[min(rise_start * sps, last)])
+            if climb >= params.min_rise_frac * depth:
+                preceded += 1
+                break
 
     return (MORPHOLOGY_SHARKFIN if preceded * 2 >= len(falls)
             else MORPHOLOGY_TROUGH)

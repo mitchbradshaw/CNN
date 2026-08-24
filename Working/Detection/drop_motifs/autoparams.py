@@ -66,7 +66,7 @@ The annotated counts are therefore a CHECK in the report and never an
 input here.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -117,6 +117,25 @@ FEATURE_LEVEL = 0.5
 # in one symbol. Only binds where the width estimate is inflated by
 # structure slower than the event.
 SEGMENTS_PER_INTERVAL = 8.0
+
+# Two onsets closer than this fraction of the measured spacing are the
+# same event found twice. Derived rather than set per recording, which is
+# what the three-stage detector had to do (its decision 2.11 records that
+# no derived quantity got both Mushroom and M2_aug right, and settles on
+# an explicit number per span).
+#
+# A fraction of the MEASURED INTERVAL is the quantity that does work,
+# because it is available only after a first pass has found the events.
+# Mushroom is the case that needs it: one icicle generates several rises -
+# the overshoot, then bumps on the recovery - and each finds its own
+# onset. Measured, at 0.25: 35 events collapse to 24 against 25
+# hand-marked, and window purity goes 0.63 -> 0.75.
+#
+# 0.25 rather than more: at 0.40 Mushroom is unchanged but two other spans
+# lose events they should keep (ID 24's purity 0.62 -> 0.57, ID 34's
+# 0.46 -> 0.36). Thirteen of the sixteen spans are unaffected at either
+# value, so this is tuned on the three that move.
+DEDUP_INTERVAL_FRAC = 0.25
 
 # Bounds on the search for a period, as fractions of the span. Below the
 # lower bound a "period" is a few samples of noise; above the upper the
@@ -259,6 +278,12 @@ def derive_params(feature_width_s, fs, n_samples, interval_s=None,
     # the trend the encoder is trying to read.
     detrend_window_s = max(detrend_window_s, 4.0 * segment_seconds, 3.0 / fs)
 
+    # Deliberately no `min_separation_s` here. Deduplication is applied
+    # once, to the pass that has already been CHOSEN - see `autotune`. It
+    # cannot be part of a scored pass, because scoring is by event count
+    # and dedup exists to reduce that count, so a deduplicated pass would
+    # lose to its own un-deduplicated twin every time. Measured: Mushroom
+    # selected a 35-event pass over the 24-event deduplication of it.
     derived = dict(segment_seconds=float(segment_seconds),
                    detrend_window_s=float(detrend_window_s))
     derived.update(overrides)
@@ -419,7 +444,40 @@ def autotune(x, fs, max_passes=3, tol=CONVERGENCE_TOL, params_factory=None,
             converged = True
             break
 
+    # -- phase 3: deduplicate the chosen pass ------------------------------
+    #
+    # One event can produce several onsets - an overshoot, then bumps on
+    # the recovery, each finding its own. Collapsing them is a fraction of
+    # the measured SPACING, which only exists now that a pass has been
+    # chosen and its events counted.
+    #
+    # It happens here rather than inside a scored pass because scoring is
+    # by event count and this reduces the count: a deduplicated pass would
+    # lose to its own un-deduplicated twin every time.
     best_entry, best_params, best_result = best_of(passes)
+    interval = best_entry["measured_interval_s"]
+    if ("min_separation_s" not in overrides
+            and np.isfinite(interval) and interval > 0):
+        separation = DEDUP_INTERVAL_FRAC * interval
+        deduped_params = replace(best_params, min_separation_s=separation)
+        deduped = detect_drops5(x, fs, deduped_params)
+        if deduped.events:
+            removed = len(best_result.events) - len(deduped.events)
+            trace.append(dict(
+                phase="dedup", pass_index=len(trace),
+                feature_width_s=best_entry["feature_width_s"],
+                segment_seconds=deduped_params.segment_seconds,
+                detrend_window_s=deduped_params.detrend_window_s,
+                n_events=len(deduped.events),
+                measured_width_s=best_entry["measured_width_s"],
+                measured_interval_s=interval,
+                min_separation_s=float(separation),
+                removed=int(removed),
+                morphology=deduped.morphology,
+                admissible=True))
+            best_entry, best_params, best_result = (
+                trace[-1], deduped_params, deduped)
+
     best_entry["selected"] = True
 
     refined_interval = best_entry["measured_interval_s"]
