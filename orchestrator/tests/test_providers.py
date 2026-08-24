@@ -223,3 +223,29 @@ def test_run_agent_hands_the_env_to_the_subprocess(monkeypatch, tmp_path):
 
     assert captured["env"] is not None, "the child inherited the parent environment"
     assert captured["env"]["ANTHROPIC_BASE_URL"] == "https://example.invalid"
+
+
+# ── Tier resolution after dropping the cap ──────────────────────────────────
+
+
+def test_opus_tickets_run_the_pro_model():
+    """The point of dropping `model_cap`: an opus-labelled ticket gets
+    deepseek-v4-pro, and the cheaper tiers still get flash."""
+    config = load_config(SHIPPED, repo_root=REPO_ROOT)
+
+    assert config.model_id("opus") == "deepseek-v4-pro"
+    assert config.model_id("sonnet") == "deepseek-v4-flash"
+    assert config.model_id("haiku") == "deepseek-v4-flash"
+
+
+def test_the_opus_sub_ceiling_does_not_idle_a_lane():
+    """The two settings are coupled. With no cap an opus ticket launches as
+    opus and consumes an opus slot, so a sub-ceiling below `concurrent` leaves
+    a dispatch lane empty whenever the ready work is opus-labelled -- which
+    most of this backlog is.
+    """
+    config = load_config(SHIPPED, repo_root=REPO_ROOT)
+
+    assert config.models.get("model_cap") is None
+    assert config.ceilings.capped_tier is None
+    assert config.ceilings.opus >= config.ceilings.concurrent

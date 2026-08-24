@@ -17,8 +17,10 @@ def test_the_shipped_config_loads(tmp_path):
     # Two, not three. The binding cap is tokens per rolling usage window, so
     # concurrency buys speed and not budget — see the ceilings note in
     # config.toml and `test_the_shipped_config_spreads_the_burn_rather_than_bursting_it`.
+    # The opus sub-ceiling matches it: with no `model_cap`, opus tickets launch
+    # as opus, and throttling them below `concurrent` would idle a lane.
     assert config.ceilings.concurrent == 2
-    assert config.ceilings.opus == 1
+    assert config.ceilings.opus == 2
     assert config.budget_minutes("S") == 30
     assert config.budget_minutes("M") == 60
     assert config.budget_minutes("L") == 120

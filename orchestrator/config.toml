@@ -16,17 +16,25 @@ ticket_branch_prefix = "ticket/"
 # tickets are allowed to finish.
 wall_clock_stop = "07:00"
 
-# The cap that actually binds is tokens per rolling usage window, not CPU and
-# not wall-clock. Three concurrent agents therefore do not cost less than one —
-# they spend the same budget three times faster. Run-20260818-2244 projected a
-# 6.5-hour drain into a 20-hour dispatch window and still died at 23:00, because
-# the burst overran a single usage window and every agent hit the cap at once.
+# `concurrent` stays at two. The original reason was Claude token burn per
+# rolling usage window: run-20260818-2244 projected a 6.5-hour drain into a
+# 20-hour dispatch window and still died at 23:00, because the burst overran a
+# single window and every agent hit the cap at once.
 #
-# Two is the compromise: the night still has far more wall-clock than it needs,
-# and the burn is spread across windows rather than piled into one.
+# Ticket agents no longer touch that budget. REVIEW AND FIX STILL DO — they run
+# claude-sonnet-5 against the subscription, and one review is three sessions (an
+# orchestrating agent plus two parallel sub-agents), up to twice per ticket. So
+# the usage window is still the binding constraint; it just binds on the review
+# half now, at roughly three to six Claude sessions per ticket rather than one
+# long agent per ticket.
+#
+# `opus` is the sub-ceiling on tickets running the top tier. It was 1 to bound
+# Claude opus spend. On DeepSeek that tier is deepseek-v4-pro — $0.66/$1.98 per
+# MTok against flash's $0.22/$0.66 — so the cost reason is gone and the throttle
+# only cost throughput. At 2 it no longer binds separately from `concurrent`.
 [ceilings]
 concurrent = 2
-opus = 1
+opus = 2
 
 # Budgets come from the ticket's size flag. Exceeding one is a stall.
 [budgets]
@@ -50,19 +58,23 @@ L = 120
 # CLAUDE PRICING (per MTok):
 #   claude-sonnet-5:    $3 in · $0.30 cache read · $15 out
 #
-# model_cap applies to ticket agents only (review and fix are set explicitly
-# below). "sonnet" maps opus->sonnet; "haiku" maps both opus and sonnet->haiku.
+# A `model_cap` key here would downgrade ticket agents to a tier ceiling
+# ("sonnet" maps opus->sonnet; "haiku" maps both down to haiku). None is set —
+# see the note below the tiers. It never applied to review or fix anyway.
 [models]
 haiku   = "deepseek-v4-flash"
 sonnet  = "deepseek-v4-flash"
 opus    = "deepseek-v4-pro"
-# Left in place so this change alters the provider and nothing else. Removing
-# it gives opus-labelled tickets deepseek-v4-pro instead of flash -- worth it,
-# the price difference is cents -- but note `ceilings.opus = 1` then starts
-# throttling them to one lane, because under a cap they never launch as opus at
-# all. Lift both together or neither.
-model_cap = "sonnet"
-# Review and auto-fix stay on Claude. These bypass `model_cap` entirely.
+# No `model_cap`. Opus-labelled tickets run deepseek-v4-pro: the cap existed to
+# hold Claude opus spend down, and over a whole night the flash/pro difference
+# is cents, so the harder tickets get the better model.
+#
+# Removing it also re-arms `ceilings.opus`, because a capped ticket never
+# launches as opus and so never consumes an opus slot. That is why the ceiling
+# moved to 2 in the same change — see the note there. Lifting one without the
+# other halves throughput.
+#
+# Review and auto-fix stay on Claude, and are never subject to a tier cap.
 review  = "claude-sonnet-5"
 fix     = "claude-sonnet-5"
 
