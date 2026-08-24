@@ -120,12 +120,22 @@ def test_construction_builds_a_non_none_layout_listing_every_block():
 
 
 def test_a_fresh_chain_has_no_incompatible_blocks():
+    """At the time this test was written every shipped block took the root
+    signal (`input_kind=None`), so nothing was ever disabled in a fresh
+    chain. Ticket 08 adds the first typed block (`detection.threshold`,
+    `input_kind='scores'`), which a fresh chain genuinely cannot feed yet --
+    that block being disabled with its reason inline is ticket 29's own
+    acceptance criterion, not a regression."""
     from UI.workspaces.analyse.builder import ChainBuilder
 
     builder = ChainBuilder(_FakeApp())
     for row in builder.add_column.objects:
-        button = row[0]
-        assert button.disabled is False
+        button, reason = row[0], row[1]
+        if button.name.startswith("Add Threshold"):
+            assert button.disabled is True
+            assert "scores" in reason.object
+        else:
+            assert button.disabled is False
 
 
 # ── add: appends, revalidates, re-renders ────────────────────────────────────

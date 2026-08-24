@@ -14,9 +14,11 @@ Run from the project root:
 
 import inspect
 import os
+import shutil
 import sys
 import tempfile
 
+import numpy as np
 import pytest
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -47,6 +49,21 @@ def _fresh_db_with_recording():
     q.insert_recording(conn, "M2_aug_concat_fs1.mat", 0, 1.0, REAL_L, 0, REAL_CHANNEL_PATH)
     conn.close()
     return tf.name
+
+
+def _fresh_db_with_synthetic_recording(n_samples, fs=1.0):
+    """A tiny synthetic channel + fresh db, for tests that need `execute_recipe`
+    to actually run an adapter but don't want to depend on the real channel
+    data (`_channel_available()`). Returns (db_path, tmpdir); caller cleans up
+    tmpdir (which also holds the .sqlite file)."""
+    tmpdir = tempfile.mkdtemp(prefix="t08_test_")
+    npy_path = os.path.join(tmpdir, "CH0.npy")
+    np.save(npy_path, np.random.default_rng(0).standard_normal(n_samples))
+    db_path = os.path.join(tmpdir, "test.sqlite")
+    conn = init_db(db_path)
+    q.insert_recording(conn, "fake.mat", 0, fs, n_samples, 0, npy_path)
+    conn.close()
+    return db_path, tmpdir
 
 
 # ── idempotency ──────────────────────────────────────────────────────────────
@@ -223,6 +240,97 @@ def test_unbounded_adapter_accepts_large_span():
         assert out["reused"] is False
     finally:
         os.unlink(db_path)
+
+
+# ── typed dispatch (Scores / WindowSet / SpanSet), persist decoupled from
+#    output_kind ──────────────────────────────────────────────────────────────
+
+def test_matrix_profile_declares_scores_and_persists_artifact():
+    import Adapters.detection_matrix_profile as mp_adapter
+
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    results_dir = os.path.join(tmpdir, "results")
+    prior_results_dir = mp_adapter.RESULTS_DIR
+    mp_adapter.RESULTS_DIR = results_dir
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "detection", "algorithm": "matrix_profile",
+             "params": {"window_min": 0.1, "backend": "stump"}},
+        ], span=(0, 200))
+        out = execute_recipe(recipe, db_path=db_path)
+
+        assert out["result"].output_kind == "scores"
+        assert len(out["result"].value.values) == 200  # matches the analysed span
+
+        conn = init_db(db_path)
+        artifacts = R.list_artifacts(conn, out["run_id"])
+        conn.close()
+        assert len(artifacts) == 1
+        assert artifacts[0]["kind"] == "encoding"
+    finally:
+        mp_adapter.RESULTS_DIR = prior_results_dir
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_window_matrix_declares_windowset_and_persists_artifact():
+    import Adapters.preprocessing_window_matrix as wm_adapter
+
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(400)
+    results_dir = os.path.join(tmpdir, "results")
+    prior_results_dir = wm_adapter.RESULTS_DIR
+    wm_adapter.RESULTS_DIR = results_dir
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "window_matrix",
+             "params": {"window_min": 1.0, "step_frac": 1.0, "catch22": True,
+                        "fast_entropy": False, "slow_entropy": False,
+                        "cnn": False, "rf": False}},
+        ], span=(0, 400))
+        out = execute_recipe(recipe, db_path=db_path)
+
+        assert out["result"].output_kind == "windowset"
+        window_set = out["result"].value
+        assert len(window_set.starts) >= 3  # WM_MIN_WINDOWS
+        assert window_set.features is not None
+        assert len(window_set.features) == len(window_set.starts)  # no timepoint alignment
+
+        conn = init_db(db_path)
+        artifacts = R.list_artifacts(conn, out["run_id"])
+        conn.close()
+        assert len(artifacts) == 1
+        assert artifacts[0]["kind"] == "encoding"
+    finally:
+        wm_adapter.RESULTS_DIR = prior_results_dir
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_matrix_profile_to_threshold_chain_writes_detections():
+    import Adapters.detection_matrix_profile as mp_adapter
+
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    prior_results_dir = mp_adapter.RESULTS_DIR
+    mp_adapter.RESULTS_DIR = os.path.join(tmpdir, "results")
+    try:
+        # mp distances are always >= 0, so threshold=-1.0 makes every
+        # non-NaN mp value pass -> one deterministic contiguous span.
+        recipe = make_recipe(1, [
+            {"stage": "detection", "algorithm": "matrix_profile",
+             "params": {"window_min": 0.1, "backend": "stump"}},
+            {"stage": "detection", "algorithm": "threshold",
+             "params": {"threshold": -1.0}},
+        ], span=(0, 200))
+        out = execute_recipe(recipe, db_path=db_path)
+
+        assert out["detections_written"] == 1
+        conn = init_db(db_path)
+        dets = R.list_detections(conn, out["run_id"])
+        conn.close()
+        assert len(dets) == 1
+        assert dets[0]["start_idx"] == 0
+        assert dets[0]["end_idx"] == 200 - 6 + 1  # m=6 for window_min=0.1 at fs=1.0
+    finally:
+        mp_adapter.RESULTS_DIR = prior_results_dir
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────

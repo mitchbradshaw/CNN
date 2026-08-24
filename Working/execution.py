@@ -203,6 +203,8 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
 
         step_timings = {}
         result = None
+        current_value = None  # last non-signal typed result (e.g. Scores), for a
+                               # downstream step whose `run` declares a `value` param
         detections_written = 0
         n_steps = len(recipe["steps"])
         referenced_steps = _referenced_earlier_steps(recipe["steps"])
@@ -228,15 +230,21 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
                     "size scales with the square of the span length."
                 )
 
+            accepted = inspect.signature(spec.run).parameters
             extra = {}
             if run_kwargs:
-                accepted = inspect.signature(spec.run).parameters
                 extra = {k: v for k, v in run_kwargs.items() if k in accepted}
             if spec.side_inputs:
                 extra.update(resolve_side_inputs(
                     conn, spec, step.get("side_inputs") or {},
                     root_signal=root_signal, step_results=step_results,
                 ))
+            # A typed (non-root-signal) step whose `run` declares a `value`
+            # param receives the previous typed step's output directly —
+            # this is what lets a chain like matrix_profile -> threshold
+            # thread a `Scores` through without going back via (x, t).
+            if spec.input_kind is not None and "value" in accepted:
+                extra["value"] = current_value
 
             t0 = time.time()
             result = spec.run(x, t, fs, **params, **extra)
@@ -255,21 +263,34 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
                                       score=score, commit=False)
                     detections_written += 1
                 conn.commit()
-            elif result.output_kind == "encoding" and spec.persist is not None:
+            elif result.output_kind == "spanset":
+                span_set = result.value
+                span_scores = span_set.scores or (None,) * len(span_set.starts)
+                for start_idx, end_idx, score in zip(span_set.starts, span_set.ends, span_scores):
+                    insert_detection(conn, run_id, int(start_idx), int(end_idx),
+                                      score=score, commit=False)
+                    detections_written += 1
+                conn.commit()
+
+            if result.value is not None:
+                current_value = result.value
+
+            if spec.persist is not None:
                 # Opt-in only (see AdapterSpec.persist's docstring) — an
                 # adapter that declares this hook gets its output written
                 # to disk and registered automatically, so a headless
                 # run_recipe.py invocation (e.g. an HPC job) produces a
-                # browsable artifact with no separate import step.
+                # browsable artifact with no separate import step. Any of
+                # the seven types may declare `persist`, not just 'encoding'.
                 artifact_path = spec.persist(
                     conn, run_id, hash8, recording, span_start, span_end, params, result
                 )
                 if artifact_path is not None:
                     insert_artifact(conn, run_id, kind="encoding", path=artifact_path)
-            # Every other 'encoding' output is left on `result` for the
+            # An output with no `persist` hook is left on `result` for the
             # caller — caching is a separate, explicit decision (see
-            # Working.encoding_cache), not something every
-            # encoding-producing step does automatically.
+            # Working.encoding_cache), not something every step does
+            # automatically.
 
         duration_s = sum(step_timings.values())
         update_run(
