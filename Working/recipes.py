@@ -64,6 +64,13 @@ def _normalize(obj):
             )
 
     if isinstance(obj, dict):
+        # A library_exemplar side-input binding hashes by what it *is*
+        # (source file, channel, sample range), not by its local database
+        # row id — the entry_id travels alongside as a convenience pointer
+        # but is excluded here so it never enters canonical_json/recipe_hash
+        # (ticket 14).
+        if obj.get("source_kind") == "library_exemplar" and "entry_id" in obj:
+            obj = {k: v for k, v in obj.items() if k != "entry_id"}
         return {str(k): _normalize(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_normalize(v) for v in obj]
@@ -94,6 +101,72 @@ def short_hash(recipe):
     return recipe_hash(recipe)[:8]
 
 
+def _normalize_side_inputs(side_inputs, step_index, source_kinds):
+    """Validate and normalise one step's `side_inputs` map (name -> binding).
+
+    Each binding names its `source_kind` (one of `source_kinds`) and the
+    content that identifies it:
+    - `root_signal`: no further content.
+    - `earlier_step`: `step_index` of an earlier step in the same recipe
+      (strictly less than this step's own position).
+    - `library_exemplar`: `entry_id` (a convenience pointer, stripped from
+      canonical_json by `_normalize`), `source_file`, `channel`, `start_idx`,
+      `end_idx` — the content that constitutes the binding's actual
+      identity.
+    """
+    if not side_inputs:
+        return {}
+
+    normalized = {}
+    for name, binding in side_inputs.items():
+        if not isinstance(binding, dict):
+            raise ValueError(f"Step {step_index}: side_input {name!r} must be a dict.")
+        source_kind = binding.get("source_kind")
+        if source_kind not in source_kinds:
+            raise ValueError(
+                f"Step {step_index}: side_input {name!r} has unknown source_kind "
+                f"{source_kind!r}; must be one of {source_kinds}."
+            )
+
+        if source_kind == "root_signal":
+            normalized[name] = {"source_kind": "root_signal"}
+
+        elif source_kind == "earlier_step":
+            ref = binding.get("step_index")
+            if not isinstance(ref, int) or not (0 <= ref < step_index):
+                raise ValueError(
+                    f"Step {step_index}: side_input {name!r} earlier_step "
+                    f"step_index must name an earlier step in this recipe "
+                    f"(0 <= step_index < {step_index}), got {ref!r}."
+                )
+            normalized[name] = {"source_kind": "earlier_step", "step_index": int(ref)}
+
+        elif source_kind == "library_exemplar":
+            required = ("entry_id", "source_file", "channel", "start_idx", "end_idx")
+            missing = [k for k in required if binding.get(k) is None]
+            if missing:
+                raise ValueError(
+                    f"Step {step_index}: side_input {name!r} library_exemplar "
+                    f"binding is missing {missing}."
+                )
+            start_idx, end_idx = int(binding["start_idx"]), int(binding["end_idx"])
+            if end_idx <= start_idx:
+                raise ValueError(
+                    f"Step {step_index}: side_input {name!r} library_exemplar "
+                    f"end_idx must be > start_idx, got ({start_idx}, {end_idx})."
+                )
+            normalized[name] = {
+                "source_kind": "library_exemplar",
+                "entry_id": int(binding["entry_id"]),
+                "source_file": str(binding["source_file"]),
+                "channel": int(binding["channel"]),
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+            }
+
+    return normalized
+
+
 def make_recipe(recording_id, steps, span=None):
     """Build a well-formed recipe dict, validating stage names and
     normalising `span` to a plain [start, end] list (or None).
@@ -110,6 +183,10 @@ def make_recipe(recording_id, steps, span=None):
     if not steps:
         raise ValueError("A recipe needs at least one step.")
 
+    # Lazily imported: SOURCE_KINDS lives in the adapter contract, a real
+    # dependency only callers binding side-inputs need to pay for.
+    from Adapters.base import SOURCE_KINDS
+
     norm_steps = []
     for i, step in enumerate(steps):
         stage = step.get("stage")
@@ -124,6 +201,7 @@ def make_recipe(recording_id, steps, span=None):
             "stage": stage,
             "algorithm": algorithm,
             "params": dict(step.get("params") or {}),
+            "side_inputs": _normalize_side_inputs(step.get("side_inputs"), i, SOURCE_KINDS),
         })
 
     norm_span = None

@@ -31,6 +31,8 @@ from Working.database.runs import (
     list_detections,
     update_run,
 )
+from Working.side_inputs import resolve_side_inputs, typed_step_value
+from Working.types import Signal
 
 
 class RecipeExecutionError(RuntimeError):
@@ -50,6 +52,20 @@ class HeldOutRecordingLocked(RuntimeError):
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _referenced_earlier_steps(steps):
+    """Indices any step's `earlier_step` side-input binding points at —
+    the only step results worth keeping around. Without this, resolving a
+    later `earlier_step` binding would mean retaining every intermediate
+    signal for the whole run, defeating `_load_signal`'s memory-mapping
+    care for chains that never actually reference an earlier step."""
+    referenced = set()
+    for step in steps:
+        for binding in (step.get("side_inputs") or {}).values():
+            if binding.get("source_kind") == "earlier_step":
+                referenced.add(binding["step_index"])
+    return referenced
 
 
 def _load_signal(recording, span):
@@ -183,11 +199,14 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
     try:
         x, t = _load_signal(recording, span)
         fs = recording["fs"]
+        root_signal = Signal(x=x, fs=fs)
 
         step_timings = {}
         result = None
         detections_written = 0
         n_steps = len(recipe["steps"])
+        referenced_steps = _referenced_earlier_steps(recipe["steps"])
+        step_results = {}
 
         for i, step in enumerate(recipe["steps"]):
             if should_cancel is not None and should_cancel():
@@ -213,10 +232,18 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
             if run_kwargs:
                 accepted = inspect.signature(spec.run).parameters
                 extra = {k: v for k, v in run_kwargs.items() if k in accepted}
+            if spec.side_inputs:
+                extra.update(resolve_side_inputs(
+                    conn, spec, step.get("side_inputs") or {},
+                    root_signal=root_signal, step_results=step_results,
+                ))
 
             t0 = time.time()
             result = spec.run(x, t, fs, **params, **extra)
             step_timings[i] = time.time() - t0
+
+            if i in referenced_steps:
+                step_results[i] = typed_step_value(result, fs)
 
             if result.output_kind == "signal":
                 x, t = result.x, result.t
