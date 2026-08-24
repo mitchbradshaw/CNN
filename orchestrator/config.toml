@@ -34,34 +34,59 @@ S = 30
 M = 60
 L = 120
 
-# Model ids handed to `claude -p --model`.
+# Model ids handed to `claude -p --model`, and the provider that serves each.
 #
-# TIER ORDER (cheapest first): haiku → sonnet → opus
-#   haiku-4-5:  $1 / $5   per MTok  (input / output)
-#   sonnet-5:   $2 / $10  per MTok
-#   opus-5:     $5 / $25  per MTok
+# Ticket agents run on DeepSeek; review and fix stay on Claude. The split is
+# deliberate: the implementer is the expensive half by an order of magnitude
+# (30-120 minutes of agentic work against a review that is minutes), and the
+# reviewer is the quality floor. f4e8e28 is the evidence -- a cheap model with
+# no gate produced a registry nothing imported, a deleted UI surface, and three
+# tests that had never been run.
 #
-# Counter-intuitive: sonnet-5 ($2) is CHEAPER than sonnet-4-5 or sonnet-4-6
-# ($3). Do NOT downgrade to an older version — it costs more, not less.
-# Similarly opus-4 was $15/$75 (now retired); opus-5 at $5/$25 is the right
-# choice. Always use the latest model in each tier.
+# DEEPSEEK PRICING (per MTok, off-peak / peak -- off-peak is 10:00-01:00 and
+# 04:00-06:00 UTC, which is most of a night run):
+#   deepseek-v4-flash:  $0.22/$0.44 in · $0.014 cache hit · $0.66/$1.32 out
+#   deepseek-v4-pro:    $0.66/$1.32 in · $0.044 cache hit · $1.98/$3.96 out
+# CLAUDE PRICING (per MTok):
+#   claude-sonnet-5:    $3 in · $0.30 cache read · $15 out
 #
 # model_cap applies to ticket agents only (review and fix are set explicitly
-# below). "sonnet" maps opus→sonnet; "haiku" maps both opus and sonnet→haiku.
-# Comment out model_cap to restore per-ticket model assignment from the YAML.
+# below). "sonnet" maps opus->sonnet; "haiku" maps both opus and sonnet->haiku.
 [models]
-haiku   = "claude-haiku-4-5"
-sonnet  = "claude-sonnet-5"
-opus    = "claude-opus-5"
-# Downgrade ceiling for ticket agents. Tickets marked [H] haiku are not
-# affected by this; tickets marked [O] opus are downgraded to sonnet.
-# Remove this key to restore original per-ticket model selection.
+haiku   = "deepseek-v4-flash"
+sonnet  = "deepseek-v4-flash"
+opus    = "deepseek-v4-pro"
+# Left in place so this change alters the provider and nothing else. Removing
+# it gives opus-labelled tickets deepseek-v4-pro instead of flash -- worth it,
+# the price difference is cents -- but note `ceilings.opus = 1` then starts
+# throttling them to one lane, because under a cap they never launch as opus at
+# all. Lift both together or neither.
 model_cap = "sonnet"
-# Review and auto-fix agents are costed separately from ticket agents.
-# Sonnet handles two-axis review reliably and is 2.5x cheaper than opus here.
-# Changed from opus-5 → sonnet-5 (saves ~60% per review, runs every ticket).
+# Review and auto-fix stay on Claude. These bypass `model_cap` entirely.
 review  = "claude-sonnet-5"
 fix     = "claude-sonnet-5"
+
+# Which provider serves each key in [models]. Anything unlisted uses `default`.
+[model_providers]
+default = "anthropic"
+haiku   = "deepseek"
+sonnet  = "deepseek"
+opus    = "deepseek"
+
+# `model_prefix` is a guard, not documentation. DeepSeek's Anthropic-compatible
+# endpoint SILENTLY REMAPS an unrecognised model name onto deepseek-v4-flash
+# rather than rejecting it -- so routing `claude-sonnet-5` here would produce a
+# successful run of the wrong model under the right name, invisible in the
+# transcript and in the cost column. The mismatch is refused at config load.
+[providers.anthropic]
+# No base_url and no api_key_env: the CLI uses its own credentials, whether
+# that is a subscription login or an exported ANTHROPIC_API_KEY.
+model_prefix = "claude-"
+
+[providers.deepseek]
+base_url     = "https://api.deepseek.com/anthropic"
+api_key_env  = "DEEPSEEK_API_KEY"
+model_prefix = "deepseek-"
 
 [paths]
 tickets = "docs/tickets"

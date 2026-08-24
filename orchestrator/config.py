@@ -8,6 +8,7 @@ exactly the 3am surprise this design exists to prevent.
 from __future__ import annotations
 
 import hashlib
+import os
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -31,8 +32,42 @@ REQUIRED_SECTIONS = (
 TIER_ORDER: tuple[str, ...] = ("haiku", "sonnet", "opus")
 
 
+#: Model keys that are routed to a provider: the three ticket tiers plus the
+#: two agents that are costed separately.
+ROUTED_KEYS: tuple[str, ...] = TIER_ORDER + ("review", "fix")
+
+
 class ConfigError(Exception):
     """`config.toml` is missing, malformed, or internally inconsistent."""
+
+
+@dataclass(frozen=True)
+class Provider:
+    """Where one agent's model is served from.
+
+    `model_prefix` is not decoration. DeepSeek's Anthropic-compatible endpoint
+    **silently remaps an unrecognised model name onto `deepseek-v4-flash`**
+    rather than rejecting it, so a config that sends `claude-sonnet-5` there
+    gets a successful run of the wrong model under the right name -- invisible
+    in the transcript, invisible in the cost column, invisible in review
+    quality until someone reads the findings. Refusing the combination at load
+    time is the only place it can be caught.
+    """
+
+    name: str
+    base_url: str | None = None
+    api_key_env: str | None = None
+    model_prefix: str | None = None
+
+
+#: Used when `config.toml` predates the provider sections -- `--resume` has to
+#: keep reading the config its run started under, and the test harness names
+#: its stand-in models whatever it likes.
+#:
+#: Deliberately carries no `model_prefix`. The prefix guard protects a routing
+#: decision; where nothing is routed there is nothing to protect, and enforcing
+#: it would reject every config written before this section existed.
+_IMPLICIT_PROVIDERS = {"anthropic": Provider(name="anthropic")}
 
 
 @dataclass(frozen=True)
@@ -133,6 +168,10 @@ class Config:
     overlap: OverlapConfig
     circuit_breaker: CircuitBreakerConfig
     rate_limit: RateLimitConfig
+    #: Defaulted so a config written before provider routing still loads.
+    providers: dict = None
+    providers_default: str = "anthropic"
+    model_providers: dict = None
 
     def budget_minutes(self, size: str) -> int:
         try:
@@ -162,6 +201,68 @@ class Config:
             return self.models[effective]
         except KeyError:
             raise ConfigError(f"no model id configured for {effective!r}") from None
+
+    def _effective_key(self, model: str) -> str:
+        """The key whose model actually runs, after `model_cap`.
+
+        Provider lookup has to apply the same cap `model_id` does, or a capped
+        opus ticket would be handed the opus provider while running the sonnet
+        model.
+        """
+        if model in TIER_ORDER:
+            cap = self.models.get("model_cap")
+            if cap and cap in TIER_ORDER and TIER_ORDER.index(model) > TIER_ORDER.index(cap):
+                return cap
+        return model
+
+    def provider_for(self, model: str) -> Provider:
+        """The provider serving `model` -- a tier name, "review", or "fix"."""
+        providers = self.providers or _IMPLICIT_PROVIDERS
+        mapping = self.model_providers or {}
+        name = mapping.get(self._effective_key(model), self.providers_default)
+        try:
+            return providers[name]
+        except KeyError:
+            raise ConfigError(f"no provider configured named {name!r}") from None
+
+    def agent_env(self, model: str) -> dict:
+        """The full environment for one agent's CLI process.
+
+        A complete mapping rather than a set of overrides, because the decisive
+        case is *removal*: an `ANTHROPIC_BASE_URL` exported in the operator's
+        shell is inherited by every child, so the Claude-backed agents have to
+        clear it rather than merely decline to set it. Leaving it would send
+        the reviewer to the same cheap endpoint as the ticket agent, and the
+        only symptom would be worse findings.
+        """
+        provider = self.provider_for(model)
+        env = dict(os.environ)
+        env.pop("ANTHROPIC_BASE_URL", None)
+        if provider.base_url:
+            env["ANTHROPIC_BASE_URL"] = provider.base_url
+        if provider.api_key_env:
+            key = os.environ.get(provider.api_key_env)
+            # An empty value is worse than an absent one: it reads as an
+            # authentication failure rather than a missing configuration.
+            if key:
+                env["ANTHROPIC_API_KEY"] = key
+        return env
+
+    def missing_credentials(self) -> tuple:
+        """Env vars named by providers actually in use, but not set.
+
+        Checked at startup because the alternative is discovering it per agent,
+        forty minutes in, as an exit code that looks like a stalled ticket.
+        """
+        seen, missing = set(), []
+        for key in ROUTED_KEYS:
+            provider = self.provider_for(key)
+            if provider.name in seen:
+                continue
+            seen.add(provider.name)
+            if provider.api_key_env and not os.environ.get(provider.api_key_env):
+                missing.append(provider.api_key_env)
+        return tuple(missing)
 
     def wall_clock_stop_at(self, started: datetime) -> datetime:
         """The next occurrence of the configured stop time, at or after `started`."""
@@ -215,6 +316,46 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
         raise ConfigError(
             f"{path}: `models.model_cap` must be one of {list(TIER_ORDER)}, got {cap!r}"
         )
+
+    # ── Provider routing ────────────────────────────────────────────────
+    providers = {
+        name: Provider(
+            name=name,
+            base_url=block.get("base_url"),
+            api_key_env=block.get("api_key_env"),
+            model_prefix=block.get("model_prefix"),
+        )
+        for name, block in (data.get("providers") or {}).items()
+    } or dict(_IMPLICIT_PROVIDERS)
+
+    routing_raw = dict(data.get("model_providers") or {})
+    providers_default = routing_raw.pop("default", "anthropic")
+    if providers_default not in providers:
+        raise ConfigError(
+            f"{path}: `model_providers.default` names {providers_default!r}, "
+            f"which is not one of {sorted(providers)}"
+        )
+    for key, name in routing_raw.items():
+        if name not in providers:
+            raise ConfigError(
+                f"{path}: `model_providers.{key}` names provider {name!r}, "
+                f"which is not one of {sorted(providers)}"
+            )
+
+    # A model must match its provider's prefix. See `Provider.model_prefix`:
+    # DeepSeek accepts an unknown name and silently serves deepseek-v4-flash,
+    # so this mismatch has no downstream symptom at all.
+    for key, model in models_raw.items():
+        if key == "model_cap":
+            continue
+        provider = providers[routing_raw.get(key, providers_default)]
+        if provider.model_prefix and not str(model).startswith(provider.model_prefix):
+            raise ConfigError(
+                f"{path}: `models.{key}` is {model!r} but it is routed to provider "
+                f"{provider.name!r}, which serves models starting {provider.model_prefix!r}. "
+                f"{provider.name} would accept this and silently serve a different "
+                f"model, so it is refused here instead."
+            )
 
     p = data["paths"]
 
@@ -283,6 +424,9 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             include_private=bool(_require(data, "overlap", "include_private", path)),
             ignore_paths=tuple(data["overlap"].get("ignore_paths", [])),
         ),
+        providers=providers,
+        providers_default=providers_default,
+        model_providers=routing_raw,
         circuit_breaker=CircuitBreakerConfig(
             consecutive_quarantines=int(
                 _require(data, "circuit_breaker", "consecutive_quarantines", path)),

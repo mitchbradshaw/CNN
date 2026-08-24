@@ -118,6 +118,18 @@ def _do_run(config, backlog, args) -> int:
               "inside every agent's worktree.", file=sys.stderr)
         return 2
 
+    # Cheaper to discover here than as a per-agent exit code forty minutes in,
+    # which looks like a stalled ticket rather than a missing key.
+    missing = config.missing_credentials()
+    if missing:
+        print(
+            "refusing to start: no API key in the environment for the provider(s) "
+            "serving this run. Set:\n  "
+            + "\n  ".join(f"{name}=<your key>" for name in missing),
+            file=sys.stderr,
+        )
+        return 2
+
     # Only on a fresh run. On `--resume` these branches are the work being
     # resumed, and reusing them is the entire point.
     stale = stale_ticket_branches(

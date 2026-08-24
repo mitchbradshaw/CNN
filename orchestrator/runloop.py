@@ -295,6 +295,7 @@ class Runner:
                 cwd=worktree.path,
                 prompt=build_prompt(ticket, self.config, previous_transcript_tail=tail),
                 model=self.config.model_id(ticket.model),
+                env=self.config.agent_env(ticket.model),
                 budget_minutes=ticket.budget_minutes or self.config.budget_minutes(ticket.size),
                 extra_args=self.config.agent.extra_args,
                 transcript_path=self.run_dir.artifact(ticket.id, f"transcript-{launch}.log"),
@@ -566,6 +567,7 @@ class Runner:
             )
             result = run_agent(list(self.config.agent.cli), cwd=worktree.path, prompt=prompt,
                                model=self.config.model_id("review"),
+                               env=self.config.agent_env("review"),
                                budget_minutes=self.config.review.timeout_minutes,
                                extra_args=self.config.agent.extra_args,
                                output_format=self.config.agent.output_format,
@@ -600,6 +602,7 @@ class Runner:
             fix_prompt = _fix_prompt(ticket, verdict.findings)
             fix = run_agent(list(self.config.agent.cli), cwd=worktree.path, prompt=fix_prompt,
                             model=self.config.model_id("fix"),
+                            env=self.config.agent_env("fix"),
                             output_format=self.config.agent.output_format,
                             max_budget_usd=self.config.agent.max_budget_usd,
                             budget_minutes=ticket.budget_minutes,
