@@ -298,3 +298,10 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [major] [spec] (rule 6.4) Reimplements `_mindist_cell_table` when `symbol_distance_table`/`mindist` already exist in `Experimentation/Detection experiments/sax_seed_search.py`
 - [minor] [spec] (no rule cited) Scale-invariant distance is unnormalised by `n_samples = max(len)`, so its magnitude grows ~sqrt(n) and a single recorded threshold is not comparable across durations
 - [minor] [spec] (no rule cited) Constant-span guard differs between `z_normalize` (`sigma == 0`) and `timeseries2symbol` (`norm_thresh = 0.001`), so near-constant pairs score 8.94 native vs 0.0 symbolic
+
+## T29 — 2026-08-25 03:27
+
+- [major] [standards] (rule 6.4) `block.name.split(".",1)[1]` in builder.py duplicates the same one-liner in UI/analyse/execution.py and UI/analyse/derive.py
+- [minor] [standards] (rule 6.2) _delete_step's ChainStateError handler is unreachable/untested since this surface never sets side_inputs yet
+- [minor] [spec] (no rule cited) "compose the three worked chains without blanking" AC is currently unsatisfiable — registry lacks train_cnn/seeded_score/banded_score adapters, a gap outside this ticket's files
+- [minor] [spec] (no rule cited) ticket's "relocates and extends RunPanel's staged-list behaviour" note points at unrelated prior art (span basket / single-algorithm select, not a step chain); building ChainBuilder fresh atop ChainState is the correct reading, not a missed relocation
