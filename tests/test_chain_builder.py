@@ -171,9 +171,14 @@ def test_incompatible_block_is_disabled_with_reason_not_filtered_out():
     assert "encoding" in reason_pane.object
     assert "signal" in reason_pane.object
 
-    # A block that's still compatible must not be disabled.
-    still_ok_row = _add_row(builder, "catalogue.gramian_gasf")
-    assert still_ok_row[0].disabled is False
+    # Every disabled row's reason matches `check_step_compatibility` exactly
+    # -- this surface doesn't invent its own wording.
+    from Working.chain_validation import check_step_compatibility
+    tail_kind = get_adapter("catalogue.gramian_gasf").output_kind
+    for block, row in zip(list_adapters(), builder.add_column.objects):
+        expected_ok, expected_reason = check_step_compatibility(tail_kind, block)
+        assert row[0].disabled is not expected_ok
+        assert row[1].object == expected_reason
 
 
 # ── reorder ──────────────────────────────────────────────────────────────────

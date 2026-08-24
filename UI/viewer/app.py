@@ -20,6 +20,7 @@ from UI.file_import import FileImportPanel
 from UI.analyse import RunPanel
 from UI.run_history import RunHistoryBrowser
 from UI.motif_browser import MotifBrowser
+from UI.workspaces.analyse import ChainBuilder
 from UI.viewer.annotations import AnnotationsMixin
 from UI.viewer.filters import FiltersMixin
 from UI.viewer.layout import LayoutMixin
@@ -127,6 +128,7 @@ class ViewerApp(
         self.run_panel = RunPanel(self)
         self.run_history = RunHistoryBrowser(self)
         self.motif_browser = MotifBrowser(self)
+        self.chain_builder = ChainBuilder(self)
         self.tabs = None  # set in layout(); lets RunHistoryBrowser switch tabs on "Reopen"
 
         source_files = sorted({r["source_file"] for r in q.list_recordings(self.conn)})

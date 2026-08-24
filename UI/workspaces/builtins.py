@@ -22,5 +22,9 @@ BUILTIN_SECTIONS = (
     # tab it has always had, one level down.
     ("Analyse", "Run algorithm", lambda app: app.run_panel.layout()),
     ("Analyse", "Run history", lambda app: app.run_history.layout()),
+    # Ticket 29: the chain builder. `ChainBuilder` is instantiated in
+    # `UI/viewer/app.py`, same as `run_panel`/`run_history` above -- this
+    # table only ever reads the attribute off `app`, per its own docstring.
+    ("Analyse", "Chain builder", lambda app: app.chain_builder.layout()),
     ("Library", "Motif browser", lambda app: app.motif_browser.layout()),
 )
