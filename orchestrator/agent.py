@@ -296,7 +296,7 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
               extra_args=(), transcript_path: Path | str | None = None,
               stall_minutes: float | None = None, commit_count=None,
               poll_seconds: float = 5.0, output_format: str = "text",
-              max_budget_usd: float = 0.0) -> AgentResult:
+              max_budget_usd: float = 0.0, env=None) -> AgentResult:
     """Run one agent to completion, its budget, or its death.
 
     With `stall_minutes` and `commit_count` supplied, the agent is also killed
@@ -316,6 +316,13 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
 
     `max_budget_usd` is a hard ceiling the CLI enforces on itself. Zero means
     no ceiling.
+
+    `env` is the complete environment for the child. It exists so that ticket
+    agents and review agents can be served by different providers in the same
+    run: the CLI takes its endpoint from `ANTHROPIC_BASE_URL`, so an inherited
+    one would move every agent at once. `None` inherits this process's
+    environment, which is the behaviour every caller had before routing
+    existed.
     """
     argv = [*cli, "-p", prompt, "--model", model]
     if output_format and output_format != "text":
@@ -335,12 +342,12 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
     try:
         if not watch_for_stall:
             exit_code, transcript, timed_out = _run_to_file(
-                argv, cwd=cwd, budget_minutes=budget_minutes)
+                argv, cwd=cwd, budget_minutes=budget_minutes, env=env)
         else:
             exit_code, transcript, timed_out, stalled_without_commit = _run_watched(
                 argv, cwd=cwd, budget_minutes=budget_minutes,
                 stall_minutes=stall_minutes, commit_count=commit_count,
-                poll_seconds=poll_seconds,
+                poll_seconds=poll_seconds, env=env,
             )
     except OSError as exc:
         exit_code = 127
@@ -370,7 +377,7 @@ def run_agent(cli, *, cwd: Path | str, prompt: str, model: str, budget_minutes: 
     return result
 
 
-def _run_to_file(argv, *, cwd, budget_minutes: float):
+def _run_to_file(argv, *, cwd, budget_minutes: float, env=None):
     """The unwatched path: no stall detection, but the transcript survives a kill.
 
     This used to be `subprocess.run(capture_output=True, timeout=...)`, which on
@@ -391,6 +398,7 @@ def _run_to_file(argv, *, cwd, budget_minutes: float):
         with open(sink_path, "w+b") as sink:
             process = subprocess.Popen(
                 argv, cwd=str(Path(cwd)), stdout=sink, stderr=subprocess.STDOUT,
+                env=env,
             )
             try:
                 exit_code = process.wait(timeout=budget_minutes * 60)
@@ -407,7 +415,7 @@ def _run_to_file(argv, *, cwd, budget_minutes: float):
     return exit_code, transcript, timed_out
 
 
-def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
+def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float, env=None,
                  commit_count, poll_seconds: float):
     """Popen plus a poll loop, returning `(exit_code, transcript, timed_out, stalled)`.
 
@@ -433,6 +441,7 @@ def _run_watched(argv, *, cwd, budget_minutes: float, stall_minutes: float,
         with open(sink_path, "w+b") as sink:
             process = subprocess.Popen(
                 argv, cwd=str(Path(cwd)), stdout=sink, stderr=subprocess.STDOUT,
+                env=env,
             )
             try:
                 while True:
