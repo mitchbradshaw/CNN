@@ -85,7 +85,14 @@ model_prefix = "claude-"
 
 [providers.deepseek]
 base_url     = "https://api.deepseek.com/anthropic"
+# Read the secret from DEEPSEEK_API_KEY, hand it to the CLI as
+# ANTHROPIC_AUTH_TOKEN. NOT ANTHROPIC_API_KEY: a stored Claude subscription
+# OAuth credential (~/.claude/.credentials.json) takes precedence over that
+# variable, so the CLI sends the *subscription* token to DeepSeek and fails
+# with `401 Your api key: ****7QAA is invalid` -- naming a key that appears
+# nowhere in this config. Verified against the live endpoint.
 api_key_env  = "DEEPSEEK_API_KEY"
+credential_env = "ANTHROPIC_AUTH_TOKEN"
 model_prefix = "deepseek-"
 
 [paths]

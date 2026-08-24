@@ -94,7 +94,7 @@ def test_a_deepseek_agent_gets_the_endpoint_and_the_key(monkeypatch):
 
     env = config.agent_env("opus")
     assert env["ANTHROPIC_BASE_URL"] == "https://api.deepseek.com/anthropic"
-    assert env["ANTHROPIC_API_KEY"] == "sk-test-value"
+    assert env["ANTHROPIC_AUTH_TOKEN"] == "sk-test-value"
 
 
 def test_a_claude_agent_clears_an_inherited_base_url(monkeypatch):
@@ -107,6 +107,17 @@ def test_a_claude_agent_clears_an_inherited_base_url(monkeypatch):
 
     env = config.agent_env("review")
     assert "ANTHROPIC_BASE_URL" not in env
+
+
+def test_a_claude_agent_does_not_inherit_the_deepseek_token(monkeypatch):
+    """The other half of the leak. The ticket agent before it was handed
+    ANTHROPIC_AUTH_TOKEN; if that survives into the reviewer's environment the
+    DeepSeek key is sent to Anthropic, which fails closed but noisily."""
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "sk-deepseek-leaked")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-value")
+    config = load_config(SHIPPED, repo_root=REPO_ROOT)
+
+    assert "ANTHROPIC_AUTH_TOKEN" not in config.agent_env("review")
 
 
 def test_a_claude_agent_keeps_the_rest_of_the_environment(monkeypatch):
@@ -122,7 +133,7 @@ def test_a_missing_key_is_not_silently_passed_as_empty(monkeypatch):
     config = load_config(SHIPPED, repo_root=REPO_ROOT)
 
     env = config.agent_env("opus")
-    assert env.get("ANTHROPIC_API_KEY") != "", \
+    assert env.get("ANTHROPIC_AUTH_TOKEN") != "", \
         "an empty key reads as authentication failure forty minutes into a run"
 
 

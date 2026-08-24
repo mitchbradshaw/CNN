@@ -56,7 +56,13 @@ class Provider:
 
     name: str
     base_url: str | None = None
+    #: Where the secret is READ from -- an env var the operator exports.
     api_key_env: str | None = None
+    #: Where the secret is WRITTEN to for the CLI. Not ANTHROPIC_API_KEY:
+    #: a stored Claude subscription OAuth credential shadows that variable,
+    #: so the CLI sends the subscription token to the third-party endpoint
+    #: and gets a 401 naming a key nobody configured. Measured, not guessed.
+    credential_env: str = "ANTHROPIC_AUTH_TOKEN"
     model_prefix: str | None = None
 
 
@@ -237,7 +243,13 @@ class Config:
         """
         provider = self.provider_for(model)
         env = dict(os.environ)
+        # Both variables select a provider, so both are cleared before either is
+        # set. Leaving ANTHROPIC_AUTH_TOKEN in place would send the DeepSeek key
+        # to Anthropic on the very next agent; leaving ANTHROPIC_BASE_URL would
+        # send the reviewer to DeepSeek. ANTHROPIC_API_KEY is deliberately left
+        # alone -- an operator who authenticates Claude that way still can.
         env.pop("ANTHROPIC_BASE_URL", None)
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
         if provider.base_url:
             env["ANTHROPIC_BASE_URL"] = provider.base_url
         if provider.api_key_env:
@@ -245,7 +257,7 @@ class Config:
             # An empty value is worse than an absent one: it reads as an
             # authentication failure rather than a missing configuration.
             if key:
-                env["ANTHROPIC_API_KEY"] = key
+                env[provider.credential_env] = key
         return env
 
     def missing_credentials(self) -> tuple:
@@ -323,6 +335,7 @@ def load_config(path: Path | str, *, repo_root: Path | str) -> Config:
             name=name,
             base_url=block.get("base_url"),
             api_key_env=block.get("api_key_env"),
+            credential_env=block.get("credential_env", "ANTHROPIC_AUTH_TOKEN"),
             model_prefix=block.get("model_prefix"),
         )
         for name, block in (data.get("providers") or {}).items()
