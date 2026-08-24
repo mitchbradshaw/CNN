@@ -158,6 +158,131 @@ def test_recipe_summary_format():
     assert recipe_summary(r) == "preprocessing.lowpass -> detection.rupture"
 
 
+# ── side-input bindings (ticket 14) ─────────────────────────────────────────
+
+def _step_with_exemplar_binding(entry_id=1, start_idx=100, end_idx=200,
+                                 source_file="rec.mat", channel=0):
+    return {
+        "stage": "detection",
+        "algorithm": "x",
+        "params": {},
+        "side_inputs": {
+            "exemplar": {
+                "source_kind": "library_exemplar",
+                "entry_id": entry_id,
+                "source_file": source_file,
+                "channel": channel,
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+            }
+        },
+    }
+
+
+def test_make_recipe_defaults_side_inputs_to_empty_dict():
+    r = make_recipe(1, [{"stage": "detection", "algorithm": "x"}])
+    assert r["steps"][0]["side_inputs"] == {}
+
+
+def test_make_recipe_round_trips_a_root_signal_binding():
+    r = make_recipe(1, [{
+        "stage": "detection", "algorithm": "x",
+        "side_inputs": {"sig": {"source_kind": "root_signal"}},
+    }])
+    assert r["steps"][0]["side_inputs"] == {"sig": {"source_kind": "root_signal"}}
+
+
+def test_make_recipe_round_trips_an_earlier_step_binding():
+    r = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+        {"stage": "detection", "algorithm": "x",
+         "side_inputs": {"ref": {"source_kind": "earlier_step", "step_index": 0}}},
+    ])
+    assert r["steps"][1]["side_inputs"] == {"ref": {"source_kind": "earlier_step", "step_index": 0}}
+
+
+def test_make_recipe_rejects_an_earlier_step_binding_pointing_forward():
+    try:
+        make_recipe(1, [
+            {"stage": "detection", "algorithm": "x",
+             "side_inputs": {"ref": {"source_kind": "earlier_step", "step_index": 0}}},
+        ])
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_make_recipe_rejects_an_earlier_step_binding_pointing_at_itself_or_later():
+    try:
+        make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+            {"stage": "detection", "algorithm": "x",
+             "side_inputs": {"ref": {"source_kind": "earlier_step", "step_index": 1}}},
+        ])
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_make_recipe_round_trips_a_library_exemplar_binding():
+    r = make_recipe(1, [_step_with_exemplar_binding()])
+    binding = r["steps"][0]["side_inputs"]["exemplar"]
+    assert binding["source_kind"] == "library_exemplar"
+    assert binding["entry_id"] == 1
+    assert binding["source_file"] == "rec.mat"
+    assert binding["channel"] == 0
+    assert binding["start_idx"] == 100
+    assert binding["end_idx"] == 200
+
+
+def test_make_recipe_rejects_a_library_exemplar_binding_missing_content():
+    try:
+        make_recipe(1, [{
+            "stage": "detection", "algorithm": "x",
+            "side_inputs": {"exemplar": {"source_kind": "library_exemplar", "entry_id": 1}},
+        }])
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_make_recipe_rejects_an_unknown_source_kind():
+    try:
+        make_recipe(1, [{
+            "stage": "detection", "algorithm": "x",
+            "side_inputs": {"bad": {"source_kind": "bogus"}},
+        }])
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+# ── side-input content-addressed hashing (ticket 14) ────────────────────────
+
+def test_recipe_hash_unchanged_when_exemplar_entry_id_changes():
+    r1 = make_recipe(1, [_step_with_exemplar_binding(entry_id=1)])
+    r2 = make_recipe(1, [_step_with_exemplar_binding(entry_id=2)])
+    assert recipe_hash(r1) == recipe_hash(r2)
+
+
+def test_recipe_hash_changes_when_exemplar_sample_range_changes():
+    r1 = make_recipe(1, [_step_with_exemplar_binding(start_idx=100, end_idx=200)])
+    r2 = make_recipe(1, [_step_with_exemplar_binding(start_idx=100, end_idx=300)])
+    assert recipe_hash(r1) != recipe_hash(r2)
+
+
+def test_recipe_hash_changes_when_exemplar_source_file_changes():
+    r1 = make_recipe(1, [_step_with_exemplar_binding(source_file="a.mat")])
+    r2 = make_recipe(1, [_step_with_exemplar_binding(source_file="b.mat")])
+    assert recipe_hash(r1) != recipe_hash(r2)
+
+
+def test_canonical_json_excludes_exemplar_entry_id():
+    r = make_recipe(1, [_step_with_exemplar_binding(entry_id=42)])
+    assert "entry_id" not in canonical_json(r)
+    assert "42" not in canonical_json(r)
+
+
 # ── runner ───────────────────────────────────────────────────────────────────
 
 def _run_all():
