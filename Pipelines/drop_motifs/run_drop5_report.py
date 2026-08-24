@@ -52,6 +52,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from Pipelines.drop_motifs.spans5 import SPANS5, load_span
+from Working.Detection.drop_motifs import motifs5
 from Working.Detection.drop_motifs.autoparams import CONFIDENCE_GATE, autotune
 from Working.Detection.drop_motifs.detect5 import params_as_dict, window_purity
 
@@ -165,7 +166,16 @@ def run_span(conn, catalogue_id, spec, max_passes):
                 f"over-framing them. Look at `segment_seconds` or the "
                 f"dedup separation.")
 
+    rows, arrays = motifs5.rows_and_arrays(
+        tuned.result, x, purity,
+        catalogue_id=catalogue_id, recording_id=spec["recording"], fs=fs,
+        source_file=os.path.basename(row["npy_path"]),
+        channel=int(row["channel"]), span_offset=offset,
+        span_label=f"ID {catalogue_id}", span_key=f"id{catalogue_id:03d}")
+
     return dict(
+        motif_rows=rows,
+        motif_arrays=arrays,
         catalogue_id=catalogue_id,
         annotation_id=spec["annotation"],
         recording_id=spec["recording"],
@@ -227,6 +237,7 @@ def main(argv=None):
     conn = open_db(args.db)
 
     summaries = []
+    store_rows, store_arrays, span_data = [], {}, {}
     for catalogue_id in wanted:
         spec = SPANS5[catalogue_id]
         print(f"[{catalogue_id:>3}] {spec['note'][:58]}", flush=True)
@@ -236,6 +247,10 @@ def main(argv=None):
               f"n={summary['n_events']:<4d} "
               f"purity={summary['purity_clean_fraction']:.2f} "
               f"morph={summary['morphology']}", flush=True)
+
+        store_rows.extend(summary.pop("motif_rows"))
+        store_arrays.update(summary.pop("motif_arrays"))
+        span_data[catalogue_id] = (x, tuned, summary)
 
         if not args.no_figures:
             # Imported here, not at module scope: this is a Pipelines
@@ -247,6 +262,27 @@ def main(argv=None):
                 x, tuned, purity, summary, out_dir,
                 panels_per_sheet=PANELS_PER_SHEET)
         summaries.append(summary)
+
+    # The motif library, written before the figures that read it, so a
+    # figure can never draw from a store that was not persisted.
+    store_dir = out_dir / "motifs"
+    motifs5.write_store(str(store_dir), store_rows, store_arrays,
+                        manifest_extra={"detector": "detect5",
+                                        "spans_run": list(wanted)})
+    print(f"\nmotif library -> {store_dir}  "
+          f"({len(store_rows)} motifs, "
+          f"{sum(r['is_pure'] for r in store_rows)} pure)")
+
+    if not args.no_figures:
+        from Pipelines.drop_motifs.figuresets5 import draw_all
+        index = draw_all(store_dir, out_dir, span_data, summaries, wanted)
+        for summary in summaries:
+            entry = index.get(str(summary["catalogue_id"]))
+            if entry:
+                summary["figure_set"] = entry
+        pooled = index.get("ALL")
+        if pooled:
+            summaries.append({"catalogue_id": "ALL", "pooled": pooled})
 
     (out_dir / "autoderive_summary.json").write_text(
         json.dumps(summaries, indent=2, default=float), encoding="utf-8")
