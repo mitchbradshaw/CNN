@@ -16,7 +16,9 @@ before being concatenated and handed to that builder as one group.
 The entry detail also hosts the "search at other scales" action (ticket 40):
 searching for the exemplar's shape across a configurable range of durations,
 under both the scale-invariant distance and the native-length control, with
-their recall shown side by side.
+their recall shown side by side. And the export action (ticket 46): the family
+leaves the tool as a folder containing a manifest, a spans CSV and copied
+plots, via `Working.export.export_library_entry`.
 """
 
 import numpy as np
@@ -27,6 +29,9 @@ from Working.database import queries as q
 from Working.database import runs as R
 from Working.distances import (
     DISTANCE_NATIVE_LENGTH, DISTANCE_SCALE_INVARIANT, resample_to_length,
+)
+from Working.export import (
+    entry_edges_by_member, export_library_entry, gather_entry_members,
 )
 from Working.library import search_entry_across_durations
 from Working.recipes import short_hash
@@ -74,6 +79,16 @@ class EntryDetail:
         self.last_search_results = None
         self.search_run_button.on_click(self._on_search_run)
 
+        # Export action (ticket 46).
+        self.export_out_dir = pn.widgets.TextInput(
+            name="Output directory", value="exports",
+        )
+        self.export_button = pn.widgets.Button(
+            name="Export entry", button_type="primary",
+        )
+        self.export_status = pn.pane.Markdown("")
+        self.export_button.on_click(self._on_export)
+
         self._entry_id = None
         self._entries = R.list_motif_entries(self.conn)
 
@@ -111,6 +126,14 @@ class EntryDetail:
             self.search_threshold,
             self.search_run_button,
             self.search_results_pane,
+            pn.pane.Markdown("### Export entry"),
+            pn.pane.Markdown(
+                "*Exports the family as a folder containing a manifest, a "
+                "spans table as CSV, and copies of its plots.*"
+            ),
+            self.export_out_dir,
+            self.export_button,
+            self.export_status,
             sizing_mode="stretch_width",
         )
 
@@ -257,6 +280,27 @@ class EntryDetail:
             )
         return "\n".join(lines)
 
+    # ── Export ────────────────────────────────────────────────────────────────
+
+    def _on_export(self, _event=None):
+        """Export the selected entry to the requested directory.
+
+        The headless work lives in `Working.export.export_library_entry`; this
+        handler only reads the widget values and reports the outcome.
+        """
+        if self._entry_id is None:
+            self.export_status.object = "*Select an exemplar first.*"
+            return
+        out_dir = self.export_out_dir.value or "exports"
+        try:
+            result = export_library_entry(self.conn, self._entry_id, out_dir)
+        except Exception as e:
+            self.export_status.object = f"**Export failed:** {e}"
+            return
+        self.export_status.object = (
+            f"**Exported entry {result['entry_id']} to `{result['out_dir']}`.**"
+        )
+
     def _render_empty(self):
         self._entry_id = None
         self.overlay_pane.object = build_motif_waveform_overlay(
@@ -291,61 +335,15 @@ class EntryDetail:
     def _gather_members(self, entry):
         """The exemplar first, then every stored member span.
 
-        The exemplar itself may or may not have a `motif_member` row yet (a
-        freshly promoted entry has none), so it is always represented once
-        from the `motif_entry` row; any stored row for the same span is only
-        used to recover its member id.
+        Shared with the exporter (`Working.export.gather_entry_members`) so
+        the detail view and the export report exactly the same family.
         """
-        exemplar = {
-            "id": None,
-            "entry_id": entry["id"],
-            "recording_id": entry["recording_id"],
-            "start_idx": entry["start_idx"],
-            "end_idx": entry["end_idx"],
-            "is_seed": True,
-        }
-        members = [exemplar]
-        exemplar_key = (
-            entry["recording_id"], entry["start_idx"], entry["end_idx"],
-        )
-        seen = {exemplar_key}
-
-        for row in R.list_motif_members(self.conn, entry["id"]):
-            key = (row["recording_id"], row["start_idx"], row["end_idx"])
-            if key in seen:
-                if key == exemplar_key and exemplar["id"] is None:
-                    exemplar["id"] = row["id"]
-                continue
-            seen.add(key)
-            member = dict(row)
-            member["is_seed"] = False
-            members.append(member)
-
-        return members
+        return gather_entry_members(self.conn, entry)
 
     def _edges_by_member(self, entry, members):
         """Map each non-exemplar member id to the edge that connects it to the
-        exemplar. `match_span_to_entry` stores (exemplar, candidate) oriented
-        edges, so the candidate is the endpoint that is not the exemplar."""
-        exemplar_member_id = members[0]["id"]
-        member_ids = {m["id"] for m in members if m["id"] is not None}
-        edges_by_member = {}
-
-        for edge in R.list_motif_edges(self.conn, entry["id"]):
-            if exemplar_member_id is not None:
-                if edge["member_a_id"] == exemplar_member_id:
-                    candidate_id = edge["member_b_id"]
-                elif edge["member_b_id"] == exemplar_member_id:
-                    candidate_id = edge["member_a_id"]
-                else:
-                    candidate_id = edge["member_a_id"]
-            else:
-                candidate_id = edge["member_a_id"]
-
-            if candidate_id in member_ids:
-                edges_by_member.setdefault(candidate_id, edge)
-
-        return edges_by_member
+        exemplar. Shared with the exporter."""
+        return entry_edges_by_member(self.conn, entry, members)
 
     # ── Text panes ──────────────────────────────────────────────────────
 
