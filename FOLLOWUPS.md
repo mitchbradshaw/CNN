@@ -380,3 +380,7 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [major] [standards] (rule 4.2) test_key_listener_ignores_text_fields asserts JS source substrings ("document.activeElement", "INPUT") rather than behaviour, bordering on 4.2's "transcription of implementation"; mitigated by the same technique being pre-established in the sibling Explore test file for the same stated reason.
 - [minor] [spec] (no rule cited) Ticket carries flags:['human-verify'] and the "person adjudicates fifty real candidates" criterion; the diff satisfies it only via a headless simulated-click test over synthetic data, with no note that the human-verify half remains outstanding.
 - [minor] [spec] (no rule cited) note_input/note-saving behaviour is not named anywhere in T22's acceptance criteria (spec-level scope creep), though it reuses an existing note column/param from tickets 19/20.
+
+## T07 — 2026-08-25 18:52
+
+- [minor] [spec] (no rule cited) "Existing tests ... pass unmodified" is in tension with the edit to tests/test_adapter_spec.py's remapped_by_ticket_07 allow-set; resolved by T06 precedent (same shared-guard-test mechanism), read as referring to per-adapter test files rather than the shared registry guard.
