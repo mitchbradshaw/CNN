@@ -174,11 +174,11 @@ def test_library_grid_renders_exemplar_cards_with_scope():
             assert len(grid.scope_panes) == 2
 
             first_scope = grid.scope_panes[0].object
-            assert "A.mat" in first_scope and "CH0" in first_scope
-            assert "B.mat" in first_scope and "CH3" in first_scope
+            assert "A.mat" in first_scope and "CH00" in first_scope
+            assert "B.mat" in first_scope and "CH03" in first_scope
 
             second_scope = grid.scope_panes[1].object
-            assert "B.mat" in second_scope and "CH3" in second_scope
+            assert "B.mat" in second_scope and "CH03" in second_scope
         finally:
             conn.close()
 
