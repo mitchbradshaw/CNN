@@ -272,19 +272,21 @@ def test_template_exports_and_imports_resolving_carried_exemplar_by_content():
         conn = init_db(db_b)
         try:
             entry_b = R.insert_motif_entry(conn, ids_b["exemplar"], 100, 110)
+            imported = T.import_template(conn, exported)
+            applied = T.apply_template(conn, imported, ids_b["root"], span=(0, 50))
         finally:
             conn.close()
 
-        imported = T.template_from_json(exported)
         conn = init_db(db_b)
         try:
-            applied = T.apply_template(conn, imported, ids_b["root"], span=(0, 50))
+            persisted = R.load_template(conn, imported["id"])
         finally:
             conn.close()
 
         assert ids_a["root"] != ids_b["root"]
         assert ids_a["exemplar"] != ids_b["exemplar"]
         assert entry_a != entry_b
+        assert persisted["steps"] == imported["steps"]
 
         binding = applied["steps"][0]["side_inputs"]["exemplar"]
         assert binding["entry_id"] == entry_b
