@@ -90,8 +90,8 @@ DEFAULT_MAX_ROUGHNESS = 2.0     # matches seed_replicas.DEFAULT_MAX_ROUGHNESS
 def roughness(values):
     """RMS first difference of the z-normalised span.
 
-    Identical definition to `Pipelines.motif_report.seed_replicas.
-    roughness`, restated here rather than imported because `Working/` must
+    The same roughness the seed-replica report used, restated here rather
+    than imported because `Working/` must
     not depend on `Pipelines/` - the dependency runs the other way, the
     same rule `dsax._letter` documents for `Adapters/`. Four lines, and
     `tests/test_drop_motifs_detect.py` is where a divergence would show.
