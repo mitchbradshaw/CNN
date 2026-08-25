@@ -41,7 +41,8 @@ def _spec(side_inputs, name="test.side_input_probe", run=None):
     directly, without going through the real adapter registry."""
     return AdapterSpec(
         name=name, display_name=name, stage="detection", params=[],
-        run=run or (lambda x, t, fs, **params: AdapterResult(output_kind="signal", x=x, t=t)),
+        run=run or (lambda x, t, fs, **params: AdapterResult(
+            output_kind="signal", value=Signal(x=x, fs=fs))),
         output_kind="signal",
         side_inputs=side_inputs,
     )
@@ -188,20 +189,22 @@ def test_raises_when_the_bound_source_kind_is_not_one_the_side_input_allows():
 def test_typed_step_value_prefers_the_results_typed_value():
     value = Signal(x=np.array([1.0]), fs=1.0)
     result = AdapterResult(output_kind="scores", value=value)
-    assert typed_step_value(result, fs=1.0) is value
+    assert typed_step_value(result) is value
 
 
-def test_typed_step_value_wraps_a_legacy_signal_output():
-    result = AdapterResult(output_kind="signal", x=np.array([1.0, 2.0]), t=np.array([0.0, 1.0]))
-    value = typed_step_value(result, fs=5.0)
-    assert isinstance(value, Signal)
-    assert value.fs == 5.0
-    assert np.array_equal(value.x, result.x)
+def test_typed_step_value_of_a_signal_output_is_its_signal():
+    """This used to assert that a `signal` result with no `value` was wrapped
+    into a `Signal` from its `x` carrier. Ticket 10 deleted that carrier, so
+    there is no longer an unwrapped form to fall back from — a signal block
+    returns its `Signal` and `typed_step_value` hands it straight back."""
+    signal = Signal(x=np.array([1.0, 2.0]), fs=5.0)
+    result = AdapterResult(output_kind="signal", value=signal)
+    assert typed_step_value(result) is signal
 
 
 def test_typed_step_value_is_none_for_an_unresolvable_output():
     result = AdapterResult(output_kind="spanset")
-    assert typed_step_value(result, fs=1.0) is None
+    assert typed_step_value(result) is None
 
 
 # ── execute_recipe wiring, end-to-end through the real adapter registry ────

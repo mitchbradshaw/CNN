@@ -18,7 +18,7 @@ def _run(x, t, fs, low_hz=0.01, high_hz=0.1, order=4):
     filt = make_bandpass_filter(fs, low_hz, high_hz, order=order)
     x_filtered = filt(x)
     return AdapterResult(
-        output_kind="signal", x=x_filtered, t=t,
+        output_kind="signal",
         value=Signal(x=x_filtered, fs=fs),
     )
 
@@ -27,7 +27,7 @@ def _plot(x, t, result, low_hz=0.01, high_hz=0.1, order=4):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(14, 4))
     ax.plot(t, x, linewidth=0.5, color="#999999", label="original")
-    ax.plot(result.t, result.x, linewidth=0.8, color="mediumseagreen", label="filtered")
+    ax.plot(t, result.value.x, linewidth=0.8, color="mediumseagreen", label="filtered")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude")
     ax.set_title(f"Bandpass filter  [{low_hz:g}, {high_hz:g}]Hz  order={order}")

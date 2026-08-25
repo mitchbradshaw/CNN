@@ -79,8 +79,7 @@ def test_fixed_seed_reproduces_bit_identical_surrogate():
         params = spec.validate_params({"method": method, "seed": 42})
         a = spec.run(x, t, fs, **params)
         b = spec.run(x, t, fs, **params)
-        assert np.array_equal(a.x, b.x), method
-        assert a.t is not None and b.t is not None, method
+        assert np.array_equal(a.value.x, b.value.x), method
         assert a.value.fs == fs, method
 
 
@@ -94,5 +93,5 @@ def test_phase_randomise_preserves_power_spectrum():
     # preserved to floating-point precision. 1e-6 relative tolerance is far
     # looser than the actual error, which is ~1e-14.
     mag_original = np.abs(np.fft.rfft(x))
-    mag_surrogate = np.abs(np.fft.rfft(result.x))
+    mag_surrogate = np.abs(np.fft.rfft(result.value.x))
     assert np.allclose(mag_original, mag_surrogate, rtol=1e-6, atol=1e-8)

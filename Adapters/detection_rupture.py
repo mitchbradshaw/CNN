@@ -36,7 +36,7 @@ def _run(x, t, fs, cost_model="l2", penalty=50.0, min_size=2, jump=5):
     intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)
                  if bounds[i + 1] > bounds[i]]
     return AdapterResult(
-        output_kind="spanset", intervals=intervals,
+        output_kind="spanset",
         value=SpanSet(
             starts=tuple(s for s, _ in intervals),
             ends=tuple(e for _, e in intervals),

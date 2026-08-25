@@ -191,16 +191,85 @@ def test_adapter_result_value_defaults_to_none():
     assert result.value is None
 
 
-def test_adapter_result_value_carries_a_typed_object_alongside_untouched_fields():
+def test_adapter_result_value_carries_the_typed_object():
     from Working.types import Signal
     import numpy as np
 
     sig = Signal(x=np.array([1.0, 2.0, 3.0]), fs=1.0)
-    result = AdapterResult(output_kind="signal", x=sig.x, t=None, value=sig)
+    result = AdapterResult(output_kind="signal", value=sig)
     assert result.value is sig
-    assert result.x is sig.x
-    assert result.intervals is None
-    assert result.encoding is None
+
+
+def test_adapter_result_carries_no_legacy_output_fields():
+    """Ticket 10, the contract phase: the dual-form support ticket 05 added
+    is deleted. `value` is the only payload.
+
+    Asserted as the absence of the *fields*, not as their being None. A
+    field left in place and merely unused is a carrier the next adapter
+    author will populate in good faith and nothing will read; removing it
+    makes a stale adapter fail loudly at construction instead.
+    """
+    import dataclasses
+
+    names = {f.name for f in dataclasses.fields(AdapterResult)}
+    assert names == {"output_kind", "value", "meta"}, sorted(names)
+
+    for legacy in ("x", "t", "intervals", "encoding"):
+        try:
+            AdapterResult(output_kind="signal", **{legacy: object()})
+        except TypeError:
+            continue
+        assert False, f"AdapterResult still accepts a {legacy!r} argument"
+
+
+# ── the seven type names are the whole vocabulary ──────────────────────────
+
+def test_every_shipped_adapter_declares_one_of_the_seven_type_kinds():
+    """AC3. `output_kind` and `input_kind` are checked together: a chain is
+    only type-safe if both ends of every join speak the same vocabulary,
+    and `input_kind=None` ("wants the root signal") is the one legitimate
+    non-type value."""
+    from Adapters.base import TYPE_KINDS
+
+    assert len(TYPE_KINDS) == 7, TYPE_KINDS
+
+    for name, spec in _shipped_adapter_specs().items():
+        assert spec.output_kind in TYPE_KINDS, (name, spec.output_kind)
+        assert spec.input_kind is None or spec.input_kind in TYPE_KINDS, \
+            (name, spec.input_kind)
+        for side in spec.side_inputs:
+            assert side.type_kind in TYPE_KINDS, (name, side.type_kind)
+
+
+def test_discover_adapters_registers_every_shipped_module():
+    """AC4. `discover_adapters()` swallows an import failure and carries on,
+    so a broken adapter module fails as a *block missing from a dropdown*
+    rather than as an error — the exact failure mode ticket 10's merge-risk
+    note warns about, since this ticket breaks every unmigrated adapter at
+    import.
+
+    Membership, not a count: the registry is global and other test modules
+    register throwaway probes into it, so an equality assertion would fail
+    for reasons that have nothing to do with the shipped set.
+    """
+    import Adapters
+    from Adapters.registry import discover_adapters
+
+    modules = sorted(
+        name for _, name, _ in pkgutil.iter_modules(Adapters.__path__)
+        if name not in ("base", "registry") and not name.startswith("_")
+    )
+
+    with _third_party_gaps_bridged():
+        registered = {spec.name for spec in discover_adapters()}
+        expected = {
+            importlib.import_module(f"Adapters.{name}").SPEC.name
+            for name in modules
+        }
+
+    missing = expected - registered
+    assert not missing, f"discover_adapters() silently skipped: {sorted(missing)}"
+    assert len(expected) == len(modules), "two modules registered the same name"
 
 
 # â”€â”€ untouched surface: recommend / derive / persist / max_span_samples /

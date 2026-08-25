@@ -36,7 +36,7 @@ def _run(x, t, fs, n_p=60, min_spike_duration=60, min_roi_wavelet=30, epsilon_fa
         min_roi_wavelet=min_roi_wavelet, epsilon_factor=epsilon_factor,
     )
     return AdapterResult(
-        output_kind="spanset", intervals=spikes,
+        output_kind="spanset",
         value=SpanSet(
             starts=tuple(s for s, _ in spikes),
             ends=tuple(e for _, e in spikes),
@@ -47,7 +47,11 @@ def _run(x, t, fs, n_p=60, min_spike_duration=60, min_roi_wavelet=30, epsilon_fa
 
 
 def _plot(x, t, result, n_p=60, min_spike_duration=60, min_roi_wavelet=30, epsilon_factor=0.05):
-    return plot_spike_detection(x, result.intervals, result.meta["pseudo_spikes"], fs=1.0)
+    # `plot_spike_detection` wants the legacy [(start, end), ...] shape; the
+    # SpanSet holds the same spans as parallel tuples, so rebuild the pairs
+    # here rather than teach a plotting helper the type system.
+    spans = list(zip(result.value.starts, result.value.ends))
+    return plot_spike_detection(x, spans, result.meta["pseudo_spikes"], fs=1.0)
 
 
 SPEC = register(AdapterSpec(

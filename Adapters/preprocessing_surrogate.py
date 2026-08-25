@@ -70,7 +70,7 @@ def _run(x, t, fs, method="phase_randomize", seed=0, block_s=1.0):
             f"('phase_randomize', 'block_shuffle')"
         )
     return AdapterResult(
-        output_kind="signal", x=x_surrogate, t=t,
+        output_kind="signal",
         value=Signal(x=x_surrogate, fs=fs),
     )
 

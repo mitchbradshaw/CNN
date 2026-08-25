@@ -536,3 +536,28 @@ Two harness observations worth acting on before the next run:
       names the input and output kinds, AC5 names the chain. A pre-flight that resolves an AC-named
       chain through `validate_chain` would have caught it before spending $2.05 on discovering it
       twice.
+
+## T10 — 2026-08-26 (worked by hand, not by the runner)
+
+Implemented directly rather than dispatched, because the ticket's declared file list
+(`["Adapters/base.py"]`) described a fraction of its own acceptance criteria. AC2 — "every adapter
+populates `value` only" — reaches 16 adapter modules, `Working/execution.py`,
+`Working/side_inputs.py`, three UI modules and eight test files. Dispatched as written, on `haiku`
+at `size: S` / 30 minutes, it would have come back either quarantined or carrying ~30 scope
+deviations. The file list is now corrected in the ticket.
+
+- [ ] **The scope gate cannot see this class of mismatch, and it is the cheapest one to catch.** A
+      ticket whose `files` list is smaller than its ACs imply is detectable before dispatch, not
+      after: T10's AC2 names `AdapterResult` fields, and every module that reads one is a `grep`
+      away. Worth a pre-flight check that greps the ACs' named symbols and warns when the hits fall
+      outside `files` — the same shape as the T12 suggestion above (resolve an AC-named chain through
+      `validate_chain`), and both are static.
+- [ ] **`_load_cached_result` built a legacy `signal` result and nothing caught it.** The step cache
+      only engages above `STEP_CACHE_WRITE_THRESHOLD_S`, so no test in the suite restores a cached
+      *signal* step — the one path that would have crashed. Found by grepping constructor call sites,
+      not by a failing test. A step-cache test that forces a signal step through a round trip
+      (threshold 0) would close it.
+- [ ] **Signal blocks must preserve the sample count, and now that is checked rather than assumed.**
+      Previously each adapter passed `t` through by hand, so a block that resampled would have
+      silently misaligned every downstream plot against the channel. `execute_recipe` now refuses it
+      with a message naming both lengths. No shipped block violates it.

@@ -12,13 +12,17 @@ for the stacked RGB array.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Working.Catalogue.gramian.gramian_calc import compute_fusion, plot_gramian_suite
 
 MAX_SPAN_SAMPLES = 5000
 
 
 def _run(x, t, fs, m=3, tau=4):
-    return AdapterResult(output_kind="encoding", encoding=compute_fusion(x, m=m, tau=tau))
+    return AdapterResult(
+        output_kind="encoding",
+        value=Encoding(values=compute_fusion(x, m=m, tau=tau), kind="image"),
+    )
 
 
 def _plot(x, t, result, m=3, tau=4):

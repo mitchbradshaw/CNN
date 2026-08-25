@@ -11,6 +11,7 @@ shape, so `plot=None` here rather than forcing a fit.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Working.Detection.analysis.freq_analysis import stft_log_spectrum
 
 
@@ -20,7 +21,8 @@ def _run(x, t, fs, window_size=300, hop_size=150, n_log_bins=64):
         n_log_bins=n_log_bins, return_2d=False,
     )
     return AdapterResult(
-        output_kind="encoding", encoding=power,
+        output_kind="encoding",
+        value=Encoding(values=power, kind="image"),
         meta={"bin_freqs": bin_freqs},
     )
 

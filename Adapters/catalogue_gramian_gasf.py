@@ -17,13 +17,17 @@ other three alongside is genuinely useful context, not a mismatch.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Working.Catalogue.gramian.gramian_calc import compute_GASF, plot_gramian_suite
 
 MAX_SPAN_SAMPLES = 5000
 
 
 def _run(x, t, fs):
-    return AdapterResult(output_kind="encoding", encoding=compute_GASF(x))
+    return AdapterResult(
+        output_kind="encoding",
+        value=Encoding(values=compute_GASF(x), kind="image"),
+    )
 
 
 def _plot(x, t, result):

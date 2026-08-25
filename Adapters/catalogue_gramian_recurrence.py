@@ -11,13 +11,17 @@ GASF/GADF. `max_span_samples=5000` caps this at ~200 MB. See
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Working.Catalogue.gramian.gramian_calc import compute_recurrence, plot_gramian_suite
 
 MAX_SPAN_SAMPLES = 5000
 
 
 def _run(x, t, fs, m=3, tau=4):
-    return AdapterResult(output_kind="encoding", encoding=compute_recurrence(x, m=m, tau=tau))
+    return AdapterResult(
+        output_kind="encoding",
+        value=Encoding(values=compute_recurrence(x, m=m, tau=tau), kind="image"),
+    )
 
 
 def _plot(x, t, result, m=3, tau=4):

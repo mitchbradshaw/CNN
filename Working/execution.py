@@ -117,13 +117,17 @@ def _recipe_prefix_hash(recipe, up_to_index):
     return recipe_hash(prefix)
 
 
-def _load_cached_result(spec, cached_path, t):
+def _load_cached_result(spec, cached_path):
     """Load a cached typed step output into an `AdapterResult`.
 
     Returns None when `spec.output_kind` has no `Working.types` serialiser
     or the cached directory is missing/corrupt, so the caller falls back to
-    recomputation. A legacy `signal` output is reconstructed as the
-    `(x, t)`-style result the rest of the loop expects.
+    recomputation.
+
+    Every kind restores the same way since ticket 10 — `value` is the only
+    payload, so `signal` no longer needs the special case that rebuilt an
+    `(x, t)` pair, and the run's time axis (which a `Signal` cannot carry,
+    having no absolute offset) stays the one the caller already holds.
     """
     value_cls = _TYPED_VALUE_CLASSES.get(spec.output_kind)
     if value_cls is None or not os.path.isdir(cached_path):
@@ -132,8 +136,6 @@ def _load_cached_result(spec, cached_path, t):
         value = value_cls.from_path(cached_path)
     except Exception:
         return None
-    if spec.output_kind == "signal":
-        return AdapterResult(output_kind="signal", x=value.x, t=t)
     return AdapterResult(output_kind=spec.output_kind, value=value)
 
 
@@ -144,7 +146,7 @@ def _cache_step_result(conn, recipe, step_index, result, elapsed_s, fs, cache_ro
     directories are simply overwritten on the next recomputation."""
     if elapsed_s <= threshold_s:
         return
-    value = typed_step_value(result, fs)
+    value = typed_step_value(result)
     if value is None or not isinstance(value, tuple(_TYPED_VALUE_CLASSES.values())):
         return
     prefix_hash = _recipe_prefix_hash(recipe, step_index)
@@ -332,7 +334,7 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
             # writes the next cache entry.
             prefix_hash = _recipe_prefix_hash(recipe, i)
             cached = get_step_artifact(conn, prefix_hash, i)
-            result = _load_cached_result(spec, cached["path"], t) if cached is not None else None
+            result = _load_cached_result(spec, cached["path"]) if cached is not None else None
             from_cache = result is not None
 
             if from_cache:
@@ -363,10 +365,24 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
                 )
 
             if i in referenced_steps:
-                step_results[i] = typed_step_value(result, fs)
+                step_results[i] = typed_step_value(result)
 
             if result.output_kind == "signal":
-                x, t = result.x, result.t
+                # `t` is the span's absolute time axis (`_load_signal`), and a
+                # `Signal` carries `fs` but no absolute offset — so it is
+                # rebuilt from this step's own axis rather than taken off the
+                # value. Every signal block filters in place and preserves the
+                # sample count; one that did not would silently misalign every
+                # downstream plot against the channel, so it is refused here.
+                x = result.value.x
+                if len(x) != len(t):
+                    raise RecipeExecutionError(
+                        f"Step {i} ('{adapter_name}') returned {len(x)} sample(s) "
+                        f"from a {len(t)}-sample span. A 'signal' block must "
+                        "preserve the sample count: the chain's time axis is the "
+                        "span's, and Signal carries no absolute offset to rebuild "
+                        "a different one from."
+                    )
             elif result.output_kind == "spanset":
                 span_set = result.value
                 span_scores = span_set.scores or (None,) * len(span_set.starts)

@@ -27,7 +27,7 @@ def _run(x, t, fs, width=20, delta=0.01, d=30):
     intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)
                  if bounds[i + 1] > bounds[i]]
     return AdapterResult(
-        output_kind="spanset", intervals=intervals,
+        output_kind="spanset",
         value=SpanSet(
             starts=tuple(s for s, _ in intervals),
             ends=tuple(e for _, e in intervals),

@@ -21,7 +21,7 @@ def _run(x, t, fs, mode="rolling_mean", window_s=600.0):
     filt = make_detrend_filter(fs, mode=mode, window_s=window_s)
     x_detrended = filt(x)
     return AdapterResult(
-        output_kind="signal", x=x_detrended, t=t,
+        output_kind="signal",
         value=Signal(x=x_detrended, fs=fs),
     )
 
@@ -30,7 +30,7 @@ def _plot(x, t, result, mode="rolling_mean", window_s=600.0):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(14, 4))
     ax.plot(t, x, linewidth=0.5, color="#999999", label="original")
-    ax.plot(result.t, result.x, linewidth=0.8, color="mediumseagreen", label="detrended")
+    ax.plot(t, result.value.x, linewidth=0.8, color="mediumseagreen", label="detrended")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude")
     ax.set_title(f"Detrend  mode={mode}  window={window_s:g}s")

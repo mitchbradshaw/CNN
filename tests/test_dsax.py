@@ -476,7 +476,7 @@ def test_adapter_run_and_derive_actually_work():
     np.random.seed(SEED)
     result = SPEC.run(x, t, fs, **params)
     assert result.output_kind == "encoding"
-    assert len(result.encoding) == 150
+    assert len(result.value.values) == 150
     assert result.meta["details"]["samples_per_symbol"] == 20
     assert "segment_plan" in result.meta["details"]
 
