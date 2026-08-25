@@ -16,11 +16,14 @@ worth overriding independently of J.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
-from Working.Detection.wavelet.scattering_transform import compute_wavelet_scattering
-from Working.Detection.wavelet.plot_scattering import plot_scattering_scalogram
 
 
 def _run(x, t, fs, J=8, Q=8, max_order=2):
+    # Imported lazily so the adapter still registers when the optional
+    # kymatio dependency is broken (it is broken against the installed scipy
+    # — see `Adapters/registry.py`'s docstring). A clear error then surfaces
+    # at run time instead of the adapter being silently skipped at discovery.
+    from Working.Detection.wavelet.scattering_transform import compute_wavelet_scattering
     result = compute_wavelet_scattering(x, t, J=J, Q=Q, max_order=max_order)
     return AdapterResult(
         output_kind="encoding", encoding=result.Sx,
@@ -30,6 +33,7 @@ def _run(x, t, fs, J=8, Q=8, max_order=2):
 
 
 def _plot(x, t, result, J=8, Q=8, max_order=2):
+    from Working.Detection.wavelet.plot_scattering import plot_scattering_scalogram
     return plot_scattering_scalogram(result.meta["scattering_result"])
 
 
