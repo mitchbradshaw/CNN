@@ -17,12 +17,16 @@ moved here (moving `Working/` code wasn't asked for), just wrapped where it is.
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
 from Working.Detection.analysis.freq_analysis import make_lowpass_filter
+from Working.types import Signal
 
 
 def _run(x, t, fs, cutoff_hz=0.05, order=4):
     filt = make_lowpass_filter(fs, cutoff_hz, order=order)
     x_filtered = filt(x)
-    return AdapterResult(output_kind="signal", x=x_filtered, t=t)
+    return AdapterResult(
+        output_kind="signal", x=x_filtered, t=t,
+        value=Signal(x=x_filtered, fs=fs),
+    )
 
 
 def _plot(x, t, result, cutoff_hz=0.05, order=4):
@@ -47,6 +51,7 @@ SPEC = register(AdapterSpec(
         ParamSpec("order", int, 4, "Filter order", min=1, max=10),
     ],
     run=_run,
+    input_kind="signal",
     output_kind="signal",
     plot=_plot,
     description=(

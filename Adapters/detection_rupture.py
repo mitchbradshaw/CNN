@@ -22,6 +22,7 @@ second adapter later if wanted.
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
 from Working.Detection.rupture.rupture_detect import detect_change_points, plot_change_points
+from Working.types import SpanSet
 
 
 def _run(x, t, fs, cost_model="l2", penalty=50.0, min_size=2, jump=5):
@@ -35,7 +36,11 @@ def _run(x, t, fs, cost_model="l2", penalty=50.0, min_size=2, jump=5):
     intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)
                  if bounds[i + 1] > bounds[i]]
     return AdapterResult(
-        output_kind="intervals", intervals=intervals,
+        output_kind="spanset", intervals=intervals,
+        value=SpanSet(
+            starts=tuple(s for s, _ in intervals),
+            ends=tuple(e for _, e in intervals),
+        ),
         meta={"n_bkps": result.n_bkps, "elapsed_s": result.elapsed_s,
               "raw_result": result},
     )
@@ -56,7 +61,8 @@ SPEC = register(AdapterSpec(
         ParamSpec("jump", int, 5, "Candidate-breakpoint subsampling stride (samples)", min=1),
     ],
     run=_run,
-    output_kind="intervals",
+    input_kind="signal",
+    output_kind="spanset",
     plot=_plot,
     description=(
         "Pelt exact change-point detection: partitions the signal into segments "

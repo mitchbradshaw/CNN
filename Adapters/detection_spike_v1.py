@@ -17,6 +17,7 @@ body) — not wrapped; nothing to call.
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
 from Working.Detection.analysis.spike_analysis import spike_detection_v1
+from Working.types import SpanSet
 
 
 def _run(x, t, fs, width=20, delta=0.01, d=30):
@@ -26,7 +27,11 @@ def _run(x, t, fs, width=20, delta=0.01, d=30):
     intervals = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)
                  if bounds[i + 1] > bounds[i]]
     return AdapterResult(
-        output_kind="intervals", intervals=intervals,
+        output_kind="spanset", intervals=intervals,
+        value=SpanSet(
+            starts=tuple(s for s, _ in intervals),
+            ends=tuple(e for _, e in intervals),
+        ),
         meta={"n_spikes": len(spikes), "spike_indices": spikes},
     )
 
@@ -41,7 +46,8 @@ SPEC = register(AdapterSpec(
         ParamSpec("d", int, 30, "Minimum inter-spike distance (samples)", min=1),
     ],
     run=_run,
-    output_kind="intervals",
+    input_kind="signal",
+    output_kind="spanset",
     plot=None,
     description=(
         "Neighbourhood-average spike detector with a refractory-period filter. "

@@ -120,10 +120,11 @@ def test_construction_builds_a_non_none_layout_listing_every_block():
 
 
 def test_a_fresh_chain_has_no_incompatible_blocks():
-    """At the time this test was written every shipped block took the root
-    signal (`input_kind=None`), so nothing was ever disabled in a fresh
-    chain. Ticket 08 adds the first typed block (`detection.threshold`,
-    `input_kind='scores'`), which a fresh chain genuinely cannot feed yet --
+    """Every shipped block in a fresh chain is compatible with the root
+    signal — the legacy blocks take it implicitly (`input_kind=None`) and
+    the ticket-06/08 typed blocks declare `input_kind="signal"` — so
+    nothing is ever disabled in a fresh chain except `detection.threshold`
+    (`input_kind='scores'`), which a fresh chain genuinely cannot feed yet —
     that block being disabled with its reason inline is ticket 29's own
     acceptance criterion, not a regression."""
     from UI.workspaces.analyse.builder import ChainBuilder
@@ -201,12 +202,12 @@ def test_move_step_reorders_and_revalidates_immediately():
     builder._add_step(get_adapter("detection.rupture"))
     assert builder.chain.is_valid is True
 
-    # rupture (produces 'intervals') before lowpass (wants 'signal') is invalid.
+    # rupture (produces 'spanset') before lowpass (wants 'signal') is invalid.
     builder._move_step(1, -1)
 
     assert [s["algorithm"] for s in builder.chain.steps] == ["rupture", "lowpass"]
     assert builder.chain.is_valid is False
-    assert "intervals" in builder.status.object
+    assert "spanset" in builder.status.object
     assert len(builder.steps_column.objects) == 2
 
 

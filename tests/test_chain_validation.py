@@ -161,9 +161,10 @@ def test_seeded_search_chain_validates_end_to_end():
 
 def test_banded_search_chain_validates_end_to_end():
     # signal -> bandpass -> scores -> span set, reusing the real, shipped
-    # bandpass adapter (legacy input_kind=None / output_kind="signal")
-    # alongside two typed blocks — the expand/contract migration means the
-    # two vocabularies must interoperate, not just each validate alone.
+    # bandpass adapter (input_kind="signal" / output_kind="signal", the
+    # ticket-06 type) alongside two typed blocks — the expand/contract
+    # migration means the vocabularies must interoperate, not just each
+    # validate alone.
     discover_adapters()
     from Adapters.registry import get_adapter
     bandpass = get_adapter("preprocessing.bandpass")
@@ -196,7 +197,7 @@ def test_make_recipe_accepts_a_valid_chain_of_real_adapters():
 
 def test_make_recipe_rejects_an_invalid_chain_with_the_reason_string():
     # gramian_gasf declares output_kind="encoding"; lowpass declares
-    # input_kind=None (expects "signal") — an encoding cannot feed it.
+    # input_kind="signal" (expects "signal") — an encoding cannot feed it.
     try:
         make_recipe(1, [
             {"stage": "catalogue", "algorithm": "gramian_gasf", "params": {}},

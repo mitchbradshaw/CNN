@@ -9,6 +9,7 @@ See `preprocessing_lowpass.py` for the note on why this factory lives under
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
 from Working.Detection.analysis.freq_analysis import make_bandpass_filter
+from Working.types import Signal
 
 
 def _run(x, t, fs, low_hz=0.01, high_hz=0.1, order=4):
@@ -16,7 +17,10 @@ def _run(x, t, fs, low_hz=0.01, high_hz=0.1, order=4):
         raise ValueError(f"low_hz ({low_hz}) must be < high_hz ({high_hz})")
     filt = make_bandpass_filter(fs, low_hz, high_hz, order=order)
     x_filtered = filt(x)
-    return AdapterResult(output_kind="signal", x=x_filtered, t=t)
+    return AdapterResult(
+        output_kind="signal", x=x_filtered, t=t,
+        value=Signal(x=x_filtered, fs=fs),
+    )
 
 
 def _plot(x, t, result, low_hz=0.01, high_hz=0.1, order=4):
@@ -42,6 +46,7 @@ SPEC = register(AdapterSpec(
         ParamSpec("order", int, 4, "Filter order", min=1, max=10),
     ],
     run=_run,
+    input_kind="signal",
     output_kind="signal",
     plot=_plot,
     description=(

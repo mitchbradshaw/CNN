@@ -301,12 +301,21 @@ def test_every_shipped_adapter_registers_without_modification():
     # Ticket 08 remaps detection_matrix_profile (encoding -> scores) and
     # preprocessing_window_matrix (encoding -> windowset) to their correct
     # types, and adds detection_threshold, a typed (input_kind='scores')
-    # adapter. The other seventeen are untouched by that ticket and still
-    # use the legacy vocabulary this test was written to guard.
+    # adapter. Ticket 06 remaps the four preprocessing filters (signal ->
+    # signal, now with an explicit input_kind) and the three interval
+    # detectors (intervals -> spanset) to their typed vocabulary. The
+    # remaining adapters are untouched by those tickets and still use the
+    # legacy vocabulary this test was written to guard.
+    remapped_by_ticket_06 = {
+        "preprocessing_bandpass", "preprocessing_detrend",
+        "preprocessing_highpass", "preprocessing_lowpass",
+        "detection_rupture", "detection_spike_v1", "detection_dehshibi_spikes",
+    }
     remapped_by_ticket_08 = {"detection_matrix_profile", "preprocessing_window_matrix",
                               "detection_threshold"}
+    remapped = remapped_by_ticket_06 | remapped_by_ticket_08
     for module_name, spec in specs.items():
-        if module_name in remapped_by_ticket_08:
+        if module_name in remapped:
             continue
         assert spec.output_kind in LEGACY_OUTPUT_KINDS, module_name
         assert spec.input_kind is None, module_name
