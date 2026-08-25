@@ -313,3 +313,10 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [minor] [standards] (no rule cited) _TYPED_VALUE_CLASSES in execution.py duplicates the type-name-lowercasing already done by TYPE_KINDS in Adapters/base.py
 - [minor] [spec] (no rule cited) force=True on execute_recipe does not bypass the per-step cache, silently defeating the "recompute even if exists" contract
 - [minor] [spec] (no rule cited) cached Signal round-trip loses t and reconstructs it from the live loop variable; correct only because no current signal-output adapter changes array length
+
+## T16 — 2026-08-25 14:10
+
+- [major] [standards] (rule 6.4) motif_browser.py _on_save_motif re-derives detection→run→recording by hand instead of calling runs.py::insert_motif, duplicating logic across modules
+- [minor] [spec] (no rule cited) vocabulary.py edited outside the ticket's declared file list, though necessary to support motif_entry_tags
+- [minor] [spec] (no rule cited) tag-linking (set_motif_entry_tags) is duplicated across all 4 save call sites rather than folded into the "one entry-creation helper", contrary to the "Why [O]" risk note
+- [minor] [spec] (no rule cited) insert_motif_entry's INSERT OR IGNORE silently discards label/rating/notes/sax_string updates on a re-save to an already-occupied span while still reporting success; untested
