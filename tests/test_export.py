@@ -45,10 +45,15 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import numpy as np
+
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.database.adjudications import insert_adjudication
 from Working.database.schema import init_db
+from Working.database import vocabulary as V
+from Working.distances import DISTANCE_SCALE_INVARIANT
+from Working.library import classify_cross_channel_edges, match_span_to_entry
 from Working import manifest
 
 
@@ -58,6 +63,7 @@ def _fresh_db():
     tmpdir = tempfile.mkdtemp(prefix="t45_")
     db_path = os.path.join(tmpdir, "test.sqlite")
     conn = init_db(db_path)
+    V.seed_vocabulary(conn)
     return conn, db_path, tmpdir
 
 
@@ -372,6 +378,216 @@ class _FakeApp:
 
     def __init__(self, conn):
         self.conn = conn
+
+
+# ── library entry exporter (T46) ─────────────────────────────────────────────
+
+def _write_recording_npy(conn, npy_dir, source_file, channel, data):
+    """Write `data` to a scratch .npy file and insert a recording row that
+    points at it. Returns the recording id."""
+    npy_path = os.path.join(npy_dir, f"{source_file}_ch{channel}.npy")
+    np.save(npy_path, np.asarray(data, dtype=float))
+    return q.insert_recording(conn, source_file, channel, 1.0, len(data), 0,
+                              npy_path)
+
+
+def _setup_library_entry(conn, tmpdir):
+    """A two-member motif family ready to export:
+
+    - recording A (A.mat, channel 0) holds the exemplar span [10, 50);
+    - recording B (A.mat, channel 1) is the same sine — a cross-channel pair —
+      matched to the exemplar so the family has one edge;
+    - the entry carries a detection pointer to a run with one plot artifact;
+    - the cross-channel edge is classified by the real classifier, which by
+      construction (identical waveforms) lands in the `artifact` bin;
+    - the entry carries one tag.
+
+    Returns (entry_id, run_id, plot_path).
+    """
+    n = 200
+    sine = np.sin(2 * np.pi * np.arange(n) / n)
+    rec_a = _write_recording_npy(conn, tmpdir, "A.mat", 0, sine)
+    rec_b = _write_recording_npy(conn, tmpdir, "A.mat", 1, sine)
+
+    config_id, _config_hash = R.get_or_create_config(
+        conn, {"recording_id": rec_a, "span": [0, n], "steps": []},
+    )
+    run_id = R.insert_run(conn, config_id, rec_a, 0, n, status="completed")
+    det_id = R.insert_detection(conn, run_id, 10, 50, score=0.9)
+    plot_path = _plot_artifact(conn, tmpdir, run_id, "entry.png")
+
+    entry_id = R.insert_motif_entry(conn, rec_a, 10, 50, detection_id=det_id,
+                                    label="sine")
+    result = match_span_to_entry(
+        conn, entry_id, rec_b, 10, 50,
+        distance_function=DISTANCE_SCALE_INVARIANT,
+        threshold=0.1, recipe_hash="h1",
+    )
+    assert result is not None
+    classify_cross_channel_edges(conn, entry_id)
+    V.set_motif_entry_tags(conn, entry_id, "element", ["sharkfin"])
+    return entry_id, run_id, plot_path
+
+
+def _export_library_entry(conn, entry_id, tmpdir):
+    from Working import export
+    out_dir = os.path.join(tmpdir, "export")
+    result = export.export_library_entry(conn, entry_id, out_dir)
+    with open(os.path.join(out_dir, "manifest.json")) as f:
+        data = json.load(f)
+    return result, data, out_dir
+
+
+def test_export_library_entry_writes_manifest_spans_csv_and_plots():
+    """AC: exports a folder containing a manifest, a CSV, and copied plots."""
+    conn, db_path, tmpdir = _fresh_db()
+    entry_id, _run_id, _plot_path = _setup_library_entry(conn, tmpdir)
+    try:
+        result, _data, out_dir = _export_library_entry(conn, entry_id, tmpdir)
+
+        assert os.path.isfile(os.path.join(out_dir, "manifest.json"))
+        assert os.path.isfile(os.path.join(out_dir, "spans.csv"))
+
+        plots_dir = os.path.join(out_dir, "plots")
+        assert os.path.isdir(plots_dir)
+        assert os.path.isfile(os.path.join(plots_dir, "entry.png"))
+
+        # summary tells the caller where everything landed
+        assert result["entry_id"] == entry_id
+        assert result["plots_copied"] == [os.path.join(plots_dir, "entry.png")]
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_export_library_entry_manifest_covers_required_fields():
+    """AC: the manifest covers exemplar, members with their edges and
+    distances, scope by recording and channel, cross-channel bins, tags, and
+    the recipe behind each edge."""
+    conn, db_path, tmpdir = _fresh_db()
+    entry_id, _run_id, _plot_path = _setup_library_entry(conn, tmpdir)
+    try:
+        _result, data, _out_dir = _export_library_entry(conn, entry_id, tmpdir)
+        entry = data["entry"]
+
+        assert entry["entry_id"] == entry_id
+        assert entry["label"] == "sine"
+
+        # exemplar
+        assert entry["exemplar"]["span_start"] == 10
+        assert entry["exemplar"]["span_end"] == 50
+        assert entry["exemplar"]["recording"]["source_file"] == "A.mat"
+        assert entry["exemplar"]["recording"]["channel"] == 0
+
+        # scope by recording and channel
+        assert entry["scope"]["recording_count"] == 1
+        assert entry["scope"]["channel_count"] == 2
+        assert {"source_file": "A.mat", "channel": 0} in entry["scope"]["recordings"]
+        assert {"source_file": "A.mat", "channel": 1} in entry["scope"]["recordings"]
+
+        # members carry their edges and distances
+        non_seed = [m for m in entry["members"] if not m["is_seed"]]
+        assert len(non_seed) == 1
+        member = non_seed[0]
+        assert member["edge"]["distance_function"] == DISTANCE_SCALE_INVARIANT
+        assert member["edge"]["threshold"] == 0.1
+        assert "distance_value" in member["edge"]
+        assert member["edge"]["recipe_hash"] == "h1"
+
+        # cross-channel bins
+        assert member["edge"]["classification_bin"] == "artifact"
+        assert entry["cross_channel_bins"]["artifact"] == 1
+
+        # tags
+        assert entry["tags"] == {"element": ["sharkfin"]}
+
+        # recipe behind each edge
+        assert len(entry["edges"]) == 1
+        assert entry["edges"][0]["recipe_hash"] == "h1"
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_export_library_entry_artifact_members_present_and_marked():
+    """AC: members classified as `artifact` are present in the export and
+    marked, not silently dropped — the same sine on two channels of one
+    recording classifies as artifact, and it must still appear in both the
+    manifest and the CSV."""
+    conn, db_path, tmpdir = _fresh_db()
+    entry_id, _run_id, _plot_path = _setup_library_entry(conn, tmpdir)
+    try:
+        _result, data, out_dir = _export_library_entry(conn, entry_id, tmpdir)
+        with open(os.path.join(out_dir, "spans.csv"), newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        non_seed = [m for m in data["entry"]["members"] if not m["is_seed"]]
+        assert len(non_seed) == 1
+        assert non_seed[0]["edge"]["classification_bin"] == "artifact"
+
+        artifact_rows = [r for r in rows if r["classification_bin"] == "artifact"]
+        assert len(artifact_rows) == 1
+        assert artifact_rows[0]["recipe_hash"] == "h1"
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_export_library_entry_manifest_schema_is_ticket_27s():
+    """AC: the manifest schema is ticket 27's — the envelope is imported from
+    `Working.manifest`, not restated."""
+    conn, db_path, tmpdir = _fresh_db()
+    entry_id, _run_id, _plot_path = _setup_library_entry(conn, tmpdir)
+    try:
+        _result, data, _out_dir = _export_library_entry(conn, entry_id, tmpdir)
+
+        assert data["manifest_version"] == manifest.MANIFEST_VERSION
+        assert data["code_version"] == manifest.get_code_version()
+        assert "created_at" in data and data["created_at"]
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_export_library_entry_raises_for_missing_entry():
+    """A missing entry fails loudly rather than writing an empty folder."""
+    conn, db_path, tmpdir = _fresh_db()
+    try:
+        from Working import export
+        try:
+            export.export_library_entry(conn, 999, os.path.join(tmpdir, "export"))
+            assert False, "expected ValueError for a missing entry"
+        except ValueError:
+            pass
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_library_entry_exporter_surface_constructs():
+    """The export action is a Panel surface; a broken dynamic map here would
+    render as a silently blank pane, so it must construct with the expected
+    non-None panes."""
+    import panel as pn
+    pn.extension()
+    from UI.workspaces.library.detail import EntryDetail
+
+    conn, db_path, tmpdir = _fresh_db()
+    entry_id, _run_id, _plot_path = _setup_library_entry(conn, tmpdir)
+    try:
+        surface = EntryDetail(_FakeApp(conn))
+        surface.select_entry(entry_id)
+        layout = surface.layout()
+
+        assert layout is not None
+        assert surface.export_button is not None
+        assert surface.export_out_dir is not None
+        assert surface.export_status is not None
+        assert any(isinstance(o, pn.widgets.Button) and "Export" in o.name
+                   for o in layout.objects)
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
