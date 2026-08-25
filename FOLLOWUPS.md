@@ -413,3 +413,10 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) grid.py repeats review/surface.py's 2-line single-occurrence-group dict-literal glue before calling build_motif_waveform_overlay — cosmetic Duplicated Code smell.
 - [major] [spec] (rule 4.5) LibraryGrid is instantiated unconditionally inside MotifBrowser.__init__, but no test asserts the composed MotifBrowser.layout() (the actual Library surface) returns non-None panes — only LibraryGrid is tested standalone against a fake app.
 - [minor] [spec] (no rule cited) "Absorbing" the motif browser was implemented as a hand-rolled nested pn.Tabs inside MotifBrowser.layout() instead of registering "Library grid" as a second section through the existing UI/workspaces registry, bypassing the sibling-registration pattern used elsewhere.
+
+## T48 — 2026-08-25 23:46
+
+- [major] [standards] (rule 3.3) T48 edits frozen Adapters/base.py to remove legacy output-kind vocabulary; rule 3.3 blocks base.py edits outside ticket 10, but its second sentence scopes the blocker to "an adapter ticket" and T48's own acceptance criteria mandate the removal
+- [major] [standards] (rule 4.4) tests/test_end_to_end.py is a new file rather than an extension of an existing seam-test file, though the ticket explicitly names it as a deliverable
+- [minor] [standards] (no rule cited) Adapters/base.py's intervals field comment calls it a "legacy carrier" though it is still actively read by several detection adapters' plot helpers (Mysterious Name/comment smell)
+- [minor] [spec] (no rule cited) AC "gone from the tree, not merely unused" is not fully met: an archived snapshot directory still contains references to the deleted import_10min_labels.py path and the removed output_kind == "intervals" vocabulary
