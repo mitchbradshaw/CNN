@@ -13,6 +13,7 @@ Run from the project root:
 """
 
 import inspect
+import json
 import os
 import sys
 import tempfile
@@ -248,6 +249,181 @@ def test_wm_unknown_recording_raises():
                 assert False, "expected ValueError"
             except ValueError:
                 pass
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+# ── T26: runtime estimators, cluster routing, SLURM array export ────────────
+
+def test_both_expensive_adapters_declare_estimate_delegating_to_cost():
+    """detection.matrix_profile and preprocessing.window_matrix both declare
+    `estimate`, delegating to their existing cost module (PRD "Cluster
+    routing"). Uncalibrated -> None, the same 'counts as free' semantics the
+    cost modules already use."""
+    from Adapters import detection_matrix_profile as mp_adapter
+    from Adapters import preprocessing_window_matrix as wm_adapter
+    from Working.Detection.matrix_profiling import cost as mp_cost
+    from Working.Preprocessing.window_matrix import cost as wm_cost
+    from tests._calibration_isolation import scratch_calibration
+
+    assert mp_adapter.SPEC.estimate is not None
+    assert wm_adapter.SPEC.estimate is not None
+
+    span = [0.0] * 100_000
+    with scratch_calibration(mp_cost, wm_cost):
+        assert mp_adapter.SPEC.estimate(span, None, 1.0) is None
+        assert wm_adapter.SPEC.estimate(span, None, 1.0) is None
+
+    with scratch_calibration(mp_cost):
+        mp_cost.calibrate("stump", n0=2000)
+        est = mp_adapter.SPEC.estimate(span, None, 1.0)
+        assert est == mp_cost.estimate_seconds(100_000, "auto")
+
+    with scratch_calibration(wm_cost):
+        wm_cost.calibrate(stages=("catch22",))
+        # The adapter's estimate delegates to the cost module, so only the
+        # calibrated stage is selected -- fast_entropy/slow_entropy would
+        # return None (uncalibrated) and the whole estimate is None.
+        est_wm = wm_adapter.SPEC.estimate(
+            span, None, 1.0, window_min=1.0,
+            fast_entropy=False, slow_entropy=False,
+        )
+        assert est_wm is not None and est_wm > 0
+
+
+def test_chain_estimate_sums_per_step_and_multiplies_by_fanout_width():
+    """The chain estimate is the sum of per-step estimates (a block with no
+    estimator contributes zero), multiplied by fan-out width."""
+    from Working.hpc.job_export import estimate_recipe_seconds
+    from Working.recipes import make_recipe
+    from Working.Detection.matrix_profiling import cost as mp_cost
+    from tests._calibration_isolation import scratch_calibration
+
+    with scratch_calibration(mp_cost):
+        mp_cost.calibrate("stump", n0=2000)
+        # detrend has no estimator -> contributes zero; matrix_profile
+        # contributes its calibrated estimate.
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "detrend",
+             "params": {"mode": "linear", "window_s": 0.01}},
+            {"stage": "detection", "algorithm": "matrix_profile",
+             "params": {"window_min": 10.0, "backend": "stump"}},
+        ], span=[0, 4000])
+        single = estimate_recipe_seconds(recipe, 4000, 1.0)
+        assert single == mp_cost.estimate_seconds(4000, "stump")
+
+        fan = make_recipe(1, [
+            {"stage": "detection", "algorithm": "matrix_profile",
+             "params": {"window_min": 10.0, "backend": "stump"}},
+        ], span=[0, 4000], fan_out={"kind": "channels", "targets": [1, 2, 3]})
+        assert estimate_recipe_seconds(fan, 4000, 1.0) == 3 * single
+
+
+def test_routing_decision_returns_cluster_above_the_configured_ceiling():
+    """Above the configured ceiling the routing decision is the value
+    'cluster' -- a headless value a run surface reads, not UI logic."""
+    from Working.hpc.job_export import route_recipe
+    from Working.recipes import make_recipe
+    from Working.Detection.matrix_profiling import cost as mp_cost
+    from tests._calibration_isolation import scratch_calibration
+
+    with scratch_calibration(mp_cost):
+        mp_cost.calibrate("stump", n0=2000)
+        recipe = make_recipe(1, [
+            {"stage": "detection", "algorithm": "matrix_profile",
+             "params": {"window_min": 10.0, "backend": "stump"}},
+        ], span=[0, 100_000])
+        est = mp_cost.estimate_seconds(100_000, "stump")
+        assert est is not None
+        assert route_recipe(recipe, 100_000, 1.0, ceiling_s=est / 2) == "cluster"
+        assert route_recipe(recipe, 100_000, 1.0, ceiling_s=est * 2) == "local"
+
+
+def test_fanout_exports_as_a_single_slurm_array_job():
+    """A fan-out over N targets exports as ONE SLURM array job whose task
+    index selects its target from the recipe's baked-in list."""
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        other_id = q.insert_recording(conn, "other_hpc.mat", 1, 1.0, 100_000, 0, "fake/CH1.npy")
+        with tempfile.TemporaryDirectory() as out_dir:
+            result = export_mp_job(conn, recording_id, 10.0, out_dir=out_dir,
+                                   fan_out={"kind": "channels", "targets": [recording_id, other_id]})
+            with open(result["script_path"]) as f:
+                script = f.read()
+            assert "#SBATCH --array=0-1" in script
+            assert "$SLURM_ARRAY_TASK_ID" in script
+            assert "materialize_target" in script
+            assert "run_recipe.py --config" in script
+            with open(result["recipe_path"]) as f:
+                data = json.load(f)
+            assert data["fan_out"] == {"kind": "channels", "targets": [recording_id, other_id]}
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_array_job_task_index_selects_its_target_from_the_recipe():
+    from Working.run_groups import materialize_target
+
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        other_id = q.insert_recording(conn, "other_hpc.mat", 1, 1.0, 100_000, 0, "fake/CH1.npy")
+        with tempfile.TemporaryDirectory() as out_dir:
+            result = export_mp_job(conn, recording_id, 10.0, out_dir=out_dir,
+                                   fan_out={"kind": "channels", "targets": [recording_id, other_id]})
+            with open(result["recipe_path"]) as f:
+                data = json.load(f)
+            assert materialize_target(data, 0)["recording_id"] == recording_id
+            assert materialize_target(data, 1)["recording_id"] == other_id
+            assert "fan_out" not in materialize_target(data, 0)
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_generic_export_job_writes_an_array_job_for_a_fanout_recipe():
+    """The generic `export_job` (the backend both bespoke exporters now wrap)
+    handles the fan-out array case directly, preserving the 3x wall-time
+    safety factor (30-minute uncalibrated floor)."""
+    from Working.hpc.job_export import export_job
+    from Working.database.runs import get_or_create_config
+    from Working.recipes import make_recipe
+
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        other_id = q.insert_recording(conn, "other_hpc.mat", 1, 1.0, 100_000, 0, "fake/CH1.npy")
+        with tempfile.TemporaryDirectory() as out_dir:
+            recipe = make_recipe(recording_id, [
+                {"stage": "detection", "algorithm": "matrix_profile",
+                 "params": {"window_min": 10.0, "backend": "auto"}},
+            ], fan_out={"kind": "channels", "targets": [recording_id, other_id]})
+            _config_id, hash8 = get_or_create_config(conn, recipe)
+            result = export_job(recipe, out_dir=out_dir, base_name=f"arr_{hash8}",
+                                job_name="arr", est_seconds=None)
+            with open(result["script_path"]) as f:
+                script = f.read()
+            assert "#SBATCH --array=0-1" in script
+            assert "$SLURM_ARRAY_TASK_ID" in script
+            assert "materialize_target" in script
+            assert "--time=00:30:00" in script  # 3x safety, 30-min floor
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_wm_array_export_uses_the_chain_template_with_array_directive():
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        other_id = q.insert_recording(conn, "other_hpc.mat", 1, 1.0, 100_000, 0, "fake/CH1.npy")
+        with tempfile.TemporaryDirectory() as out_dir:
+            result = export_wm_job(conn, recording_id, 10.0, out_dir=out_dir,
+                                   fan_out={"kind": "channels", "targets": [recording_id, other_id]})
+            with open(result["script_path"]) as f:
+                script = f.read()
+            assert "#SBATCH --array=0-1" in script
+            assert "wm_status.py --artifact" in script
+            assert "sbatch --array=$SLURM_ARRAY_TASK_ID" in script
     finally:
         conn.close()
         os.unlink(db_path)

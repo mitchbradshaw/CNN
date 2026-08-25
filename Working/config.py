@@ -263,6 +263,15 @@ MP_INTERACTIVE_BUDGET_S = 60    # <= this: run inline, blocking, progress bar
 MP_BACKGROUND_BUDGET_S = 900    # <= this: background thread + cancel;
                                  #  > this: HPC export only
 
+# The generic cluster-routing ceiling for a whole chain
+# (Working/hpc/job_export.py `route_recipe`): above this summed per-step
+# estimate (times fan-out width) the routing decision is "cluster" -- the
+# value a run surface reads to promote "export cluster job" to the primary
+# action, per PIPELINE_PRD.md "Cluster routing". Kept at the same value as
+# the two per-workload background budgets (both 900s), so the single-stage
+# story and the chain story do not disagree.
+CLUSTER_ROUTING_CEILING_S = 900
+
 # ── HPC export (Working/hpc/job_export.py) ─────────────────────────────────
 #
 # `HPC/README.md` records that `--chdir` disagrees between hand-written job
