@@ -20,7 +20,9 @@ Covered here:
   - a failed run still gets a manifest (status='failed', error_text, partial
     step timings);
   - the manifest lands beside its run's artifacts;
-  - the UI import action constructs as a Panel surface with non-None panes.
+  - the UI import action constructs as a Panel surface with non-None panes;
+  - `run_recipe.py` writes a manifest on every invocation, including failed
+    runs (exercised end-to-end through the CLI).
 
 Run from the project root:
     python tests/test_manifest.py
@@ -30,6 +32,7 @@ import inspect
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -308,6 +311,74 @@ def test_manifest_written_beside_artifacts():
     finally:
         os.unlink(db_path)
         shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# ── run_recipe.py CLI (writes a manifest every invocation) ───────────────────
+
+def _invoke_run_recipe(recipe_dict, db_path, out_dir):
+    """Write a recipe JSON and invoke run_recipe.py in a subprocess."""
+    tmpdir = tempfile.mkdtemp(prefix="t27_cli_")
+    recipe_path = os.path.join(tmpdir, "recipe.json")
+    with open(recipe_path, "w") as f:
+        json.dump(recipe_dict, f)
+    try:
+        return subprocess.run(
+            [sys.executable, "Pipelines/run_recipe/run_recipe.py",
+             "--config", recipe_path, "--db", db_path, "--out-dir", out_dir],
+            capture_output=True, text=True, cwd=PROJECT_ROOT,
+        )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_run_recipe_cli_writes_manifest_on_success():
+    """AC: run_recipe.py writes a manifest on every invocation — success path
+    exercised end-to-end through the CLI."""
+    db_path, _npy, tmpdir = _fresh_synthetic_recording(200)
+    out_dir = os.path.join(tmpdir, "out")
+    try:
+        result = _invoke_run_recipe(
+            {"recording_id": 1, "span": [0, 200], "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass",
+                 "params": {"cutoff_hz": 0.05}},
+            ]},
+            db_path, out_dir,
+        )
+        assert result.returncode == 0, result.stderr
+        with open(os.path.join(out_dir, "manifest.json")) as f:
+            data = json.load(f)
+        assert data["runs"][0]["status"] == "completed"
+        assert data["runs"][0]["recipe"]["recording_id"] == 1
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_run_recipe_cli_writes_manifest_on_failure():
+    """AC: run_recipe.py writes a manifest on every invocation — a failed run
+    still produces one, with status='failed' and the error text."""
+    tmpdir = tempfile.mkdtemp(prefix="t27_cli_fail_")
+    db_path = os.path.join(tmpdir, "test.sqlite")
+    conn = init_db(db_path)
+    # npy path that does not exist -> execute_recipe fails while loading signal
+    q.insert_recording(conn, "fake.mat", 0, 1.0, 200, 0,
+                       os.path.join(tmpdir, "MISSING.npy"))
+    conn.close()
+    out_dir = os.path.join(tmpdir, "out")
+    try:
+        result = _invoke_run_recipe(
+            {"recording_id": 1, "span": [0, 200], "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass",
+                 "params": {"cutoff_hz": 0.05}},
+            ]},
+            db_path, out_dir,
+        )
+        assert result.returncode != 0
+        with open(os.path.join(out_dir, "manifest.json")) as f:
+            data = json.load(f)
+        assert data["runs"][0]["status"] == "failed"
+        assert data["runs"][0]["error_text"]
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── UI import action ─────────────────────────────────────────────────────────

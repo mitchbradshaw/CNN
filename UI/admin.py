@@ -13,6 +13,7 @@ refresh its own tag dropdowns, without this module importing `app.py`.
 import pandas as pd
 import panel as pn
 
+from Working import manifest
 from Working.database import vocabulary as v
 
 TERM_COLUMNS = ["id", "category", "value", "description", "active"]
@@ -111,5 +112,56 @@ class VocabularyAdmin:
             self.status,
             self.terms_table,
             pn.Row(self.deactivate_button, self.reactivate_button),
+            sizing_mode="stretch_width",
+        )
+
+
+class ManifestImport:
+    """The one generic cluster-job import action (T27): point it at a
+    manifest (e.g. `Results/Detection/matrix_profile/manifest.json`) and it
+    reads the manifest and reconstructs the local configs, runs, detections
+    and artifact rows. Replaces the two bespoke artifact importers."""
+
+    def __init__(self, conn):
+        self.conn = conn
+        self.path_input = pn.widgets.TextInput(
+            name="Manifest path",
+            placeholder="e.g. Results/Detection/matrix_profile/manifest.json",
+        )
+        self.import_button = pn.widgets.Button(name="Import manifest", button_type="primary")
+        self.import_button.on_click(self._on_import)
+        self.status = pn.pane.Markdown("")
+
+    def _on_import(self, _event=None):
+        path = self.path_input.value.strip()
+        if not path:
+            self.status.object = "**Enter a manifest path first.**"
+            return
+        try:
+            summary = manifest.import_manifest(self.conn, path)
+            created = len(summary["recordings_created"])
+            self.status.object = (
+                f"Imported {len(summary['imported_runs'])} run(s), "
+                f"{summary['imported_detections']} detection(s), "
+                f"{summary['imported_artifacts']} artifact(s) from "
+                f"`{path}`.\n\n"
+                f"Recordings created: {created}. "
+                f"Skipped (already present): {len(summary['skipped_runs'])}."
+            )
+        except Exception as e:
+            self.status.object = f"**Import failed:** {e}"
+
+    def layout(self):
+        return pn.Column(
+            pn.pane.Markdown(
+                "### Cluster-job import\n"
+                "Copy cluster output back into the working tree at matching "
+                "relative paths, then point this at the run's `manifest.json`. "
+                "The import reconstructs the local configs, runs, detections "
+                "and artifact rows."
+            ),
+            self.path_input,
+            self.import_button,
+            self.status,
             sizing_mode="stretch_width",
         )
