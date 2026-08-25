@@ -401,3 +401,8 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) UI/workspaces/__init__.py imports CompareSurface from the analyse.compare submodule, contradicting analyse/__init__.py's stated "import from here, not a submodule" convention
 - [minor] [standards] (rule 6.2) tests/test_compare.py adds a hand-rolled _run_all()/__main__ test runner duplicating pytest, unrequested machinery
 - [minor] [standards] (no rule cited) CompareSurface._route_to_review reaches through app.review_surface.queue and app.review_surface.on_tab_activated via getattr guards, borderline Feature Envy/Message Chain
+
+## T43 — 2026-08-25 20:00
+
+- [minor] [standards] (no rule cited) _run seeds with np.random.RandomState while every stochastic site in Working/ uses np.random.default_rng; no rule mandates either but it diverges from repo convention
+- [minor] [standards] (no rule cited) Adding the adapter forced a companion edit to tests/test_adapter_spec.py (count bump + new membership set) — Shotgun Surgery smell, though arguably inherent to that test's role as a registry-completeness guard
