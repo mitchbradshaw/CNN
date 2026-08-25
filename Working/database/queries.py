@@ -23,6 +23,15 @@ from Working.database.schema import VERDICTS  # noqa: F401  (re-exported)
 SOURCE_IMPORTED_10MIN = "imported_10min"
 SOURCE_MANUAL_UI = "manual_ui"
 
+# The verdict subsets the divergence and queue semantics rest on. The PRD's
+# verdict vocabulary maps `interesting` to accept and `not_interesting` to
+# reject; `seed` marks exemplar-worthy and is a positive human verdict, so it
+# also reads as accepted. `artifact` is retained as a first-class category, not
+# as accept/reject. These are subsets of the shared `VERDICTS` constant, never
+# a restatement of the five terms themselves.
+ACCEPTED_VERDICTS = ("interesting", "seed")
+REJECTED_VERDICTS = ("not_interesting",)
+
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -354,3 +363,177 @@ def recording_summary(conn, recording_id):
     counts["total"] = sum(counts.values())
     counts["reviewed_fraction"] = reviewed_fraction(conn, recording_id)
     return counts
+
+
+# ── adjudication divergence queries ──────────────────────────────────────────
+#
+# The two divergence directions from the Review invariant, with equal standing
+# over one read path. The PRD names a `v_spans` union view; that view was
+# withdrawn (ticket 02) because an `origin` discriminator column violates
+# standard 2.5, which is what lets a machine write land in a human store. These
+# queries therefore read across both sources with a join at the call site — the
+# same read, without the schema-level discriminator.
+
+def _verdict_placeholders(verdicts):
+    return ", ".join("?" * len(verdicts))
+
+
+def divergence_rejected_detections(conn, recording_id=None):
+    """Detections a human rejected — machine says yes, human says no.
+
+    Reads the machine side joined to its adjudication verdict; the annotation
+    store is deliberately not consulted (standard 2.5). Optionally scoped to a
+    recording.
+
+    Returns
+    -------
+    list[sqlite3.Row] — detection rows (d.*) plus `adjudication_verdict`,
+    `adjudication_note`, `recording_id` and `channel`.
+    """
+    query = """
+        SELECT d.*, a.verdict AS adjudication_verdict,
+               a.note AS adjudication_note,
+               r.recording_id, rec.channel
+        FROM detections d
+        JOIN adjudications a ON a.detection_id = d.id
+        JOIN runs r ON r.id = d.run_id
+        JOIN recordings rec ON rec.id = r.recording_id
+        WHERE a.verdict IN (__REJECTED__)
+    """.replace("__REJECTED__", _verdict_placeholders(REJECTED_VERDICTS))
+    params = list(REJECTED_VERDICTS)
+    if recording_id is not None:
+        query += " AND r.recording_id = ?"
+        params.append(recording_id)
+    query += " ORDER BY d.id"
+    return conn.execute(query, params).fetchall()
+
+
+def divergence_annotations_without_detection(conn, recording_id=None):
+    """Annotations with no overlapping detection — human says yes, machine
+    said nothing.
+
+    Reads the human store and asks whether any machine detection (reached
+    through its run's recording) overlaps the annotation's span. Soft-deleted
+    annotations are excluded, same as `list_annotations`. Optionally scoped to
+    a recording.
+
+    Returns
+    -------
+    list[sqlite3.Row] — annotation rows (a.*).
+    """
+    query = """
+        SELECT a.*
+        FROM annotations a
+        WHERE a.deleted_at IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM detections d
+              JOIN runs r ON r.id = d.run_id
+              WHERE r.recording_id = a.recording_id
+                AND a.start_idx < d.end_idx AND d.start_idx < a.end_idx
+          )
+    """
+    params = []
+    if recording_id is not None:
+        query += " AND a.recording_id = ?"
+        params.append(recording_id)
+    query += " ORDER BY a.id"
+    return conn.execute(query, params).fetchall()
+
+
+# ── candidate queue query ─────────────────────────────────────────────────────
+
+def queue_candidates(conn, run_id=None, run_group_id=None, method=None,
+                     score_min=None, score_max=None, channel=None,
+                     adjudication_status=None, limit=50, offset=0):
+    """Paginated candidate queue for adjudication.
+
+    Filters compose: run, run group, method (the recipe's detection
+    algorithm), score range, channel, and adjudication status. Detections are
+    ordered by id for stable paging.
+
+    Parameters
+    ----------
+    adjudication_status : str, optional
+        None (no filter), 'unadjudicated', 'adjudicated', 'accepted', or
+        'rejected'.
+    limit, offset : int
+        Paging window over the ordered, filtered candidate list.
+
+    Returns
+    -------
+    list[sqlite3.Row] — detection rows (d.*) plus `recording_id`, `channel`
+    and `config_json`.
+    """
+    clauses = []
+    params = []
+
+    if run_id is not None:
+        clauses.append("d.run_id = ?")
+        params.append(run_id)
+    if run_group_id is not None:
+        clauses.append("r.run_group_id = ?")
+        params.append(run_group_id)
+    if score_min is not None:
+        clauses.append("d.score >= ?")
+        params.append(score_min)
+    if score_max is not None:
+        clauses.append("d.score <= ?")
+        params.append(score_max)
+    if channel is not None:
+        clauses.append("rec.channel = ?")
+        params.append(channel)
+    if method is not None:
+        clauses.append(
+            """EXISTS (
+                SELECT 1 FROM json_each(c.config_json, '$.steps') AS s
+                WHERE json_extract(s.value, '$.algorithm') = ?
+            )"""
+        )
+        params.append(method)
+
+    if adjudication_status is not None:
+        status = adjudication_status
+        if status == "unadjudicated":
+            clauses.append(
+                "NOT EXISTS (SELECT 1 FROM adjudications ad WHERE ad.detection_id = d.id)"
+            )
+        elif status == "adjudicated":
+            clauses.append(
+                "EXISTS (SELECT 1 FROM adjudications ad WHERE ad.detection_id = d.id)"
+            )
+        elif status == "accepted":
+            clauses.append(
+                """EXISTS (
+                    SELECT 1 FROM adjudications ad
+                    WHERE ad.detection_id = d.id
+                      AND ad.verdict IN (__ACCEPTED__)
+                )""".replace("__ACCEPTED__", _verdict_placeholders(ACCEPTED_VERDICTS))
+            )
+            params.extend(ACCEPTED_VERDICTS)
+        elif status == "rejected":
+            clauses.append(
+                """EXISTS (
+                    SELECT 1 FROM adjudications ad
+                    WHERE ad.detection_id = d.id
+                      AND ad.verdict IN (__REJECTED__)
+                )""".replace("__REJECTED__", _verdict_placeholders(REJECTED_VERDICTS))
+            )
+            params.extend(REJECTED_VERDICTS)
+        else:
+            raise ValueError(
+                "adjudication_status must be one of 'unadjudicated', 'adjudicated', "
+                "'accepted', 'rejected', got {!r}".format(adjudication_status)
+            )
+
+    query = """
+        SELECT d.*, r.recording_id, rec.channel, c.config_json
+        FROM detections d
+        JOIN runs r ON r.id = d.run_id
+        JOIN recordings rec ON rec.id = r.recording_id
+        JOIN configs c ON c.id = r.config_id
+    """
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY d.id LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    return conn.execute(query, params).fetchall()
