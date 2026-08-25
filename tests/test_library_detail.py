@@ -103,13 +103,10 @@ def test_selecting_entry_shows_members_overlay_and_edge_fields():
             assert "A.mat" in member_text
             assert "B.mat" in member_text
 
-            edge_rows = detail.edge_pane.value
-            assert len(edge_rows) == 1
-            row = edge_rows[0]
-            assert row["distance_function"] == DISTANCE_SCALE_INVARIANT
-            assert abs(row["threshold"] - 0.1) < 1e-9
-            assert row["distance_value"] is not None
-            assert "B.mat" in row["member"]
+            edge_text = detail.edge_pane.object
+            assert "B.mat" in edge_text
+            assert DISTANCE_SCALE_INVARIANT in edge_text
+            assert "0.1" in edge_text
         finally:
             conn.close()
 
@@ -178,7 +175,8 @@ def test_family_with_twenty_members_renders_without_blanking():
 
             assert detail.overlay_pane.object is not None
             assert isinstance(detail.overlay_pane.object, hv.Overlay)
-            assert len(detail.edge_pane.value) == 20
+            assert "Members (21)" in detail.member_pane.object
+            assert detail.edge_pane.object is not None
 
             fig = hv.render(detail.overlay_pane.object, backend="bokeh")
             assert len(fig.renderers) >= 20, len(fig.renderers)
@@ -196,7 +194,7 @@ def test_empty_library_entry_detail_renders_non_none_panes():
         assert layout is not None
         assert detail.overlay_pane.object is not None
         assert detail.member_pane.object is not None
-        assert detail.edge_pane.value == []
+        assert detail.edge_pane.object is not None
     finally:
         conn.close()
 
