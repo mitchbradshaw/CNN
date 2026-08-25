@@ -241,7 +241,7 @@ class ControlsMixin:
                 step_spec = get_adapter(f"{step['stage']}.{step['algorithm']}")
                 step_params = step_spec.validate_params(step["params"])
                 step_result = step_spec.run(x, t, recording["fs"], **step_params)
-                x, t = step_result.x, step_result.t
+                x = step_result.value.x
             last_step = steps[-1]
             spec = get_adapter(f"{last_step['stage']}.{last_step['algorithm']}")
             params = spec.validate_params(last_step["params"])
@@ -250,5 +250,6 @@ class ControlsMixin:
             self.status.object = f"*Auto-preview failed: {e}*"
             return
         self.encoding_section.visible = True
-        self._show_encoding(result.x, result.t, result.encoding, result.meta["details"], recording)
+        self._show_encoding(result.meta["encoded_x"], result.meta["encoded_t"],
+                            result.value.values, result.meta["details"], recording)
         self.status.object = "*Auto-preview shown below — not a run, nothing recorded. Click Run to record one.*"

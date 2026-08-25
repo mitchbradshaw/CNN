@@ -312,11 +312,11 @@ class RunSurface:
         if kind == "spanset":
             return f"{len(getattr(result.value, 'starts', ()))} span(s)"
         if kind == "signal":
-            shape = getattr(result.x, "shape", None)
+            shape = getattr(getattr(result.value, "x", None), "shape", None)
             return f"signal {tuple(shape)}" if shape is not None else "signal"
         if kind == "encoding":
             try:
-                n = len(result.encoding)
+                n = len(result.value.values)
             except TypeError:
                 n = None
             return f"encoding ({n} values)" if n is not None else "encoding"

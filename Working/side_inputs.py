@@ -29,22 +29,20 @@ class SideInputResolutionError(RuntimeError):
     the side input so the failure points at exactly which binding is bad."""
 
 
-def typed_step_value(result, fs):
+def typed_step_value(result):
     """The typed value an `AdapterResult` represents, for stashing as a
     possible `earlier_step` binding target.
 
-    Prefers `result.value` (a real `Working.types` object, ticket 05/13).
-    Falls back to wrapping a `signal` output into a `Signal` — `signal` is
-    both the root interchange type and the chain's root kind (see
-    `Working.chain_validation`'s docstring). Anything else (an encoding or
-    other result with no typed `value`) can't be resolved to a typed value:
-    returns None.
+    Since ticket 10 that is simply `result.value`: every adapter populates
+    it, and the per-kind carrier fields this used to fall back to are gone.
+    A result with no `value` at all can't be resolved to a typed value and
+    returns None, which `resolve_side_inputs` reports as an unresolved
+    binding naming the side input.
+
+    The `fs` argument went with the fallback that needed it — a `Signal`
+    has always carried its own sample rate.
     """
-    if result.value is not None:
-        return result.value
-    if result.output_kind == "signal":
-        return Signal(x=result.x, fs=fs)
-    return None
+    return result.value
 
 
 def _resolve_library_exemplar(conn, name, binding):

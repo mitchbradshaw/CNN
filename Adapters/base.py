@@ -108,18 +108,23 @@ class SideInputSpec:
 class AdapterResult:
     """Uniform output wrapper regardless of `output_kind`.
 
-    Only the field(s) matching `output_kind` are populated; the others
-    stay at their default. `meta` always carries at least `elapsed_s`
-    (filled in by whoever calls `run`, not the adapter itself, so timing
-    is measured uniformly rather than each adapter timing itself slightly
-    differently).
+    `value` is the payload, and the only one: an instance of the
+    `Working.types` class named by `output_kind`. Ticket 05 introduced it
+    alongside a set of per-kind carrier fields (`x`/`t`/`intervals`/
+    `encoding`) so the twenty existing adapters could be migrated one batch
+    at a time; ticket 10 deletes those, leaving the seven interchange types
+    as the only output vocabulary in the codebase.
+
+    Anything an adapter wants to hand a plot helper or a UI panel that is
+    not part of the type contract goes in `meta` — the SAX blocks put the
+    exact encoded array there under `encoded_x`/`encoded_t`, and
+    `detection.matrix_profile` its `mp`/`mpi`/`t_mp`. `meta` always carries
+    at least `elapsed_s` (filled in by whoever calls `run`, not the adapter
+    itself, so timing is measured uniformly rather than each adapter timing
+    itself slightly differently).
     """
 
     output_kind: str
-    x: Any = None            # 'signal': the processed array
-    t: Any = None            # 'signal': matching timestamps
-    intervals: Optional[list] = None   # legacy carrier: [(start, end[, score]), ...]
-    encoding: Any = None     # 'encoding': array, string, or other value
     value: Any = None        # a typed object from `Working.types` (ticket 01)
     meta: dict = field(default_factory=dict)
 

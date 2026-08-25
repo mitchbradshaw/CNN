@@ -209,17 +209,18 @@ def test_signal_panel_autoscales_to_preprocessed_not_raw_range():
     sax_spec = get_adapter("detection.sax_csax")
     sparams = sax_spec.validate_params({"segment_mode": "samples_per_symbol", "samples_per_symbol": 20})
     np.random.seed(2)
-    sresult = sax_spec.run(dresult.x, dresult.t, 1.0, **sparams)
+    sresult = sax_spec.run(dresult.value.x, t, 1.0, **sparams)
 
     dmap_signal, dmap_paa, dmap_quant, _dmap_strip, range_stream = build_encoding_panels(
-        sresult.x, sresult.t, sresult.encoding, sresult.meta["details"],
+        sresult.meta["encoded_x"], sresult.meta["encoded_t"],
+        sresult.value.values, sresult.meta["details"],
     )
     renderer = hv.renderer("bokeh")
     p1 = renderer.get_plot(dmap_signal)
     p1.refresh()
     rendered_mid = (p1.state.y_range.start + p1.state.y_range.end) / 2.0
 
-    preprocessed_mid = (dresult.x.min() + dresult.x.max()) / 2.0
+    preprocessed_mid = (dresult.value.x.min() + dresult.value.x.max()) / 2.0
 
     assert abs(rendered_mid - preprocessed_mid) < 0.05, (
         f"rendered axis midpoint {rendered_mid:.4g} is not close to the "

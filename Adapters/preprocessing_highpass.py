@@ -16,7 +16,7 @@ def _run(x, t, fs, cutoff_hz=0.01, order=4):
     filt = make_highpass_filter(fs, cutoff_hz, order=order)
     x_filtered = filt(x)
     return AdapterResult(
-        output_kind="signal", x=x_filtered, t=t,
+        output_kind="signal",
         value=Signal(x=x_filtered, fs=fs),
     )
 
@@ -25,7 +25,7 @@ def _plot(x, t, result, cutoff_hz=0.01, order=4):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(14, 4))
     ax.plot(t, x, linewidth=0.5, color="#999999", label="original")
-    ax.plot(result.t, result.x, linewidth=0.8, color="tomato", label="filtered")
+    ax.plot(t, result.value.x, linewidth=0.8, color="tomato", label="filtered")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Amplitude")
     ax.set_title(f"Highpass filter  cutoff={cutoff_hz:g}Hz  order={order}")

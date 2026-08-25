@@ -16,6 +16,7 @@ worth overriding independently of J.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 
 
 def _run(x, t, fs, J=8, Q=8, max_order=2):
@@ -26,7 +27,8 @@ def _run(x, t, fs, J=8, Q=8, max_order=2):
     from Working.Detection.wavelet.scattering_transform import compute_wavelet_scattering
     result = compute_wavelet_scattering(x, t, J=J, Q=Q, max_order=max_order)
     return AdapterResult(
-        output_kind="encoding", encoding=result.Sx,
+        output_kind="encoding",
+        value=Encoding(values=result.Sx, kind="image"),
         meta={"scattering_result": result,
               "border_effects_flagged": result.border_effects_flagged},
     )

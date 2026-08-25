@@ -164,10 +164,17 @@ class ExecutionMixin:
 
         if spec.output_kind == "signal":
             recording = q.get_recording_by_id(conn_w, recipe["recording_id"])
+            span = recipe["span"]
+            start, end = (0, recording["n_samples"]) if span is None else span
             return {
                 "kind": "signal",
                 "recording": dict(recording),
-                "result_x": result.x, "result_t": result.t,
+                "result_x": result.value.x,
+                # A Signal carries `fs` but no absolute offset, so the axis is
+                # rebuilt from the span the same way `execution._load_signal`
+                # builds it — the plot is drawn against the channel, not
+                # against zero.
+                "result_t": np.arange(start, end) / recording["fs"],
             }
 
         return {"kind": None}
@@ -197,18 +204,19 @@ class ExecutionMixin:
                 step_spec = get_adapter(f"{step['stage']}.{step['algorithm']}")
                 step_params = step_spec.validate_params(step["params"])
                 step_result = step_spec.run(x, t, recording["fs"], **step_params)
-                x, t = step_result.x, step_result.t
+                x = step_result.value.x
             params = spec.validate_params(recipe["steps"][-1]["params"])
             result = spec.run(x, t, recording["fs"], **params)
 
         if result is not None:
             algorithm_short = recipe["steps"][-1]["algorithm"]
             if algorithm_short.startswith("sax_"):  # Part 6, 4e
-                self._persist_sax_encoding(conn_w, recording, recipe, out, result.encoding,
+                self._persist_sax_encoding(conn_w, recording, recipe, out, result.value.values,
                                            algorithm_short, result.meta["details"])
             return {
                 "kind": "encoding", "recording": dict(recording),
-                "x": result.x, "t": result.t, "symbols": result.encoding,
+                "x": result.meta["encoded_x"], "t": result.meta["encoded_t"],
+                "symbols": result.value.values,
                 "details": result.meta["details"],
             }
 

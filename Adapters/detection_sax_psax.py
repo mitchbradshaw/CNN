@@ -12,6 +12,7 @@ exactly (no fallback path).
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Adapters._sax_common import derive_sax_rows, plot_encoding_matplotlib, recommend_sax_params, segment_plan
 from Working.Detection.sax.psax_python.psax import psax
 
@@ -33,7 +34,20 @@ def _run(x, t, fs, segment_mode="seconds_per_symbol", seconds_per_symbol=20.0,
     # See `detection_sax_csax._run`'s comment: `x`/`t` are populated even
     # though output_kind="encoding" — the UI's encoding view (Part 6 3b)
     # needs the exact (possibly-preprocessed) array that got encoded.
-    return AdapterResult(output_kind="encoding", x=x, t=t, encoding=symbols, meta={"details": details})
+        # The EXACT array that got encoded goes in `meta`, not into a carrier
+    # field on the result: it already reflects any upstream preprocessing
+    # step the recipe chained in ahead of this one, and the UI's encoding
+    # view (Part 6 3b) needs precisely it to draw panel 1 and align the
+    # PAA/quantisation panels against it. Recovering it any other way would
+    # mean the UI re-deriving which preprocessing ran, from outside the
+    # recipe machinery that already knows. `meta` is the right home —
+    # `detection.matrix_profile` already carries its `mp`/`mpi`/`t_mp`
+    # arrays there — and it keeps `value` the single typed payload.
+    return AdapterResult(
+        output_kind="encoding",
+        value=Encoding(values=symbols, kind="symbolic"),
+        meta={"details": details, "encoded_x": x, "encoded_t": t},
+    )
 
 
 def _recommend(x, t, fs):
@@ -46,7 +60,7 @@ def _derive(x, t, fs, params):
 
 def _plot(x, t, result, **params):
     # See `Adapters.detection_sax_csax._plot` — identical reasoning.
-    return plot_encoding_matplotlib(x, t, result.encoding, result.meta["details"])
+    return plot_encoding_matplotlib(x, t, result.value.values, result.meta["details"])
 
 
 SPEC = register(AdapterSpec(

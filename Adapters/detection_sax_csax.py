@@ -16,6 +16,7 @@ instead of a pre-run control.
 
 from Adapters.base import AdapterSpec, AdapterResult, ParamSpec
 from Adapters.registry import register
+from Working.types import Encoding
 from Adapters._sax_common import derive_sax_rows, plot_encoding_matplotlib, recommend_sax_params, segment_plan
 from Working.Detection.sax.csax_python.csax import csax
 
@@ -34,16 +35,20 @@ def _run(x, t, fs, segment_mode="seconds_per_symbol", seconds_per_symbol=20.0,
         normalize=normalize, return_details=True,
     )
     details["segment_plan"] = plan
-    # `x`/`t` populated even though output_kind="encoding" (a deliberate,
-    # additive deviation from AdapterResult's usual "only the matching
-    # kind's fields are populated" convention) — this is the EXACT array
-    # that got encoded, already reflecting any upstream preprocessing step
-    # the recipe chained in ahead of this one. The UI's encoding view
-    # (Part 6 3b) needs precisely this to draw panel 1 and align the PAA/
-    # quantisation panels against it; recovering it any other way would
+    # The EXACT array that got encoded goes in `meta`, not into a carrier
+    # field on the result: it already reflects any upstream preprocessing
+    # step the recipe chained in ahead of this one, and the UI's encoding
+    # view (Part 6 3b) needs precisely it to draw panel 1 and align the
+    # PAA/quantisation panels against it. Recovering it any other way would
     # mean the UI re-deriving which preprocessing ran, from outside the
-    # recipe machinery that already knows.
-    return AdapterResult(output_kind="encoding", x=x, t=t, encoding=symbols, meta={"details": details})
+    # recipe machinery that already knows. `meta` is the right home —
+    # `detection.matrix_profile` already carries its `mp`/`mpi`/`t_mp`
+    # arrays there — and it keeps `value` the single typed payload.
+    return AdapterResult(
+        output_kind="encoding",
+        value=Encoding(values=symbols, kind="symbolic"),
+        meta={"details": details, "encoded_x": x, "encoded_t": t},
+    )
 
 
 def _recommend(x, t, fs):
@@ -60,7 +65,7 @@ def _plot(x, t, result, **params):
     # `plot_encoding_matplotlib`'s docstring for why the two can't
     # literally share drawing code. Both take the SAME input: the
     # symbol array and the `details` dict this run already computed.
-    return plot_encoding_matplotlib(x, t, result.encoding, result.meta["details"])
+    return plot_encoding_matplotlib(x, t, result.value.values, result.meta["details"])
 
 
 SPEC = register(AdapterSpec(

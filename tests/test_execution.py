@@ -221,7 +221,7 @@ def test_bounded_span_allowed_for_same_adapter():
         ], span=(100000, 100600))  # 600 samples, well under the cap
         out = execute_recipe(recipe, db_path=db_path)
         assert out["reused"] is False
-        assert out["result"].encoding.shape == (600, 600)
+        assert out["result"].value.values.shape == (600, 600)
     finally:
         os.unlink(db_path)
 

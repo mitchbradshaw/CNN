@@ -72,27 +72,32 @@ def test_detection_adapters_declare_signal_to_spanset():
         assert spec.estimate is None, name
 
 
-def test_preprocessing_run_populates_legacy_and_typed_value():
+def test_preprocessing_run_populates_the_typed_value():
+    """Ticket 10 removed the `x`/`t` carrier fields this test used to assert
+    alongside `value`. A preprocessing block preserves the sample count —
+    `Working.execution` refuses one that does not, because the chain's time
+    axis is the span's and a `Signal` carries no absolute offset to rebuild
+    a different one from."""
     x, t, fs = _signal()
     for name in PREPROCESSING_ADAPTERS:
         spec = get_adapter(name)
         params = spec.validate_params({})
         result = spec.run(x, t, fs, **params)
         assert isinstance(result, AdapterResult), name
-        assert result.x is not None, name
-        assert result.t is not None, name
         assert isinstance(result.value, Signal), name
         assert result.value.fs == fs, name
+        assert len(result.value.x) == len(x), name
 
 
-def test_detection_run_populates_legacy_and_typed_value():
+def test_detection_run_populates_the_typed_value():
+    """Ticket 10 removed the `intervals` carrier this test used to assert
+    alongside `value`; the SpanSet was always the real payload."""
     x, t, fs = _signal()
     for name in DETECTION_ADAPTERS:
         spec = get_adapter(name)
         params = spec.validate_params({})
         result = spec.run(x, t, fs, **params)
         assert isinstance(result, AdapterResult), name
-        assert result.intervals is not None, name
         assert isinstance(result.value, SpanSet), name
         assert len(result.value.starts) == len(result.value.ends), name
 

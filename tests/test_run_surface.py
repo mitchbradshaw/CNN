@@ -48,7 +48,7 @@ from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.hpc.job_export import estimate_recipe_seconds
 from Working.Detection.matrix_profiling import cost as mp_cost
-from Working.types import SpanSet
+from Working.types import Signal, SpanSet
 from tests._calibration_isolation import scratch_calibration
 from UI.analyse.chain_state import ChainState
 
@@ -417,7 +417,8 @@ def test_stage_results_append_and_earlier_stage_stays_inspectable():
 
     surface._clear_stage_results()
     surface._append_stage_result(
-        0, AdapterResult(output_kind="signal", x=np.zeros(4)), recipe,
+        0, AdapterResult(output_kind="signal",
+                        value=Signal(x=np.zeros(4), fs=1.0)), recipe,
     )
     surface._append_stage_result(
         1, AdapterResult(

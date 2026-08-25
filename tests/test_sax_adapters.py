@@ -186,7 +186,7 @@ def test_diagnostic_rows_warns_on_low_entropy_and_high_self_rate():
         segment_mode="samples_per_symbol", samples_per_symbol=20,
     )
     details = result.meta["details"]
-    rows = diagnostic_rows(result.encoding, details)
+    rows = diagnostic_rows(result.value.values, details)
     by_label = {label: (value, severity) for label, value, severity in rows}
     assert by_label["Occupancy entropy"][1] == "warn"
     assert "cSAX fallback" in by_label
@@ -200,7 +200,7 @@ def test_diagnostic_rows_no_fallback_key_when_not_triggered():
     result = get_adapter("detection.sax_csax").run(
         x, np.arange(len(x)), 1.0, segment_mode="samples_per_symbol", samples_per_symbol=20,
     )
-    rows = diagnostic_rows(result.encoding, result.meta["details"])
+    rows = diagnostic_rows(result.value.values, result.meta["details"])
     labels = [label for label, _, _ in rows]
     assert "cSAX fallback" not in labels
     assert "Realised alphabet size" in labels
