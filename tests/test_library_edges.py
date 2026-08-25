@@ -18,6 +18,10 @@ The acceptance criteria under test:
 4. Re-running the same match with the same recipe does not duplicate the edge.
 5. An edge written today can be recomputed from its recorded fields to the
    same distance value.
+6. Search at other scales (ticket 40): a synthetic motif planted at three
+   durations is recovered under the scale-invariant distance and fewer under
+   the native-length control, and the `EntryDetail` surface exposes and runs
+   the search action.
 
 Headless: uses a temporary directory for the npy files the recordings point
 at and an in-memory sqlite database.
