@@ -31,7 +31,7 @@ if PROJECT_ROOT not in sys.path:
 from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.database import runs as R
-from Working.execution import RecipeExecutionError, execute_recipe
+from Working.execution import RecipeCancelled, RecipeExecutionError, execute_recipe
 from Working.recipes import make_recipe
 
 REAL_CHANNEL_PATH = "DATA/derived/channels/M2_aug_concat_fs1/CH0.npy"
@@ -330,6 +330,168 @@ def test_matrix_profile_to_threshold_chain_writes_detections():
         assert dets[0]["end_idx"] == 200 - 6 + 1  # m=6 for window_min=0.1 at fs=1.0
     finally:
         mp_adapter.RESULTS_DIR = prior_results_dir
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ── T24: run-row status/current-step, per-stage emission, cancellation ───────
+
+def test_run_row_tracks_current_step_and_emits_stage_results():
+    """AC1 + AC3: the run row carries `current_step` as a run progresses so a
+    poller can read it, and each stage's typed result is emitted via
+    `on_step_result` as it lands rather than accumulated to the end."""
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+        ], span=(0, 200))
+
+        observed_current_steps = []
+        emitted = []
+
+        def on_progress(i, n, s, a):
+            conn = init_db(db_path)
+            try:
+                run = R.list_runs(conn)[0]  # the only run row
+                observed_current_steps.append(run["current_step"])
+            finally:
+                conn.close()
+
+        def on_step_result(i, result):
+            emitted.append((i, result.output_kind))
+
+        out = execute_recipe(
+            recipe, db_path=db_path,
+            on_progress=on_progress, on_step_result=on_step_result,
+        )
+
+        assert observed_current_steps == [0, 1], (
+            f"a poller should see current_step advance 0 then 1, got {observed_current_steps}"
+        )
+        assert emitted == [(0, "signal"), (1, "signal")], (
+            f"each stage result should be emitted as it lands, got {emitted}"
+        )
+
+        conn = init_db(db_path)
+        try:
+            run = R.get_run(conn, out["run_id"])
+            assert run["status"] == "completed"
+            assert run["current_step"] == 1
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_cancellation_marks_run_failed_with_note_and_current_step():
+    """AC2: cooperative cancellation between steps marks the run failed with
+    a note rather than leaving it half-written, and the run row still shows
+    the last step that actually started."""
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+        ], span=(0, 200))
+
+        calls = {"n": 0}
+
+        def should_cancel():
+            calls["n"] += 1
+            return calls["n"] >= 2  # cancel before the second step
+
+        try:
+            execute_recipe(recipe, db_path=db_path, should_cancel=should_cancel)
+            assert False, "expected RecipeCancelled"
+        except RecipeCancelled:
+            pass
+
+        conn = init_db(db_path)
+        try:
+            run = R.list_runs(conn)[0]
+            assert run["status"] == "failed"
+            assert "Cancelled" in run["error_text"]
+            assert run["current_step"] == 0  # step 0 started; step 1 never did
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_invalid_chain_raises_before_any_run_row():
+    """AC4: chain validation hard-fails before the first step, so an invalid
+    recipe (here: a hand-edited dict that bypasses make_recipe's own check)
+    never starts computing and never creates a run row."""
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    try:
+        # lowpass produces a signal; threshold expects Scores. Validated only
+        # at execution because this recipe was built by hand, not make_recipe.
+        recipe = {
+            "recording_id": 1,
+            "span": [0, 200],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass",
+                 "params": {"cutoff_hz": 0.05}},
+                {"stage": "detection", "algorithm": "threshold",
+                 "params": {"threshold": -1.0}},
+            ],
+        }
+
+        try:
+            execute_recipe(recipe, db_path=db_path)
+            assert False, "expected ValueError from chain validation"
+        except ValueError as e:
+            assert "Invalid chain" in str(e)
+
+        conn = init_db(db_path)
+        try:
+            assert len(R.list_runs(conn)) == 0, "an invalid chain must never create a run row"
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_step_and_intra_step_progress_both_fire():
+    """AC5: the step-level on_progress and the finer intra-step
+    run_kwargs['on_progress'] are two distinct callbacks with distinct
+    signatures, and both fire."""
+    import Adapters.preprocessing_window_matrix as wm_adapter
+
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(400)
+    results_dir = os.path.join(tmpdir, "results")
+    prior_results_dir = wm_adapter.RESULTS_DIR
+    wm_adapter.RESULTS_DIR = results_dir
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "window_matrix",
+             "params": {"window_min": 1.0, "step_frac": 1.0, "catch22": True,
+                        "fast_entropy": False, "slow_entropy": False,
+                        "cnn": False, "rf": False}},
+        ], span=(0, 400))
+
+        step_progress = []
+        intra_progress = []
+
+        def on_progress(i, n, s, a):
+            step_progress.append((i, n, s, a))
+
+        def intra(done, total, stage):
+            intra_progress.append((done, total, stage))
+
+        out = execute_recipe(
+            recipe, db_path=db_path,
+            on_progress=on_progress,
+            run_kwargs={"on_progress": intra},
+        )
+
+        assert out["reused"] is False
+        assert step_progress, "step-level on_progress must fire once per step"
+        assert len(step_progress[0]) == 4, "step-level signature: (i, n, stage, algorithm)"
+        assert intra_progress, "intra-step run_kwargs['on_progress'] must fire"
+        assert len(intra_progress[0]) == 3, "intra-step signature: (done, total, stage)"
+    finally:
+        wm_adapter.RESULTS_DIR = prior_results_dir
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 

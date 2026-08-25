@@ -331,6 +331,10 @@ _RUNS_NEW_COLUMNS = [
     ("duration_s", "REAL"),
     ("error_text", "TEXT"),
     ("step_timings_json", "TEXT"),
+    # T24: the index of the step a background run is currently executing, so a
+    # poller can read progress off the run row. NULL before the first step and
+    # on a reused run; left at the last started step when a run fails/cancels.
+    ("current_step", "INTEGER"),
     # Fan-out (run_groups) and surrogate-control pairing, both nullable —
     # a run belongs to neither unless something opts it in.
     ("run_group_id", "INTEGER REFERENCES run_groups(id)"),
