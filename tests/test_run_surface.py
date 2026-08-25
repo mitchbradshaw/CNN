@@ -245,15 +245,66 @@ def test_scope_selector_span_feeds_recipe():
     assert recipe["span"] == [100, 500]
 
 
-# ── no surrogate control (ticket 44 owns that toggle) ───────────────────────
+# ── surrogate toggle (ticket 44) ─────────────────────────────────────────────
 
-def test_no_surrogate_control_appears_on_surface():
+def test_surrogate_toggle_defaults_on_and_appears_on_surface():
     from UI.workspaces.analyse.run_surface import RunSurface
 
     surface = RunSurface(_FakeApp(), chain=_lowpass_chain())
-    names = _widget_names(surface.layout())
-    assert not any("surrogate" in str(n).lower() for n in names), \
-        f"surrogate control must not appear on this surface; found: {names}"
+    layout = surface.layout()
+
+    assert surface.surrogate_toggle is not None
+    assert surface.surrogate_toggle.value is True
+    names = _widget_names(layout)
+    assert any("surrogate" in str(n).lower() for n in names), \
+        f"surrogate toggle must appear on the run surface; found: {names}"
+
+
+def test_surrogate_toggle_default_on_is_recorded_in_the_recipe():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(_FakeApp(), chain=_lowpass_chain())
+    recipe = surface._current_recipe()
+    assert recipe["surrogate"] is True
+
+
+def test_surrogate_toggle_off_is_recorded_in_the_recipe():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(_FakeApp(), chain=_lowpass_chain())
+    surface.surrogate_toggle.value = False
+    recipe = surface._current_recipe()
+    assert recipe["surrogate"] is False
+
+
+def test_on_run_finished_displays_detected_versus_surrogate_counts():
+    from UI.workspaces.analyse.run_surface import RunSurface
+    from Working.database import runs as run_db
+    from Working.database import queries as q
+
+    conn = init_db(":memory:")
+    try:
+        rec_id = q.insert_recording(conn, "fake.mat", 0, 1.0, 1000, 0, "fake.npy")
+        config_id, _ = run_db.get_or_create_config(conn, {"steps": []})
+        run_a = run_db.insert_run(conn, config_id, rec_id, 0, 1000, status="completed")
+        run_b = run_db.insert_run(conn, config_id, rec_id, 0, 1000, status="completed")
+        run_db.insert_detection(conn, run_a, 0, 10)
+        run_db.insert_detection(conn, run_a, 20, 30)
+        run_db.insert_detection(conn, run_b, 40, 50)
+
+        surface = RunSurface(_FakeApp(conn=conn), chain=_lowpass_chain(rec_id))
+        surface._on_run_finished({
+            "run_id": run_a,
+            "surrogate_run_id": run_b,
+            "reused": False,
+            "config_hash": "x",
+        })
+
+        assert "surrogate" in surface.status.object.lower()
+        assert "2" in surface.status.object
+        assert "1" in surface.status.object
+    finally:
+        conn.close()
 
 
 # ── launch / cancel: ticket-24 background run ───────────────────────────────
