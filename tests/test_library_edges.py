@@ -40,7 +40,10 @@ import numpy as np
 from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.database import runs as R
-from Working.distances import DISTANCE_REGISTRY, DISTANCE_SCALE_INVARIANT
+from Working.distances import (
+    DISTANCE_REGISTRY, DISTANCE_SCALE_INVARIANT, DISTANCE_NATIVE_LENGTH,
+    resample_to_length,
+)
 from Working.library import match_span_to_entry
 
 
@@ -213,7 +216,9 @@ def _make_scale_library(npy_dir):
     - recording A holds a single full sine cycle over 100 samples; that span
       is the exemplar entry.
     - recording B is 800 samples of zeros with the same sine planted at three
-      durations (50, 150, 200) at non-overlapping spans.
+      durations (50, 150, 200) at non-overlapping spans. Each planted instance
+      is the exemplar *resampled* to that duration, so under the
+      scale-invariant distance it is the same shape at a different scale.
 
     Returns (conn, entry_id, rec_a, rec_b, planted) where `planted` is a list
     of (duration, start_idx, end_idx).
@@ -228,7 +233,7 @@ def _make_scale_library(npy_dir):
     x = np.zeros(n)
     planted = [(50, 10, 60), (150, 300, 450), (200, 550, 750)]
     for dur, start, end in planted:
-        x[start:end] = np.sin(2 * np.pi * np.arange(dur) / dur)
+        x[start:end] = resample_to_length(sine, dur)
     rec_b = _write_recording(conn, npy_dir, "B.mat", 0, x)
     return conn, entry_id, rec_a, rec_b, planted
 

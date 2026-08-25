@@ -12,6 +12,11 @@ so the detail view and the motif browser/review surface show the same shape
 (`axiswise=True`, `zscore` vdim, z-normalised). The family may span recordings
 and channels; each member's snippet is resampled to the exemplar's length
 before being concatenated and handed to that builder as one group.
+
+The entry detail also hosts the "search at other scales" action (ticket 40):
+searching for the exemplar's shape across a configurable range of durations,
+under both the scale-invariant distance and the native-length control, with
+their recall shown side by side.
 """
 
 import numpy as np
@@ -20,7 +25,11 @@ import panel as pn
 from Working.config import MOTIF_BOTTOM_HEIGHT
 from Working.database import queries as q
 from Working.database import runs as R
-from Working.distances import resample_to_length
+from Working.distances import (
+    DISTANCE_NATIVE_LENGTH, DISTANCE_SCALE_INVARIANT, resample_to_length,
+)
+from Working.library import search_entry_across_durations
+from Working.recipes import short_hash
 from UI.plots import build_motif_waveform_overlay, load_channel_mmap
 
 
@@ -42,10 +51,34 @@ class EntryDetail:
         self.member_pane = pn.pane.Markdown("*No exemplar selected.*")
         self.edge_pane = pn.pane.Markdown("*No edges yet.*")
 
+        # Search-at-other-scales action (ticket 40).
+        self.search_recording = pn.widgets.Select(
+            name="Search recording", options={},
+        )
+        self.search_min_duration = pn.widgets.IntInput(
+            name="Min duration (samples)", value=10, step=1,
+        )
+        self.search_max_duration = pn.widgets.IntInput(
+            name="Max duration (samples)", value=200, step=1,
+        )
+        self.search_step = pn.widgets.IntInput(
+            name="Duration step (samples)", value=10, step=1,
+        )
+        self.search_threshold = pn.widgets.FloatInput(
+            name="Threshold", value=0.1, step=0.05,
+        )
+        self.search_run_button = pn.widgets.Button(
+            name="Search at other scales", button_type="primary",
+        )
+        self.search_results_pane = pn.pane.Markdown("*Run a search to see results.*")
+        self.last_search_results = None
+        self.search_run_button.on_click(self._on_search_run)
+
         self._entry_id = None
         self._entries = R.list_motif_entries(self.conn)
 
         self._build_entry_options()
+        self._build_search_recording_options()
         self.entry_select.param.watch(self._on_select_entry, "value")
         self._render_empty()
         if self._entries:
@@ -66,6 +99,18 @@ class EntryDetail:
             self.member_pane,
             pn.pane.Markdown("**Edges**"),
             self.edge_pane,
+            pn.pane.Markdown("### Search at other scales"),
+            pn.pane.Markdown(
+                "*Search for the exemplar's shape at durations it was never "
+                "defined at, under both the scale-invariant distance and the "
+                "native-length control.*"
+            ),
+            self.search_recording,
+            pn.Row(self.search_min_duration, self.search_max_duration,
+                   self.search_step),
+            self.search_threshold,
+            self.search_run_button,
+            self.search_results_pane,
             sizing_mode="stretch_width",
         )
 
@@ -102,6 +147,116 @@ class EntryDetail:
             options[label] = entry["id"]
         self.entry_select.options = options
 
+    def _build_search_recording_options(self):
+        options = {}
+        for recording in q.list_recordings(self.conn):
+            label = f"{recording['source_file']} CH{recording['channel']:02d}"
+            options[label] = recording["id"]
+        self.search_recording.options = options
+
+    # ── Search at other scales ──────────────────────────────────────────
+
+    def _on_search_run(self, event):
+        """Run the search-at-other-scales action for the selected exemplar.
+
+        Runs the same search under `DISTANCE_SCALE_INVARIANT` and under
+        `DISTANCE_NATIVE_LENGTH` (the unnormalised control) so their recall
+        is comparable side by side, writes the resulting members/edges, and
+        renders a summary table.
+        """
+        if self._entry_id is None:
+            self.search_results_pane.object = "*Select an exemplar first.*"
+            return
+        if not self.search_recording.options:
+            self.search_results_pane.object = "*No recordings to search.*"
+            return
+
+        recording_id = self.search_recording.value
+        if recording_id is None:
+            recording_id = next(iter(self.search_recording.options.values()))
+
+        min_dur = int(self.search_min_duration.value)
+        max_dur = int(self.search_max_duration.value)
+        step = int(self.search_step.value)
+        threshold = float(self.search_threshold.value)
+
+        if step < 1 or max_dur < min_dur or min_dur < 1:
+            self.search_results_pane.object = "*Invalid duration range.*"
+            return
+
+        durations = list(range(min_dur, max_dur + 1, step))
+        entry = R.get_motif_entry(self.conn, self._entry_id)
+        entry_rec = q.get_recording_by_id(self.conn, entry["recording_id"])
+
+        results = {}
+        for distance_function in (DISTANCE_SCALE_INVARIANT, DISTANCE_NATIVE_LENGTH):
+            search_recipe = {
+                "action": "search_at_other_scales",
+                "entry": {
+                    "source_file": entry_rec["source_file"] if entry_rec else None,
+                    "channel": entry_rec["channel"] if entry_rec else None,
+                    "start_idx": entry["start_idx"],
+                    "end_idx": entry["end_idx"],
+                },
+                "recording_id": recording_id,
+                "durations": durations,
+                "threshold": threshold,
+                "distance_function": distance_function,
+            }
+            h = short_hash(search_recipe)
+            results[distance_function] = search_entry_across_durations(
+                self.conn, self._entry_id, recording_id,
+                durations=durations,
+                threshold=threshold, recipe_hash=h,
+                distance_function=distance_function,
+            )
+
+        self.last_search_results = results
+        self.search_results_pane.object = self._format_search_results(
+            entry, results, durations,
+        )
+
+    def _format_search_results(self, entry, results, durations):
+        entry_rec = q.get_recording_by_id(self.conn, entry["recording_id"])
+        entry_label = entry["label"] or f"Exemplar {entry['id']}"
+        if entry_rec is not None:
+            entry_label += (
+                f" — {entry_rec['source_file']} CH{entry_rec['channel']:02d} "
+                f"[{entry['start_idx']}, {entry['end_idx']})"
+            )
+
+        target = results[DISTANCE_SCALE_INVARIANT]["recording_id"]
+        target_rec = q.get_recording_by_id(self.conn, target)
+        if target_rec is not None:
+            target_label = (
+                f"{target_rec['source_file']} CH{target_rec['channel']:02d}"
+            )
+        else:
+            target_label = f"recording {target}"
+
+        step_text = "—"
+        if len(durations) > 1:
+            step_text = str(durations[1] - durations[0])
+
+        lines = [
+            f"**Search at other scales** — {entry_label}",
+            f"Target: {target_label}",
+            f"Durations: {durations[0]}–{durations[-1]} step {step_text}",
+            "",
+            "| distance_function | matches | matched durations |",
+            "|---|---|---|",
+        ]
+        for distance_function, result in results.items():
+            matched_durations = sorted({r["duration"] for r in result["matches"]})
+            dur_text = (
+                ", ".join(str(d) for d in matched_durations)
+                if matched_durations else "—"
+            )
+            lines.append(
+                f"| {distance_function} | {result['recall']} | {dur_text} |"
+            )
+        return "\n".join(lines)
+
     def _render_empty(self):
         self._entry_id = None
         self.overlay_pane.object = build_motif_waveform_overlay(
@@ -117,6 +272,15 @@ class EntryDetail:
             return
 
         self._entry_id = entry_id
+
+        # Default the search target to the exemplar's own recording so the
+        # action's first run is the natural "does this recur at other scales
+        # in the same recording" question.
+        if self.search_recording.options:
+            entry_rec_id = entry["recording_id"]
+            if entry_rec_id in self.search_recording.options.values():
+                self.search_recording.value = entry_rec_id
+
         members = self._gather_members(entry)
         edges_by_member = self._edges_by_member(entry, members)
 
