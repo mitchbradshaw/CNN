@@ -16,16 +16,18 @@ and wires launch/cancel to the ticket-24 background-run machinery
 `should_cancel`).
 
 The surrogate toggle is deliberately NOT here — ticket 44 owns that control
-(merge risk MEDIUM vs 44), and ticket 32 owns progress/per-stage-result
-rendering on this same file (merge risk HIGH vs 32). This surface only
-decides, launches and cancels.
+(merge risk MEDIUM vs 44). Ticket 32 adds the slow-run progress indicator
+(estimated finish appears only above `MP_INTERACTIVE_BUDGET_S`) and the
+per-stage results pane that accumulates each landed step, so this surface
+decides, launches, cancels, and shows how a launched run is getting on.
 """
 
+import datetime
 import threading
 
 import panel as pn
 
-from Working.config import CLUSTER_ROUTING_CEILING_S
+from Working.config import CLUSTER_ROUTING_CEILING_S, MP_INTERACTIVE_BUDGET_S
 from Working.database import queries as q
 from Working.execution import RecipeCancelled, RecipeExecutionError, execute_recipe
 from Working.hpc.job_export import estimate_recipe_seconds, export_job, route_recipe
@@ -65,13 +67,15 @@ class RunSurface:
     sample count, live database connection and (by default) the chain under
     construction; a `chain` may be passed explicitly instead."""
 
-    def __init__(self, app, chain=None, ceiling_s=CLUSTER_ROUTING_CEILING_S):
+    def __init__(self, app, chain=None, ceiling_s=CLUSTER_ROUTING_CEILING_S,
+                 progress_threshold_s=MP_INTERACTIVE_BUDGET_S):
         self.app = app
         if chain is None:
             builder = getattr(app, "chain_builder", None)
             chain = getattr(builder, "chain", None)
         self.chain = chain or ChainState(recording_id=getattr(app, "_recording_id", 1))
         self.ceiling_s = ceiling_s
+        self.progress_threshold_s = progress_threshold_s
 
         self._cancel_event = threading.Event()
         self._thread = None
@@ -79,6 +83,7 @@ class RunSurface:
         self._estimate_seconds = None
         self._fanout_width = 1
         self._route = None
+        self._current_target_label = None
 
         self.estimate_pane = pn.pane.Markdown("")
         self.routing_pane = pn.pane.Markdown("")
@@ -93,6 +98,8 @@ class RunSurface:
         self.export_button = pn.widgets.Button(name="Export cluster job", button_type="default")
         self.cancel_button = pn.widgets.Button(name="Cancel", button_type="danger", disabled=True)
         self.status = pn.pane.Markdown("")
+        self.progress_pane = pn.pane.Markdown("")
+        self.stage_results = pn.Column()
 
         self._load_scope_options()
         self._wire_handlers()
@@ -113,6 +120,11 @@ class RunSurface:
             pn.layout.Divider(),
             pn.Row(self.local_button, self.export_button, self.cancel_button),
             self.status,
+            pn.layout.Divider(),
+            pn.pane.Markdown("### Progress"),
+            self.progress_pane,
+            pn.pane.Markdown("### Stage results"),
+            self.stage_results,
             sizing_mode="stretch_width",
         )
 
@@ -248,6 +260,83 @@ class RunSurface:
             self.export_button.button_type = "default"
             self.local_button.button_type = "primary"
 
+    # ── progress / per-stage results (ticket 32) ──────────────────────────
+
+    def _progress_visible(self):
+        return (self._estimate_seconds is not None
+                and self._estimate_seconds > self.progress_threshold_s)
+
+    def _estimated_finish(self):
+        if self._estimate_seconds is None:
+            return "?"
+        finish = datetime.datetime.now() + datetime.timedelta(seconds=self._estimate_seconds)
+        return finish.strftime("%H:%M:%S")
+
+    def _set_progress(self, detail):
+        if self._progress_visible():
+            self.progress_pane.object = (
+                f"**Estimated finish:** {self._estimated_finish()} — {detail}"
+            )
+        else:
+            self.progress_pane.object = ""
+
+    def _update_step_progress(self, i, n_steps, stage, algorithm):
+        self._set_progress(f"Step {i + 1}/{n_steps}: {stage}.{algorithm}")
+
+    def _update_intra_step_progress(self, done, total, stage):
+        self._set_progress(f"{stage}: {done}/{total}")
+
+    def _update_target_progress(self, i, n_targets, label):
+        self._set_progress(f"Target {i + 1}/{n_targets}: {label}")
+
+    def _stage_label(self, recipe, step_index):
+        fan = recipe.get("fan_out")
+        if fan and fan["kind"] == "bands":
+            if step_index == 0:
+                return "preprocessing.bandpass"
+            step = recipe["steps"][step_index - 1]
+        else:
+            step = recipe["steps"][step_index]
+        return f"{step['stage']}.{step['algorithm']}"
+
+    def _describe_result(self, result):
+        kind = result.output_kind
+        if kind == "intervals":
+            return f"{len(result.intervals or [])} detection(s)"
+        if kind == "spanset":
+            return f"{len(getattr(result.value, 'starts', ()))} span(s)"
+        if kind == "signal":
+            shape = getattr(result.x, "shape", None)
+            return f"signal {tuple(shape)}" if shape is not None else "signal"
+        if kind == "encoding":
+            try:
+                n = len(result.encoding)
+            except TypeError:
+                n = None
+            return f"encoding ({n} values)" if n is not None else "encoding"
+        value = result.value
+        if value is not None:
+            for attr in ("n_windows", "n_timepoints", "starts"):
+                if hasattr(value, attr):
+                    try:
+                        n = len(getattr(value, attr))
+                    except TypeError:
+                        continue
+                    return f"{kind} ({n})"
+        return kind
+
+    def _clear_stage_results(self):
+        self.stage_results.clear()
+
+    def _append_stage_result(self, step_index, result, recipe, target_label=None):
+        label = self._stage_label(recipe, step_index)
+        heading = f"**Step {step_index + 1}** — {label}"
+        if target_label is not None:
+            heading += f" (target {target_label})"
+        self.stage_results.append(
+            pn.pane.Markdown(f"{heading}\n{self._describe_result(result)}")
+        )
+
     # ── launch / cancel (ticket 24 background run) ─────────────────────────
 
     def _on_run(self, _event=None):
@@ -267,6 +356,9 @@ class RunSurface:
         self.export_button.disabled = True
         self.cancel_button.disabled = False
         self.status.object = f"Running {recipe_summary(recipe)} ..."
+        self._current_target_label = None
+        self._clear_stage_results()
+        self._set_progress("Starting ...")
 
         db_path = self.app.conn.execute("PRAGMA database_list").fetchone()[2] or None
         doc = pn.state.curdoc  # captured here, on the serving thread
@@ -275,22 +367,56 @@ class RunSurface:
             # A worker thread must never touch `self.app.conn` — SQLite
             # connections are thread-affined. `fan_out_recipe` /
             # `execute_recipe` open their own connection from `db_path`.
-            def on_progress(i, n, label):
+            def _show(status_text, progress_text):
                 def _update():
-                    self.status.object = f"Running target {i + 1}/{n}: {label} ..."
+                    self.status.object = status_text
+                    self._set_progress(progress_text)
                 _run_on_ui_thread(doc, _update)
 
+            def on_step_progress(i, n, stage, algorithm):
+                label = f"{stage}.{algorithm}"
+                _show(
+                    f"Running step {i + 1}/{n}: {label} ...",
+                    f"Step {i + 1}/{n}: {label}",
+                )
+
+            def on_intra_progress(done, total, stage):
+                _show(
+                    f"Running {stage} {done}/{total} ...",
+                    f"{stage}: {done}/{total}",
+                )
+
+            def on_target_progress(i, n, label):
+                self._current_target_label = label
+                _show(
+                    f"Running target {i + 1}/{n}: {label} ...",
+                    f"Target {i + 1}/{n}: {label}",
+                )
+
+            def on_step_result(i, result):
+                target_label = self._current_target_label
+
+                def _update():
+                    self._append_stage_result(i, result, recipe, target_label=target_label)
+                _run_on_ui_thread(doc, _update)
+
+            run_kwargs = {"on_progress": on_intra_progress}
             try:
                 if recipe.get("fan_out"):
                     out = fan_out_recipe(
                         recipe, db_path=db_path,
                         should_cancel=self._cancel_event.is_set,
-                        on_progress=on_progress,
+                        on_progress=on_target_progress,
+                        run_kwargs=run_kwargs,
+                        on_step_result=on_step_result,
                     )
                 else:
                     out = execute_recipe(
                         recipe, db_path=db_path,
                         should_cancel=self._cancel_event.is_set,
+                        on_progress=on_step_progress,
+                        run_kwargs=run_kwargs,
+                        on_step_result=on_step_result,
                     )
                 _run_on_ui_thread(doc, lambda: self._on_run_finished(out))
             except RecipeCancelled:
@@ -328,6 +454,7 @@ class RunSurface:
         self.local_button.disabled = False
         self.export_button.disabled = False
         self.cancel_button.disabled = True
+        self.progress_pane.object = ""
         if "run_group_id" in out:
             self.status.object = f"Done. run_group_id={out['run_group_id']}"
         else:
@@ -337,10 +464,12 @@ class RunSurface:
         self.local_button.disabled = False
         self.export_button.disabled = False
         self.cancel_button.disabled = True
+        self.progress_pane.object = ""
         self.status.object = "**Cancelled.**"
 
     def _on_run_failed(self, message):
         self.local_button.disabled = False
         self.export_button.disabled = False
         self.cancel_button.disabled = True
+        self.progress_pane.object = ""
         self.status.object = f"**Failed:** {message}"
