@@ -61,6 +61,8 @@ class LibraryGrid:
         self.group_by.param.watch(self._on_group_by, "value")
         self._build()
         self.groups = self._group_entries()
+        self._sections = pn.Column(sizing_mode="stretch_width")
+        self._render_sections()
 
     # ── Layout ─────────────────────────────────────────────────────────
 
@@ -75,19 +77,26 @@ class LibraryGrid:
                 ),
                 sizing_mode="stretch_width",
             )
-        sections = [self.group_by]
+        return pn.Column(self.group_by, self._sections, sizing_mode="stretch_width")
+
+    # ── Grouping ───────────────────────────────────────────────────────
+
+    def _on_group_by(self, event):
+        self.groups = self._group_entries()
+        self._render_sections()
+
+    def _render_sections(self):
+        """Rebuild the section panes for the current `self.groups` in place,
+        so the `pn.Column` already embedded by `layout()` picks up the new
+        grouping without needing `layout()` to be called again."""
+        sections = []
         for title, entry_ids in self.groups:
             sections.append(pn.pane.Markdown(f"### {title}"))
             sections.append(pn.FlexBox(
                 *[self._card_by_entry[eid] for eid in entry_ids],
                 sizing_mode="stretch_width",
             ))
-        return pn.Column(*sections, sizing_mode="stretch_width")
-
-    # ── Grouping ───────────────────────────────────────────────────────
-
-    def _on_group_by(self, event):
-        self.groups = self._group_entries()
+        self._sections.objects = sections
 
     def _group_entries(self):
         basis = self.group_by.value

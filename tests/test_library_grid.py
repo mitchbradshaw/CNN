@@ -52,6 +52,20 @@ from UI.workspaces.library.grid import LibraryGrid
 
 # ── fixture helpers ─────────────────────────────────────────────────────────
 
+def _group_titles_from_layout(layout):
+    """Walk a `LibraryGrid.layout()` panel tree and collect the group
+    heading text (the `### <title>` markdown panes), recursing into nested
+    Column/FlexBox containers. Used to assert on what the grid actually
+    renders, not just on the `grid.groups` data structure."""
+    titles = []
+    for obj in layout:
+        if isinstance(obj, pn.pane.Markdown) and obj.object.startswith("### "):
+            titles.append(obj.object[len("### "):])
+        elif hasattr(obj, "__iter__"):
+            titles.extend(_group_titles_from_layout(obj))
+    return titles
+
+
 def _write_recording(conn, npy_dir, source_file, channel, data, fs=1.0):
     """Write `data` to a scratch .npy file and insert a recording row that
     points at it. Returns the recording id."""
@@ -153,6 +167,29 @@ def test_group_by_tag_puts_a_two_tag_entry_under_both_tags():
             assert e1 in groups["ridge"]
             assert e2 in groups["sharkfin"]
             assert e3 in groups["untagged"]
+        finally:
+            conn.close()
+
+
+# ── criterion 1b: the selector actually re-renders the layout ───────────────
+
+def test_group_by_selector_rerenders_the_layout_when_changed():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            layout = grid.layout()
+            assert set(_group_titles_from_layout(layout)) == {"aaa", "bbb"}
+
+            grid.group_by.value = "tag"
+            assert set(_group_titles_from_layout(layout)) == {
+                "sharkfin", "ridge", "untagged",
+            }
+
+            grid.group_by.value = "cluster"
+            assert set(_group_titles_from_layout(layout)) == {
+                "sine-a", "sine-b", "sine-c",
+            }
         finally:
             conn.close()
 
