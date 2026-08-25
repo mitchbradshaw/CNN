@@ -1,7 +1,7 @@
-"""
+﻿"""
 test_adapter_spec.py
 ======================
-Ticket 05/contract — adapter spec. `AdapterSpec` declares an `input_kind`,
+Ticket 05/contract â€” adapter spec. `AdapterSpec` declares an `input_kind`,
 typed `side_inputs`, and an optional runtime `estimate`; `output_kind`
 is one of the seven interchange type names (see `Working.types` /
 ticket 01). `AdapterResult` carries a `value` field for a typed object.
@@ -11,7 +11,7 @@ expand phase accepted it side-by-side with the typed vocabulary, and the
 contract phase (ticket 48) removed it. `OUTPUT_KINDS` is exactly the seven
 interchange type names.
 
-Pure-dataclass contract tests, no database/UI — runnable standalone:
+Pure-dataclass contract tests, no database/UI â€” runnable standalone:
     python tests/test_adapter_spec.py
 """
 
@@ -64,7 +64,7 @@ def _spec(**overrides):
     return AdapterSpec(**kwargs)
 
 
-# ── output_kind: the legacy vocabulary is gone ──────────────────────────────
+# â”€â”€ output_kind: the legacy vocabulary is gone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_legacy_output_vocabulary_is_gone():
     # The contract phase removed the legacy `intervals` output kind.
@@ -74,7 +74,7 @@ def test_legacy_output_vocabulary_is_gone():
     assert set(OUTPUT_KINDS) == set(_interchange_type_names())
 
 
-# ── output_kind: interchange types accepted too ─────────────────────────────
+# â”€â”€ output_kind: interchange types accepted too â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_output_kind_accepts_the_name_of_every_type_working_types_owns():
     # An adapter may declare its output as any type the type module defines,
@@ -97,7 +97,7 @@ def test_output_kind_union_has_no_duplicates():
     assert len(OUTPUT_KINDS) == len(set(OUTPUT_KINDS))
 
 
-# ── input_kind ───────────────────────────────────────────────────────────────
+# â”€â”€ input_kind â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_input_kind_defaults_to_none_meaning_root_signal():
     assert _spec().input_kind is None
@@ -126,7 +126,7 @@ def test_input_kind_rejects_an_unknown_value():
         pass
 
 
-# ── side_inputs ──────────────────────────────────────────────────────────────
+# â”€â”€ side_inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_side_inputs_default_to_an_empty_list():
     assert _spec().side_inputs == []
@@ -173,7 +173,7 @@ def test_side_input_rejects_an_empty_source_list():
         pass
 
 
-# ── estimate ─────────────────────────────────────────────────────────────────
+# â”€â”€ estimate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_estimate_defaults_to_none_meaning_free():
     assert _spec().estimate is None
@@ -184,7 +184,7 @@ def test_estimate_accepts_a_callable_returning_predicted_seconds():
     assert spec.estimate(None, None, 1.0) == 12.5
 
 
-# ── AdapterResult.value ──────────────────────────────────────────────────────
+# â”€â”€ AdapterResult.value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_adapter_result_value_defaults_to_none():
     result = AdapterResult(output_kind="signal")
@@ -203,8 +203,8 @@ def test_adapter_result_value_carries_a_typed_object_alongside_untouched_fields(
     assert result.encoding is None
 
 
-# ── untouched surface: recommend / derive / persist / max_span_samples /
-#    plot / validate_params ─────────────────────────────────────────────────
+# â”€â”€ untouched surface: recommend / derive / persist / max_span_samples /
+#    plot / validate_params â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_validate_params_behaviour_is_unchanged():
     from Adapters.base import ParamSpec
@@ -230,7 +230,7 @@ def test_the_new_fields_default_to_the_values_the_shipped_adapters_rely_on():
     assert spec.estimate is None
 
 
-# ── the shipped adapters import and register unmodified ────────────────────
+# â”€â”€ the shipped adapters import and register unmodified â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @contextlib.contextmanager
 def _third_party_gaps_bridged():
@@ -239,7 +239,7 @@ def _third_party_gaps_bridged():
     conda environment.
 
     `kymatio` is broken against the installed scipy (it imports
-    `scipy.special.sph_harm`, which scipy has since removed) — the case
+    `scipy.special.sph_harm`, which scipy has since removed) â€” the case
     `Adapters/registry.py`'s docstring names, and the reason
     `discover_adapters()` skips a module rather than failing. The stand-in
     satisfies the import and nothing else: constructing it raises, so no test
@@ -294,7 +294,7 @@ def _shipped_adapter_specs():
 
 def test_every_shipped_adapter_registers_without_modification():
     specs = _shipped_adapter_specs()
-    assert len(specs) == 20, f"expected the twenty shipped adapters, got {sorted(specs)}"
+    assert len(specs) == 21, f"expected the twenty-one shipped adapters, got {sorted(specs)}"
     # Ticket 08 remaps detection_matrix_profile (encoding -> scores) and
     # preprocessing_window_matrix (encoding -> windowset) to their correct
     # types, and adds detection_threshold, a typed (input_kind='scores')
@@ -306,8 +306,9 @@ def test_every_shipped_adapter_registers_without_modification():
     # typed (input_kind='signal', output_kind='signal') adapter. Ticket 09
     # removes detection_entropy entirely: its whole-span scalar fits none of
     # the seven interchange types, so it is out of scope rather than an
-    # eighth type. Every shipped adapter therefore declares a typed
-    # output_kind and input_kind.
+    # eighth type. Ticket 11 adds catalogue_cluster, a new typed
+    # (input_kind='windowset', output_kind='grouping') adapter. Every shipped
+    # adapter therefore declares a typed output_kind and input_kind.
     for module_name, spec in specs.items():
         assert spec.output_kind in OUTPUT_KINDS, module_name
         assert spec.input_kind is None or spec.input_kind in OUTPUT_KINDS, module_name
@@ -329,7 +330,7 @@ def test_the_expansion_did_not_drop_a_hook_a_shipped_adapter_declares():
         assert owners, f"no shipped adapter declares {hook} any more"
 
 
-# ── runner ───────────────────────────────────────────────────────────────────
+# â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
