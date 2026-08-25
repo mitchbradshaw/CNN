@@ -183,6 +183,18 @@ def _pane_named(tabs, name):
     return tabs.objects[names.index(name)]
 
 
+def _tabs_inside(pane):
+    """The first `pn.Tabs` anywhere inside `pane` (ticket 34: Analyse is a
+    Row(run-history sidebar, Tabs)), or None."""
+    if isinstance(pane, pn.Tabs):
+        return pane
+    for obj in getattr(pane, "objects", ()):
+        found = _tabs_inside(obj)
+        if found is not None:
+            return found
+    return None
+
+
 # ── construction ───────────────────────────────────────────────────────────
 
 def test_construction_builds_a_non_none_layout(tmp_path):
@@ -389,10 +401,12 @@ def test_block_inspector_mounts_into_the_analyse_workspace_as_a_real_pane():
     app, db_path = _fresh_app()
     try:
         analyse = _pane_named(app.tabs, "Analyse")
-        assert isinstance(analyse, pn.Tabs), \
-            "Analyse should group its sections once more than one is mounted"
-        assert "Block inspector" in _tab_names(analyse)
-        pane = _pane_named(analyse, "Block inspector")
+        # Ticket 34: Analyse is a Row(run-history sidebar, section Tabs).
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None, \
+            "Analyse should still group its sections in sub-tabs"
+        assert "Block inspector" in _tab_names(tabs)
+        pane = _pane_named(tabs, "Block inspector")
         assert pane is not None, "Block inspector renders as None -- the blank-pane failure"
     finally:
         _close_and_unlink(app, db_path)

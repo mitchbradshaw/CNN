@@ -40,6 +40,13 @@ _EMPTY_NOTICE = (
 #: `{workspace: [(label, factory), ...]}`, insertion-ordered.
 _REGISTRY = {}
 
+#: `{workspace: factory}` — a persistent sidebar rendered to the LEFT of a
+#: workspace's section tabs (ticket 34: Analyse's run-history sidebar).
+#: Factored out of the section registry because a sidebar is not a section:
+#: it has no sub-tab, it is always visible within the workspace, and it is
+#: never a duplicate of a tab the user could have selected.
+_SIDEBARS = {}
+
 
 class UnknownWorkspace(KeyError):
     """Raised for a workspace name that is not one of `WORKSPACES`.
@@ -78,29 +85,57 @@ def sections(workspace):
     return tuple(_REGISTRY.get(workspace, ()))
 
 
+def register_sidebar(workspace, factory):
+    """Mount `factory` as a persistent sidebar for `workspace`.
+
+    `factory(app)` is called at layout time and must return a Panel object.
+    A sidebar is rendered to the left of the workspace's section content
+    (tabs, single pane, or placeholder) and is never itself a section.
+    """
+    if workspace not in WORKSPACES:
+        raise UnknownWorkspace(
+            f"{workspace!r} is not a workspace; expected one of {list(WORKSPACES)}"
+        )
+    if workspace in _SIDEBARS:
+        raise ValueError(
+            f"{workspace!r} already has a sidebar -- two tickets have "
+            f"registered one, which is a merge collision"
+        )
+    _SIDEBARS[workspace] = factory
+
+
 def build(workspace, app, base=None):
     """Return the pane for `workspace`, built against `app`.
 
     `base` is content the shell owns and always shows first -- Explore passes
     the viewer that way, so a ticket registering into Explore adds below it
     rather than replacing it.
+
+    A workspace with a registered sidebar renders `pn.Row(sidebar, content)`,
+    so the sidebar is always visible alongside the workspace's sections.
     """
     registered = sections(workspace)
     built = [factory(app) for _, factory in registered]
 
     if base is not None:
         if not built:
-            return base
-        return pn.Column(base, *built, sizing_mode="stretch_width")
+            content = base
+        else:
+            content = pn.Column(base, *built, sizing_mode="stretch_width")
+    elif not built:
+        content = pn.pane.Markdown(_EMPTY_NOTICE.format(workspace=workspace))
+    elif len(built) == 1:
+        content = built[0]
+    else:
+        content = pn.Tabs(
+            *((label, pane) for (label, _), pane in zip(registered, built)),
+            sizing_mode="stretch_width",
+        )
 
-    if not built:
-        return pn.pane.Markdown(_EMPTY_NOTICE.format(workspace=workspace))
-    if len(built) == 1:
-        return built[0]
-    return pn.Tabs(
-        *((label, pane) for (label, _), pane in zip(registered, built)),
-        sizing_mode="stretch_width",
-    )
+    sidebar_factory = _SIDEBARS.get(workspace)
+    if sidebar_factory is not None:
+        return pn.Row(sidebar_factory(app), content, sizing_mode="stretch_width")
+    return content
 
 
 def reset():
@@ -111,6 +146,7 @@ def reset():
     ever adds a tab.
     """
     _REGISTRY.clear()
+    _SIDEBARS.clear()
     for workspace, label, factory in BUILTIN_SECTIONS:
         register(workspace, label, factory)
     register("Analyse", "Compare", lambda app: CompareSurface(app).layout())
@@ -118,6 +154,8 @@ def reset():
              lambda app: RunGroupExporter(app).layout())
     register("Analyse", "Block inspector",
              lambda app: BlockInspector(app).layout())
+    # Ticket 34: run history is Analyse's sidebar, not a section.
+    register_sidebar("Analyse", lambda app: app.run_history.layout())
 
 
 reset()

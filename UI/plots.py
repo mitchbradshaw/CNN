@@ -905,7 +905,7 @@ def build_reviewed_ribbon(reviewed_rows, fs, x_range_samples, n_buckets=REVIEWED
 
 def build_window_matrix_ribbon(coverage, fs, x_range_samples, n_buckets=WM_COVERAGE_RIBBON_BUCKETS):
     """One coverage-ribbon pane for ONE window-matrix ladder scale
-    (WINDOW_MATRIX_UI_PROMPT.md §8.3, `UI.window_matrix_panel`) — the caller
+    (WINDOW_MATRIX_UI_PROMPT.md §8.3, `UI.workspaces.analyse.window_matrix`) — the caller
     builds one of these per scale that has any coverage, stacked under the
     staged-span preview.
 

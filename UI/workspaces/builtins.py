@@ -16,15 +16,14 @@ imports at all.
 #: workspace with more than one section shows on its sub-tab, so it is user-
 #: facing text, not an identifier.
 BUILTIN_SECTIONS = (
-    # Analyse holds the run panel first: `UI/run_history.py` reaches the run
-    # panel with `tabs.active = 1`, which lands on this workspace's first
-    # section. Ticket 34 folds run history in properly; until then it keeps the
-    # tab it has always had, one level down.
+    # Analyse holds the run panel first so that `activate_workspace("Analyse",
+    # "Run algorithm")` lands on it. Ticket 34 folded run history into Analyse
+    # as a sidebar (registered via `workspaces.register_sidebar`), so it is no
+    # longer a section here.
     ("Analyse", "Run algorithm", lambda app: app.run_panel.layout()),
-    ("Analyse", "Run history", lambda app: app.run_history.layout()),
     # Ticket 29: the chain builder. `ChainBuilder` is instantiated in
-    # `UI/viewer/app.py`, same as `run_panel`/`run_history` above -- this
-    # table only ever reads the attribute off `app`, per its own docstring.
+    # `UI/viewer/app.py`, same as `run_panel` above -- this table only ever
+    # reads the attribute off `app`, per its own docstring.
     ("Analyse", "Chain builder", lambda app: app.chain_builder.layout()),
     ("Review", "Candidate queue", lambda app: app.review_surface.layout()),
     ("Library", "Motif browser", lambda app: app.motif_browser.layout()),

@@ -18,7 +18,7 @@ from Working.database.schema import init_db
 from UI.admin import VocabularyAdmin
 from UI.file_import import FileImportPanel
 from UI.analyse import RunPanel
-from UI.run_history import RunHistoryBrowser
+from UI.workspaces.analyse.history import RunHistoryBrowser
 from UI.motif_browser import MotifBrowser
 from UI.workspaces.analyse import ChainBuilder
 from UI.workspaces.review import ReviewSurface

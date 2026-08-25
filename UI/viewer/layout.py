@@ -270,7 +270,11 @@ class LayoutMixin:
         Callers used to write `self.tabs.active = 1` and rely on the tab order.
         That is no longer sufficient on its own: the run panel is a section
         inside Analyse now, so a caller that switches only the outer tab can
-        land on Analyse with Run history showing and its own surface hidden.
+        land on Analyse with the wrong surface showing.
+
+        Since ticket 34, Analyse is a `pn.Row(run-history sidebar, Tabs)`, so
+        the section lives in the inner `pn.Tabs` rather than in the workspace
+        pane itself; this walks a `pn.Row` to find the first inner `pn.Tabs`.
 
         Silently does nothing for a section that is not mounted -- a workspace
         holding a single section renders it directly rather than as sub-tabs,
@@ -281,5 +285,10 @@ class LayoutMixin:
         if section is None:
             return
         pane = self.tabs.objects[names.index(workspace)]
+        if isinstance(pane, pn.Row):
+            pane = next(
+                (obj for obj in pane.objects if isinstance(obj, pn.Tabs)),
+                pane,
+            )
         if isinstance(pane, pn.Tabs) and section in pane._names:
             pane.active = list(pane._names).index(section)
