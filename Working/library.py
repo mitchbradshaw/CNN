@@ -20,6 +20,7 @@ import numpy as np
 
 from Working.database import queries as q
 from Working.database import runs as R
+from Working.cross_channel import ARTIFACT, classify_waveforms
 from Working.distances import DISTANCE_REGISTRY, DISTANCE_SCALE_INVARIANT
 
 
@@ -151,3 +152,79 @@ def match_span_to_entry(conn, entry_id, recording_id, start_idx, end_idx,
         "threshold": threshold,
         "recipe_hash": recipe_hash,
     }
+
+
+def _set_motif_edge_classification(conn, edge_id, lag, waveform_correlation,
+                                   classification_bin):
+    """Write the cross-channel classification onto an existing motif edge.
+
+    `R.insert_motif_edge` is deliberately idempotent and therefore cannot
+    update a duplicate key, so the classification action needs this single
+    UPDATE path for edges the search/matching seam has already created.
+    """
+    conn.execute(
+        """UPDATE motif_edge
+           SET lag = ?, waveform_correlation = ?, classification_bin = ?
+           WHERE id = ?""",
+        (lag, waveform_correlation, classification_bin, edge_id),
+    )
+    conn.commit()
+
+
+def classify_cross_channel_edges(conn, entry_id):
+    """Classify and persist every cross-channel edge of one motif family.
+
+    A pair is cross-channel when both member spans live in recordings with the
+    same `source_file` but different `channel` — the same acquisition seen on
+    two electrodes. For each such edge, the lag is the cross-correlation peak
+    and the waveform identity is the correlation at that lag, computed by
+    `Working.cross_channel.classify_waveforms`, then written back onto the
+    edge.
+
+    Returns
+    -------
+    list[dict]
+        One dict per classified edge, in `list_motif_edges` order, with the
+        persisted `edge_id`, `member_a_id`, `member_b_id`, `lag`,
+        `waveform_correlation` and `classification_bin`.
+    """
+    results = []
+    for edge in R.list_motif_edges(conn, entry_id):
+        member_a = R.get_motif_member(conn, edge["member_a_id"])
+        member_b = R.get_motif_member(conn, edge["member_b_id"])
+        recording_a = q.get_recording_by_id(conn, member_a["recording_id"])
+        recording_b = q.get_recording_by_id(conn, member_b["recording_id"])
+
+        if (recording_a["source_file"] != recording_b["source_file"]
+                or recording_a["channel"] == recording_b["channel"]):
+            continue
+
+        x_a = _load_span(recording_a, member_a["start_idx"], member_a["end_idx"])
+        x_b = _load_span(recording_b, member_b["start_idx"], member_b["end_idx"])
+        lag, waveform_correlation, classification_bin = classify_waveforms(x_a, x_b)
+
+        _set_motif_edge_classification(
+            conn, edge["id"], lag, waveform_correlation, classification_bin,
+        )
+        results.append({
+            "edge_id": edge["id"],
+            "member_a_id": edge["member_a_id"],
+            "member_b_id": edge["member_b_id"],
+            "lag": lag,
+            "waveform_correlation": waveform_correlation,
+            "classification_bin": classification_bin,
+        })
+
+    return results
+
+
+def recurrence_count(conn, entry_id):
+    """Recurrence count for a motif family, with artifact edges excluded.
+
+    An edge classified as `artifact` is a shared-ground recording error, not a
+    finding, so it contributes nothing to this count.
+    """
+    return sum(
+        1 for edge in R.list_motif_edges(conn, entry_id)
+        if edge["classification_bin"] != ARTIFACT
+    )
