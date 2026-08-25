@@ -351,3 +351,12 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [ ] **T25** GATING (no exit class, gate: —) — Scope selection and run-group fan-out
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T25 — 2026-08-25 16:15
+
+- [major] [standards] (rule 4.2) test_band_fan_out_reuses_existing_band_definitions only borrows SPIKE_TRAIN_BANDS label strings, doesn't exercise real integration with bands.py
+- [major] [standards] (rule 6.1) run_groups.py docstring implies reuse of Working.database.bands vocabulary that the production code never actually consults
+- [minor] [standards] (rule 6.2) get_run_group() is defined but unused anywhere in this diff - speculative generality ahead of ticket 10's need
+- [minor] [standards] (no rule cited) baseline smell Primitive Obsession: band target {label, low_hz, high_hz} travels as a bare dict with no shared type/validator
+- [minor] [spec] (no rule cited) "Existing band definitions ... reused, not redefined" acceptance criterion met only cosmetically - production path never imports/enforces Working.database.bands, and no pre-existing frequency-band vocabulary exists in the repo to reuse
+- [minor] [spec] (no rule cited) band branch of _normalize_fan_out raises KeyError instead of ValueError when low_hz/high_hz are missing, inconsistent with the rest of the function's error handling
