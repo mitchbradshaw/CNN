@@ -38,6 +38,7 @@ from UI.plots import (
     build_channel_dmap, build_motif_occurrence_overlay, build_motif_waveform_overlay,
     load_channel_mmap, style_main_plot_frame, PLOT_FONTSIZE,
 )
+from UI.workspaces.library.grid import LibraryGrid
 
 _MotifRefreshTrigger = hv.streams.Stream.define("MotifRefreshTrigger", tick=0)
 
@@ -56,6 +57,7 @@ class MotifBrowser:
     def __init__(self, app):
         self.app = app
         self.conn = app.conn
+        self.library_grid = LibraryGrid(app)
 
         # ── Scale switcher ──────────────────────────────────────────────
         self.scale_radio = pn.widgets.RadioButtonGroup(name="Scale", options=[], button_type="default")
@@ -446,7 +448,7 @@ class MotifBrowser:
 
     # ── Layout ───────────────────────────────────────────────────────────
 
-    def layout(self):
+    def _browser_layout(self):
         sidebar = pn.Column(
             pn.pane.Markdown("### Motif browser"),
             self.scale_status,
@@ -481,3 +483,12 @@ class MotifBrowser:
             sizing_mode="stretch_width",
         )
         return pn.Row(sidebar, main, sizing_mode="stretch_width")
+
+    def layout(self):
+        """The Library workspace surface: the grid first, the existing motif
+        browser preserved as a second sub-tab rather than replaced."""
+        return pn.Tabs(
+            ("Library grid", self.library_grid.layout()),
+            ("Motif browser", self._browser_layout()),
+            sizing_mode="stretch_width",
+        )

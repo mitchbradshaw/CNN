@@ -37,10 +37,12 @@ hv.extension("bokeh")
 
 from Working.database.schema import init_db
 from Working.database import queries as q
+from Working.database import runs as R
 from Working.execution import execute_recipe
 from Working.recipes import make_recipe
 from UI.plots import build_motif_waveform_overlay
 from UI.viewer import ViewerApp
+from UI.workspaces.library.grid import LibraryGrid
 from tests._session_isolation import scratch_session_file
 
 import Adapters.detection_matrix_profile as mp_adapter
@@ -101,6 +103,19 @@ def _close(app, db_path, tmpdir):
     shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+class _FakeLibraryApp:
+    """The only app surface `LibraryGrid` is allowed to read."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+
+def _insert_library_recording(conn, tmpdir, source_file, channel):
+    npy_path = os.path.join(tmpdir, f"{source_file}_ch{channel}.npy")
+    _planted_npy(npy_path)
+    return q.insert_recording(conn, source_file, channel, FS, N, 0, npy_path)
+
+
 # ── scale ladder ─────────────────────────────────────────────────────────────
 
 def test_scale_ladder_shows_available_and_invalid_states():
@@ -113,6 +128,59 @@ def test_scale_ladder_shows_available_and_invalid_states():
         assert any("missing" in opt for opt in mb.scale_radio.options), mb.scale_radio.options
     finally:
         _close(app, db_path, tmpdir)
+
+
+# ── library grid (T38) ─────────────────────────────────────────────────────
+
+def test_library_grid_renders_empty_library_without_blanking():
+    conn = init_db(":memory:")
+    try:
+        grid = LibraryGrid(_FakeLibraryApp(conn))
+        layout = grid.layout()
+        assert layout is not None
+        assert grid.cards == []
+    finally:
+        conn.close()
+
+
+def test_library_grid_renders_exemplar_cards_with_scope():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        conn = init_db(":memory:")
+        try:
+            rec_a = _insert_library_recording(conn, tmpdir, "A.mat", 0)
+            rec_b = _insert_library_recording(conn, tmpdir, "B.mat", 3)
+
+            # e1 is newer, so it sorts first under `list_motif_entries`'s
+            # created_at DESC ordering — lets us assert its scope on cards[0]
+            # deterministically rather than whichever row won the race.
+            e1 = R.insert_motif_entry(
+                conn, rec_a, 10, 50, label="sine-a",
+                created_at="2026-01-02T00:00:00+00:00",
+            )
+            e2 = R.insert_motif_entry(
+                conn, rec_b, 20, 60, label="sine-b",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            # e1 appears in both recordings; e2 only in recording B.
+            R.get_or_create_motif_member(conn, e1, rec_a, 10, 50)
+            R.get_or_create_motif_member(conn, e1, rec_b, 20, 60)
+            R.get_or_create_motif_member(conn, e2, rec_b, 20, 60)
+
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            layout = grid.layout()
+
+            assert layout is not None
+            assert len(grid.cards) == 2
+            assert len(grid.scope_panes) == 2
+
+            first_scope = grid.scope_panes[0].object
+            assert "A.mat" in first_scope and "CH00" in first_scope
+            assert "B.mat" in first_scope and "CH03" in first_scope
+
+            second_scope = grid.scope_panes[1].object
+            assert "B.mat" in second_scope and "CH03" in second_scope
+        finally:
+            conn.close()
 
 
 # ── selecting a scale loads groups and both panes ───────────────────────────
