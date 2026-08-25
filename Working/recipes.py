@@ -8,7 +8,8 @@ mechanism serving all four, never special-cased per use.
     recipe = {
         "recording_id": <int>,
         "span": [start_idx, end_idx] | None,   # None = whole channel
-        "steps": [ {"stage": ..., "algorithm": ..., "params": {...}}, ... ]
+        "steps": [ {"stage": ..., "algorithm": ..., "params": {...}}, ... ],
+        "fan_out": {...},  # optional; N sibling runs over a channel/band scope
     }
 
 `stage` is one of `STAGES` below. `steps` is ORDERED and may chain (e.g.
@@ -167,7 +168,59 @@ def _normalize_side_inputs(side_inputs, step_index, source_kinds):
     return normalized
 
 
-def make_recipe(recording_id, steps, span=None):
+def _normalize_fan_out(fan_out):
+    """Validate and normalise a recipe's optional `fan_out` scope.
+
+    A fan-out is one action over N sibling targets — either a channel sweep
+    (N recording ids) or a band decomposition (N frequency bands). The target
+    list is baked into the recipe so a cluster task index can select its own
+    target from it (PIPELINE_PRD.md, Execution: Fan-out). Channel fan-out and
+    band fan-out are deliberately the same mechanism.
+
+    Returns
+    -------
+    dict : {"kind": "channels"|"bands", "targets": [...]}
+    """
+    if not isinstance(fan_out, dict):
+        raise ValueError("fan_out must be a dict with 'kind' and 'targets'.")
+    kind = fan_out.get("kind")
+    if kind not in ("channels", "bands"):
+        raise ValueError(
+            f"fan_out.kind must be 'channels' or 'bands', got {kind!r}."
+        )
+    targets = fan_out.get("targets")
+    if not isinstance(targets, list) or not targets:
+        raise ValueError("fan_out.targets must be a non-empty list.")
+
+    if kind == "channels":
+        norm_targets = []
+        for t in targets:
+            if isinstance(t, bool) or not isinstance(t, int):
+                raise ValueError(
+                    f"fan_out channel targets must be recording ids (int), got {t!r}."
+                )
+            norm_targets.append(int(t))
+        return {"kind": "channels", "targets": norm_targets}
+
+    # bands
+    norm_targets = []
+    for t in targets:
+        if not isinstance(t, dict):
+            raise ValueError(
+                f"fan_out band targets must be dicts with low_hz/high_hz, got {t!r}."
+            )
+        low = float(t["low_hz"])
+        high = float(t["high_hz"])
+        if low <= 0 or high <= 0 or low >= high:
+            raise ValueError(
+                f"fan_out band target needs 0 < low_hz < high_hz, got ({low}, {high})."
+            )
+        label = str(t.get("label") or f"{low:g}-{high:g}Hz")
+        norm_targets.append({"label": label, "low_hz": low, "high_hz": high})
+    return {"kind": "bands", "targets": norm_targets}
+
+
+def make_recipe(recording_id, steps, span=None, fan_out=None):
     """Build a well-formed recipe dict, validating stage names and
     normalising `span` to a plain [start, end] list (or None).
 
@@ -179,6 +232,11 @@ def make_recipe(recording_id, steps, span=None):
         optionally "params" (dict, defaults to {}).
     span : (int, int), optional
         None means the whole channel.
+    fan_out : dict, optional
+        A scope over which this recipe fans out into N sibling runs. Either
+        {"kind": "channels", "targets": [recording_id, ...]} or
+        {"kind": "bands", "targets": [{"label": ..., "low_hz": ..., "high_hz": ...}, ...]}.
+        The target list is baked into the recipe.
     """
     if not steps:
         raise ValueError("A recipe needs at least one step.")
@@ -220,11 +278,14 @@ def make_recipe(recording_id, steps, span=None):
     if not ok:
         raise ValueError(f"Invalid chain: {reason}")
 
-    return {
+    recipe = {
         "recording_id": int(recording_id),
         "span": norm_span,
         "steps": norm_steps,
     }
+    if fan_out is not None:
+        recipe["fan_out"] = _normalize_fan_out(fan_out)
+    return recipe
 
 
 def recipe_summary(recipe):
