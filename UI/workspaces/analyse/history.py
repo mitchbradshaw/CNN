@@ -1,11 +1,17 @@
 """
-run_history.py
-================
+UI/workspaces/analyse/history.py
+=================================
 The run history browser (5e) — "the single biggest reason I'm building
-this": a filterable table of every past run, letting you (a) see
-everything tried on a given channel, (b) click a run and reopen its exact
-recipe in the run panel to re-run or tweak it, and (c) find the artifacts
-it produced.
+this": a filterable table of every past run, letting you (a) see everything
+tried on a given channel, (b) click a run and reload its exact chain into
+the chain builder to re-run or tweak it, and (c) find the artifacts it
+produced.
+
+Moved here by ticket 34 (was `UI/run_history.py`) and folded into Analyse as
+a sidebar: the standalone "Run history" tab is gone; this is now the sidebar
+Analyse renders alongside its section tabs, and Reopen reconstructs the
+run's recipe steps in the chain builder (PRD: "a history sidebar that can
+reload a past chain").
 """
 
 import json
@@ -32,7 +38,7 @@ class RunHistoryBrowser:
             name="Status", options=["running", "completed", "failed"],
         )
         self.refresh_button = pn.widgets.Button(name="Refresh", button_type="default")
-        self.reopen_button = pn.widgets.Button(name="Reopen in Run panel", button_type="primary")
+        self.reopen_button = pn.widgets.Button(name="Reopen in builder", button_type="primary")
         self.status = pn.pane.Markdown("")
         self.artifacts_pane = pn.pane.Markdown("*Select a run to see its artifacts.*")
 
@@ -115,40 +121,22 @@ class RunHistoryBrowser:
             return
         run = R.get_run(self.conn, run_id)
         recipe = R.load_recipe(self.conn, run["config_id"])
+        if not recipe.get("steps"):
+            self.status.object = "**That run has no steps to reload.**"
+            return
 
-        rp = self.app.run_panel
-        last_step = recipe["steps"][-1]
-        rp.stage_select.value = last_step["stage"]
-        rp._on_stage_changed(None)
-        adapter_full_name = f"{last_step['stage']}.{last_step['algorithm']}"
-        rp.algorithm_select.value = adapter_full_name
-        rp._on_algorithm_changed(None)
-        for name, widget in rp._param_widgets.items():
-            if name in last_step["params"]:
-                widget.value = last_step["params"][name]
-
-        # Reflect the run's exact span as a one-off manual selection so
-        # re-running (or tweaking a param first) reproduces the same span.
-        # `_pending_bounds` lives in the viewer's CURRENT display unit
-        # (seconds or hours — see ViewerApp._unit_scale), not necessarily
-        # seconds, so divide by that unit's scale, not just fs.
-        if run["span_start"] is not None and run["span_end"] is not None:
-            rp.span_mode.value = "Selected span"
-            fs = self.app._fs or 1.0
-            scale = self.app._unit_scale()
-            self.app._pending_bounds = (
-                run["span_start"] / fs / scale, run["span_end"] / fs / scale,
-            )
-            self.app._sync_time_fields_from_bounds()
-            self.app._update_selection_info()
-            self.app._refresh_view()
+        # PRD: "a history sidebar that can reload a past chain" — Reopen now
+        # reconstructs the run's recipe steps in the chain builder (rather
+        # than only restaging the last step in the run panel).
+        from UI.analyse.chain_state import ChainState
+        builder = self.app.chain_builder
+        builder.chain = ChainState.from_recipe(recipe)
+        builder._refresh()
 
         if self.app.tabs is not None:
-            # Analyse, with the run panel showing rather than whichever
-            # section the user happened to leave selected.
-            self.app.activate_workspace("Analyse", "Run algorithm")
+            self.app.activate_workspace("Analyse", "Chain builder")
         self.status.object = (
-            f"Reopened run_id={run_id}'s last step ({adapter_full_name}) in the Run panel."
+            f"Reopened run_id={run_id}'s chain ({recipe_summary(recipe)}) in the builder."
         )
 
     def layout(self):
@@ -156,13 +144,14 @@ class RunHistoryBrowser:
             pn.pane.Markdown(
                 "### Run history\n"
                 "Everything you've tried, filterable by recording and status. "
-                "Select a row to see its artifacts, or reopen it in the run panel "
-                "to re-run or tweak a parameter."
+                "Select a row to see its artifacts, or reopen it in the chain "
+                "builder to re-run or tweak it."
             ),
             pn.Row(self.filter_recording, self.filter_status, self.refresh_button),
             self.table,
             pn.Row(self.reopen_button),
             self.status,
             self.artifacts_pane,
-            sizing_mode="stretch_width",
+            width=360,
+            styles={"overflow-y": "auto"},
         )

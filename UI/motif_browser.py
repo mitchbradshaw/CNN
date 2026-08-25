@@ -15,8 +15,9 @@ per slide on open, only on an explicit Compute/Recompute action.
 Compute-a-missing-scale deliberately does NOT duplicate `run_panel.py`'s
 background-thread/progress/cancel machinery: it stages the
 `detection.matrix_profile` recipe in the existing Run panel (the same way
-`run_history.py`'s "Reopen" does) and switches tabs there, so the one
-tier-routing/execution implementation this app has stays the only one.
+`UI/workspaces/analyse/history.py`'s "Reopen" does) and switches tabs there,
+so the one tier-routing/execution implementation this app has stays the only
+one.
 """
 
 import json

@@ -14,7 +14,7 @@ from Working.database import queries as q
 from Working.config import AUTO_PREVIEW_DEBOUNCE_MS
 from Working.recipes import STAGES
 
-from UI.window_matrix_panel import WindowMatrixPanel
+from UI.workspaces.analyse.window_matrix import WindowMatrixPanel
 from UI.analyse.param_widgets import _widget_for_param
 from UI.analyse.ui_thread import _run_on_ui_thread
 

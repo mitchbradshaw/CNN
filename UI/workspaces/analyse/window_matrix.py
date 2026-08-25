@@ -1,10 +1,14 @@
 """
-window_matrix_panel.py
-========================
+UI/workspaces/analyse/window_matrix.py
+=======================================
 Stage 3 UI for the window matrix (WINDOW_MATRIX_UI_PROMPT.md §8): the
 timescale ladder, cost/routing, and run controls. Composed INTO the Run
-panel rather than given its own tab — `UI/run_panel.py` is already 2,100+
-lines and must not grow by another 500 for this.
+panel rather than given its own tab — `UI/analyse/run_panel.py` is already
+2,100+ lines and must not grow by another 500 for this.
+
+Moved here by ticket 34 (was `UI/window_matrix_panel.py`) so the window-matrix
+panel lives inside the Analyse workspace package alongside the other Analyse
+surfaces.
 
 Structured like `UI/motif_browser.py`'s scale switcher (the same ladder
 idea at a different pipeline stage): a small component class with a

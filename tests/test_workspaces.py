@@ -40,6 +40,8 @@ pn.extension()
 
 from Working.database.schema import init_db
 from Working.database import queries as q
+from Working.database import runs as R
+from Working.recipes import make_recipe
 from UI import workspaces
 from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
@@ -85,6 +87,25 @@ def _pane_named(tabs, name):
     names = _tab_names(tabs)
     assert name in names, f"no tab named {name!r}; got {names}"
     return tabs.objects[names.index(name)]
+
+
+def _tabs_inside(pane):
+    """The first `pn.Tabs` anywhere inside `pane` (handles Analyse's
+    Row(sidebar, Tabs) shape), or None."""
+    if isinstance(pane, pn.Tabs):
+        return pane
+    for obj in getattr(pane, "objects", ()):
+        found = _tabs_inside(obj)
+        if found is not None:
+            return found
+    return None
+
+
+def _contains_widget(pane, widget):
+    """True if `widget` is `pane` or appears anywhere in its object tree."""
+    if pane is widget:
+        return True
+    return any(_contains_widget(o, widget) for o in getattr(pane, "objects", ()))
 
 
 # ── The registration contract ───────────────────────────────────────────────
@@ -161,7 +182,10 @@ def test_reset_restores_the_pre_split_surfaces():
     workspaces.reset()
     assert [label for label, _ in workspaces.sections("Review")] == ["Candidate queue"]
     analyse = [label for label, _ in workspaces.sections("Analyse")]
-    assert "Run algorithm" in analyse and "Run history" in analyse
+    assert "Run algorithm" in analyse
+    # Ticket 34: run history is folded into Analyse as a sidebar, so it is
+    # no longer a registered section.
+    assert "Run history" not in analyse
 
 
 # ── The shell ───────────────────────────────────────────────────────────────
@@ -205,32 +229,39 @@ def test_admin_group_holds_vocabulary_admin_and_import():
 
 
 def test_run_history_is_still_reachable_after_the_split():
-    """Regression: the first pass at this ticket dropped `run_history` from the
-    assembly entirely, which removed a working surface from the app and made
-    the Reopen criterion below unsatisfiable."""
+    """Ticket 34 folded run history into Analyse as a sidebar: it is no
+    longer a sub-tab, but the table must still be reachable from the Analyse
+    workspace (the Reopen criterion below is unsatisfiable otherwise)."""
     if not _channel_available():
         pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         analyse = _pane_named(app.tabs, "Analyse")
-        assert isinstance(analyse, pn.Tabs), \
-            "Analyse should group its sections once more than one is mounted"
-        assert "Run history" in _tab_names(analyse)
-        assert _pane_named(analyse, "Run history") is not None
+        assert isinstance(analyse, pn.Row), \
+            "Analyse should be a Row(run-history sidebar, section tabs)"
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None, "Analyse should still contain section tabs"
+        assert "Run history" not in _tab_names(tabs), \
+            "Run history should no longer be a sub-tab"
+        assert _contains_widget(analyse, app.run_history.table), \
+            "run-history table should be reachable in the Analyse sidebar"
     finally:
         _close_and_unlink(app, db_path)
 
 
 def test_reopen_switches_to_the_analyse_workspace():
-    """`UI/run_history.py` sets `tabs.active = 1` to reach the run panel. After
-    the split index 1 must still be the workspace that holds it."""
+    """`UI/workspaces/analyse/history.py` activates Analyse; index 1 must
+    still be the workspace that holds it, and its first section the run
+    panel."""
     if not _channel_available():
         pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         assert _tab_names(app.tabs)[1] == "Analyse"
         analyse = _pane_named(app.tabs, "Analyse")
-        assert _tab_names(analyse)[0] == "Run algorithm", \
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None
+        assert _tab_names(tabs)[0] == "Run algorithm", \
             "Reopen lands on Analyse; its first section must be the run panel"
     finally:
         _close_and_unlink(app, db_path)
@@ -272,18 +303,20 @@ def test_a_registered_section_reaches_the_shell_without_editing_it():
 
 
 def test_activate_workspace_selects_the_section_too():
-    """Reopen must land on the run panel, not merely on the workspace holding
-    it. Switching only the outer tab leaves whichever section the user last
-    looked at on screen."""
+    """Reopen must land on a specific section of Analyse, not merely on the
+    workspace holding it. With Analyse now a Row(sidebar, Tabs), the section
+    lives in the inner Tabs."""
     if not _channel_available():
         pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
     app, db_path = _fresh_app()
     try:
         analyse = _pane_named(app.tabs, "Analyse")
-        analyse.active = _tab_names(analyse).index("Run history")
-        app.activate_workspace("Analyse", "Run algorithm")
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None
+        tabs.active = _tab_names(tabs).index("Run algorithm")
+        app.activate_workspace("Analyse", "Chain builder")
         assert app.tabs.active == EXPECTED_TABS.index("Analyse")
-        assert _tab_names(analyse)[analyse.active] == "Run algorithm"
+        assert _tab_names(tabs)[tabs.active] == "Chain builder"
     finally:
         _close_and_unlink(app, db_path)
 
@@ -299,6 +332,61 @@ def test_activate_workspace_tolerates_a_workspace_without_sub_tabs():
         assert app.tabs.active == EXPECTED_TABS.index("Library")
     finally:
         _close_and_unlink(app, db_path)
+
+
+def test_analyse_workspace_has_run_history_sidebar():
+    """PRD: Analyse holds 'a history sidebar that can reload a past chain'.
+    The run-history table must be reachable from the Analyse workspace, and
+    no longer occupy a sub-tab."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        assert isinstance(analyse, pn.Row), \
+            "Analyse should be a Row with the run-history sidebar first"
+        sidebar = analyse.objects[0]
+        assert _contains_widget(sidebar, app.run_history.table), \
+            "the run-history table should appear in the Analyse sidebar"
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None
+        assert "Run history" not in _tab_names(tabs), \
+            "the standalone Run history tab should be gone, not merely hidden"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_history_reopens_a_chain_into_the_builder():
+    """PRD: 'a history sidebar that can reload a past chain'. Selecting a
+    past run and clicking Reopen must reconstruct that run's recipe steps in
+    the chain builder."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    tf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    tf.close()
+    conn = init_db(tf.name)
+    rid = q.insert_recording(conn, "UNITTEST_history.mat", 0, 1.0, REAL_L, 0, REAL_CHANNEL_PATH)
+    recipe = make_recipe(rid, [
+        {"stage": "preprocessing", "algorithm": "detrend", "params": {}},
+        {"stage": "detection", "algorithm": "matrix_profile", "params": {"window_min": 10.0}},
+    ], span=(0, 100))
+    config_id, _ = R.get_or_create_config(conn, recipe)
+    R.insert_run(conn, config_id, rid, 0, 100, status="completed")
+    conn.close()
+
+    session_cm = scratch_session_file()
+    session_cm.__enter__()
+    app = ViewerApp(db_path=tf.name)
+    app._test_session_cm = session_cm
+    app.layout()
+    try:
+        app.run_history._refresh()
+        app.run_history.table.selection = [0]
+        app.run_history._on_reopen()
+        steps = app.chain_builder.chain.steps
+        assert [s["algorithm"] for s in steps] == ["detrend", "matrix_profile"]
+    finally:
+        _close_and_unlink(app, tf.name)
 
 
 def _run_all():

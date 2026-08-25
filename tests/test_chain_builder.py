@@ -92,6 +92,18 @@ def _pane_named(tabs, name):
     return tabs.objects[names.index(name)]
 
 
+def _tabs_inside(pane):
+    """The first `pn.Tabs` anywhere inside `pane` (ticket 34: Analyse is a
+    Row(run-history sidebar, Tabs)), or None."""
+    if isinstance(pane, pn.Tabs):
+        return pane
+    for obj in getattr(pane, "objects", ()):
+        found = _tabs_inside(obj)
+        if found is not None:
+            return found
+    return None
+
+
 def _add_row(builder, adapter_name):
     """The (button, reason_pane) row rendered for one adapter's `Add`
     control, found by the adapter's registry name -- order in
@@ -278,10 +290,12 @@ def test_chain_builder_mounts_into_the_analyse_workspace_as_a_real_pane():
     app, db_path = _fresh_app()
     try:
         analyse = _pane_named(app.tabs, "Analyse")
-        assert isinstance(analyse, pn.Tabs), \
-            "Analyse should group its sections once more than one is mounted"
-        assert "Chain builder" in _tab_names(analyse)
-        pane = _pane_named(analyse, "Chain builder")
+        # Ticket 34: Analyse is a Row(run-history sidebar, section Tabs).
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None, \
+            "Analyse should still group its sections in sub-tabs"
+        assert "Chain builder" in _tab_names(tabs)
+        pane = _pane_named(tabs, "Chain builder")
         assert pane is not None, "Chain builder renders as None -- the blank-pane failure"
     finally:
         _close_and_unlink(app, db_path)

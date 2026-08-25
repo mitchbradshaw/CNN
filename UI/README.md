@@ -106,8 +106,8 @@ run_panel.py    "Run algorithm" tab — configure and launch a
                 Working/Pipelines analysis recipe against the current
                 recording/span, tracked in the `runs`/`configs`/
                 `detections` tables.
-run_history.py  "Run history" tab — browse past runs, reopen one's
-                artifacts, jump back to the Viewer tab at that run's span.
+analyse/history.py  Analyse's run-history sidebar (ticket 34) — browse past
+                runs, reopen one's chain in the chain builder, see artifacts.
 ```
 
 ## Workspaces

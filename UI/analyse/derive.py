@@ -230,7 +230,7 @@ class DeriveMixin:
         window matrix) but are structurally nothing like that — matrix
         profile is a continuous distance array with its own Motif browser
         tab, and the window matrix is a whole feature table with its own
-        Run-panel section (`window_matrix_panel.py`). `_gather_display_data`
+        Run-panel section (`UI/workspaces/analyse/window_matrix.py`). `_gather_display_data`
         already draws this exact line via
         `last_step["algorithm"].startswith("sax_")` for the post-run path;
         this is the same test, reused for the pre-run auto-preview path."""
