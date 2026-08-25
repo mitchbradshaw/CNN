@@ -360,3 +360,8 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) baseline smell Primitive Obsession: band target {label, low_hz, high_hz} travels as a bare dict with no shared type/validator
 - [minor] [spec] (no rule cited) "Existing band definitions ... reused, not redefined" acceptance criterion met only cosmetically - production path never imports/enforces Working.database.bands, and no pre-existing frequency-band vocabulary exists in the repo to reuse
 - [minor] [spec] (no rule cited) band branch of _normalize_fan_out raises KeyError instead of ValueError when low_hz/high_hz are missing, inconsistent with the rest of the function's error handling
+
+## T21 — 2026-08-25 18:10
+
+- [minor] [standards] (no rule cited) Dead `import pytest` in tests/test_review_surface.py:35, never used
+- [minor] [standards] (no rule cited) `_load_recording`'s recording-is-None branch leaves stale `_dmap`/`_range_stream`/`_x` from a prior recording instead of resetting them
