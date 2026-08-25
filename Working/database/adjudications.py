@@ -85,12 +85,6 @@ def get_adjudication(conn, detection_id):
     ).fetchone()
 
 
-def get_adjudication_by_id(conn, adjudication_id):
-    return conn.execute(
-        "SELECT * FROM adjudications WHERE id = ?", (adjudication_id,)
-    ).fetchone()
-
-
 def set_adjudication_tags(conn, adjudication_id, category, values, commit=True):
     """Replace an adjudication's tags for one category with `values`.
 
