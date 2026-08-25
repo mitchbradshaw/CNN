@@ -161,6 +161,67 @@ def list_run_group_runs(conn, run_group_id):
     ).fetchall()
 
 
+# ── templates (saved chains, ticket 47) ─────────────────────────────────────
+#
+# A template row stores the chain's `steps` with recording and span already
+# stripped; `Working.templates` owns the carry/rebind semantics and the
+# portable JSON shape. This layer only persists and reads the steps JSON.
+
+def save_template(conn, name, steps):
+    """Insert a template row and return its id."""
+    cur = conn.execute(
+        "INSERT INTO templates (name, steps_json) VALUES (?, ?)",
+        (name, json.dumps(steps, sort_keys=True, separators=(",", ":"))),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_template(conn, template_id):
+    return conn.execute(
+        "SELECT * FROM templates WHERE id = ?", (template_id,)
+    ).fetchone()
+
+
+def list_templates(conn):
+    return conn.execute("SELECT * FROM templates ORDER BY id").fetchall()
+
+
+def load_template(conn, template_id):
+    """Parse and return a template row as `{id, name, steps}`."""
+    row = get_template(conn, template_id)
+    if row is None:
+        raise ValueError(f"No template with id={template_id}")
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "steps": json.loads(row["steps_json"]),
+    }
+
+
+def find_motif_entry_id_for_content(conn, source_file, channel, start_idx, end_idx):
+    """The local motif-entry id for an exemplar's content, or None.
+
+    Content-addressed lookup (ticket 14): a carried exemplar is identified by
+    its source file, channel and sample range, never by a portable-invalid
+    local row id. Used by `Working.templates.apply_template` to reattach the
+    convenience `entry_id` pointer on whichever machine is applying it.
+    """
+    recording = conn.execute(
+        "SELECT id FROM recordings WHERE source_file = ? AND channel = ?",
+        (source_file, channel),
+    ).fetchone()
+    if recording is None:
+        return None
+    row = conn.execute(
+        """SELECT id FROM motif_entry
+           WHERE recording_id = ? AND start_idx = ? AND end_idx = ?
+           LIMIT 1""",
+        (recording["id"], int(start_idx), int(end_idx)),
+    ).fetchone()
+    return row["id"] if row is not None else None
+
+
 # ── detections ───────────────────────────────────────────────────────────────
 
 def insert_detection(conn, run_id, start_idx, end_idx, score=None, meta_json=None, commit=True):
