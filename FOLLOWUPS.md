@@ -371,3 +371,12 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) summary
 - [minor] [standards] (no rule cited) _recording_n_samples/_recording_fs reach three attrs off self.app plus a DB fallback (possible Feature Envy, minor)
 - [minor] [standards] (no rule cited) fan-out scope passed as raw dict rather than a small type (possible Primitive Obsession, consistent with existing recipe-dict convention)
+
+## T22 — 2026-08-25 18:45
+
+- [major] [standards] (rule 6.4) Verdict-shortcut widget/JS pattern in surface.py near-duplicates UI/viewer/shortcuts.py's ShortcutsMixin (same hidden-button helper, same KEY_MAP/keydown JS, same focus guard/dispatch, same window handler-reattach idiom) instead of sharing one helper.
+- [major] [standards] (rule 7.1) note_input and its wiring into _on_verdict is behaviour not named in T22's acceptance criteria (which are limited to five verdict keys, one-keystroke advance, undo, focus-guard, no-collision, 50-candidate soak).
+- [major] [standards] (rule 4.5) tests/test_review_keyboard.py is new and outside the ticket's declared file list, but matches the 4.5-mandated headless surface-construction test and the established test_shortcuts_and_view_controls.py precedent — judged justified, not an invented fourth seam under 4.4.
+- [major] [standards] (rule 4.2) test_key_listener_ignores_text_fields asserts JS source substrings ("document.activeElement", "INPUT") rather than behaviour, bordering on 4.2's "transcription of implementation"; mitigated by the same technique being pre-established in the sibling Explore test file for the same stated reason.
+- [minor] [spec] (no rule cited) Ticket carries flags:['human-verify'] and the "person adjudicates fifty real candidates" criterion; the diff satisfies it only via a headless simulated-click test over synthetic data, with no note that the human-verify half remains outstanding.
+- [minor] [spec] (no rule cited) note_input/note-saving behaviour is not named anywhere in T22's acceptance criteria (spec-level scope creep), though it reuses an existing note column/param from tickets 19/20.
