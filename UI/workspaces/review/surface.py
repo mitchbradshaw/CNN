@@ -39,6 +39,12 @@ _ReviewRefreshTrigger = hv.streams.Stream.define("ReviewRefreshTrigger", tick=0)
 
 _STATUS_OPTIONS = ("unadjudicated", "adjudicated", "accepted", "rejected", "all")
 
+# The five single-key verdict bindings for the Review workspace. These are
+# deliberately disjoint from Explore's keys (1-4, Enter, n/p/r/z/x/c, Escape),
+# whose keydown listener is also attached to `document`.
+_REVIEW_KEY_ORDER = ("5", "6", "7", "8", "9")
+REVIEW_VERDICT_KEYS = dict(zip(_REVIEW_KEY_ORDER, q.VERDICTS))
+
 
 class ReviewSurface:
     """The candidate queue surface for the Review workspace."""
@@ -69,6 +75,25 @@ class ReviewSurface:
         # ── Navigation ──────────────────────────────────────────────────
         self.next_button = pn.widgets.Button(name="Next candidate", button_type="primary")
 
+        # ── Verdict keys and undo ────────────────────────────────────────
+        self.note_input = pn.widgets.TextInput(
+            name="Note (saved with next verdict)", value="",
+        )
+        self.undo_button = pn.widgets.Button(
+            name="Undo last verdict", button_type="warning", disabled=True,
+        )
+        self.verdict_key_reference = pn.pane.Markdown(
+            "**Verdict keys** (not while typing in a text field): "
+            + " &nbsp;|&nbsp; ".join(
+                f"`{key}` = {verdict}"
+                for key, verdict in REVIEW_VERDICT_KEYS.items()
+            ),
+            styles={"background": "#f0f0f0", "padding": "6px 10px",
+                    "border-radius": "4px"},
+        )
+        self._verdict_buttons = {}
+        self._build_verdict_shortcut_widgets()
+
         # ── Readouts and panes ───────────────────────────────────────────
         self.queue_status = pn.pane.Markdown("")
         self.candidate_label = pn.pane.Markdown("*No candidates loaded.*")
@@ -91,6 +116,7 @@ class ReviewSurface:
         # ── Wiring ───────────────────────────────────────────────────────
         self.apply_filters_button.on_click(self._on_apply_filters)
         self.next_button.on_click(self._on_next)
+        self.undo_button.on_click(self._on_undo)
         self.pad_left_input.param.watch(self._on_padding_changed, "value")
         self.pad_right_input.param.watch(self._on_padding_changed, "value")
 
@@ -104,6 +130,11 @@ class ReviewSurface:
             pn.pane.Markdown("### Review queue"),
             self.queue_status,
             pn.layout.Divider(),
+            pn.pane.Markdown("**Verdicts**"),
+            self.verdict_key_reference,
+            self.note_input,
+            self.undo_button,
+            pn.layout.Divider(),
             pn.pane.Markdown("**Signal context**"),
             self.pad_left_input,
             self.pad_right_input,
@@ -116,6 +147,8 @@ class ReviewSurface:
             self.status_select,
             self.apply_filters_button,
             pn.layout.Divider(),
+            *self._verdict_buttons.values(),
+            self._review_key_listener,
             self.next_button,
             width=340,
         )
@@ -183,6 +216,72 @@ class ReviewSurface:
             self.queue_status.object = f"**Filter error:** {e}"
             return
         self._render_current()
+
+    def _on_verdict(self, verdict):
+        """Adjudicate the current candidate and re-render the queue."""
+        if self.queue.current is None:
+            self._render_current()
+            return
+        note = (self.note_input.value or "").strip() or None
+        self.queue.adjudicate_current(verdict, note=note)
+        self.note_input.value = ""
+        self._render_current()
+
+    def _on_undo(self, _event=None):
+        """Undo the last verdict and return to the candidate it reversed."""
+        self.queue.undo()
+        self._render_current()
+
+    def _build_verdict_shortcut_widgets(self):
+        """Invisible buttons and the keydown listener that clicks them.
+
+        Panel has no global-keyboard hook, so the Review workspace uses the
+        same DOM-safe pattern as Explore: one real (1px, opacity 0) button per
+        verdict, clicked by a document-level `keydown` listener. Text fields
+        are excluded so typing a note/filter value never fires a verdict.
+        """
+
+        def _hidden_review_button(css_class, handler):
+            btn = pn.widgets.Button(
+                name="", css_classes=[css_class], width=1, height=1,
+                styles={"opacity": "0", "position": "fixed",
+                        "pointer-events": "none", "top": "0", "left": "0"},
+            )
+            btn.on_click(handler)
+            return btn
+
+        for key, verdict in REVIEW_VERDICT_KEYS.items():
+            self._verdict_buttons[verdict] = _hidden_review_button(
+                f"review-verdict-{key}",
+                lambda _event, v=verdict: self._on_verdict(v),
+            )
+
+        key_map_js = ", ".join(
+            f"'{key}': 'review-verdict-{key}'" for key in REVIEW_VERDICT_KEYS
+        )
+        self._review_key_listener = pn.pane.HTML(
+            """
+            <script>
+            (function() {
+                var KEY_MAP = { __KEY_MAP__ };
+                function handleReviewShortcut(e) {
+                    var tag = (document.activeElement && document.activeElement.tagName) || '';
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') { return; }
+                    var cls = KEY_MAP[e.key];
+                    if (!cls) { return; }
+                    var candidates = document.querySelectorAll('.' + cls + ', .' + cls + ' button');
+                    candidates.forEach(function(el) {
+                        if (el.tagName === 'BUTTON') { el.click(); }
+                    });
+                }
+                document.removeEventListener('keydown', window.__reviewShortcutHandler || function(){});
+                window.__reviewShortcutHandler = handleReviewShortcut;
+                document.addEventListener('keydown', handleReviewShortcut);
+            })();
+            </script>
+            """.replace("__KEY_MAP__", key_map_js),
+            width=1, height=1, margin=0, styles={"opacity": "0"},
+        )
 
     # ── Rendering ─────────────────────────────────────────────────────────
 
@@ -252,6 +351,7 @@ class ReviewSurface:
 
     def _render_current(self):
         self._load_recording()
+        self.undo_button.disabled = not bool(self.queue.history)
         if self._range_stream is None:
             self.queue_status.object = "**No recording loaded in the Viewer.**"
             self.candidate_label.object = "*No candidates loaded.*"
