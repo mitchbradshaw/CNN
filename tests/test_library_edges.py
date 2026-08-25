@@ -182,8 +182,10 @@ def test_edge_can_be_recomputed_from_recorded_fields():
         mb = R.get_motif_member(conn, edge["member_b_id"])
         rec_a_row = q.get_recording_by_id(conn, ma["recording_id"])
         rec_b_row = q.get_recording_by_id(conn, mb["recording_id"])
-        xa = np.load(rec_a_row["npy_path"], mmap_mode="r")[ma["start_idx"]:ma["end_idx"]]
-        xb = np.load(rec_b_row["npy_path"], mmap_mode="r")[mb["start_idx"]:mb["end_idx"]]
+        # `np.array` copies the slice out of the memmap so the scratch .npy
+        # files aren't held open when the temp dir is cleaned up on Windows.
+        xa = np.array(np.load(rec_a_row["npy_path"], mmap_mode="r")[ma["start_idx"]:ma["end_idx"]])
+        xb = np.array(np.load(rec_b_row["npy_path"], mmap_mode="r")[mb["start_idx"]:mb["end_idx"]])
         func = DISTANCE_REGISTRY[edge["distance_function"]]
         recomputed = func(xa, xb)
         assert np.isclose(recomputed, edge["distance_value"], atol=1e-9)
