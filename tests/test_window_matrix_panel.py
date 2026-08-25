@@ -1,7 +1,7 @@
 """
 test_window_matrix_panel.py
 =============================
-Headless tests for UI.window_matrix_panel.WindowMatrixPanel
+Headless tests for UI.workspaces.analyse.window_matrix.WindowMatrixPanel
 (WINDOW_MATRIX_UI_PROMPT.md §8.2/§3.1-3.4) — no browser, follows
 tests/test_run_panel.py's approach of instantiating the real UI objects
 against a temp DB, never a live server.
@@ -93,6 +93,30 @@ def _select_window_matrix(app):
     rp.algorithm_select.value = "preprocessing.window_matrix"
     rp._on_algorithm_changed(None)
     return rp
+
+
+# ── Module location (ticket 34) ──────────────────────────────────────────────
+
+def test_window_matrix_panel_lives_in_the_analyse_package():
+    """Ticket 34 moved UI/window_matrix_panel.py into the Analyse workspace
+    package. The import that used to be `UI.window_matrix_panel` must now
+    resolve from `UI.workspaces.analyse.window_matrix`."""
+    from UI.workspaces.analyse.window_matrix import WindowMatrixPanel
+    assert WindowMatrixPanel.__name__ == "WindowMatrixPanel"
+
+
+def test_window_matrix_panel_is_the_analyse_package_class():
+    """The panel the run panel instantiates must be the one in the new
+    location — the move is real, not a stale import shim."""
+    from UI.workspaces.analyse.window_matrix import WindowMatrixPanel as NewPanel
+    with _IsolatedCalibration():
+        cost.calibrate()
+        app, db_path, npy_dir = _fresh_app_with_recording()
+        try:
+            rp = _select_window_matrix(app)
+            assert isinstance(rp.window_matrix_panel, NewPanel)
+        finally:
+            _close(app, db_path, npy_dir)
 
 
 # ── Visibility (§3.1) ────────────────────────────────────────────────────────
