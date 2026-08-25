@@ -217,6 +217,7 @@ def test_queue_filters_by_adjudication_status():
     adj.insert_adjudication(conn, d_acc, "interesting")
     adj.insert_adjudication(conn, d_rej, "not_interesting")
     assert [r["id"] for r in q.queue_candidates(conn, adjudication_status="unadjudicated")] == [d_un]
+    assert [r["id"] for r in q.queue_candidates(conn, adjudication_status="adjudicated")] == [d_acc, d_rej]
     assert [r["id"] for r in q.queue_candidates(conn, adjudication_status="accepted")] == [d_acc]
     assert [r["id"] for r in q.queue_candidates(conn, adjudication_status="rejected")] == [d_rej]
 
