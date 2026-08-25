@@ -80,9 +80,11 @@ def insert_run(conn, config_id, recording_id, span_start, span_end,
 
 def update_run(conn, run_id, **fields):
     """Update editable run fields: status, finished_at, duration_s,
-    error_text, step_timings_json, artifact_path, current_step."""
+    error_text, step_timings_json, artifact_path, current_step,
+    run_group_id."""
     allowed = {"status", "finished_at", "duration_s", "error_text",
-               "step_timings_json", "artifact_path", "current_step"}
+               "step_timings_json", "artifact_path", "current_step",
+               "run_group_id"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
@@ -127,6 +129,36 @@ def list_runs(conn, recording_id=None, status=None):
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY id DESC"
     return conn.execute(query, params).fetchall()
+
+
+# ── run_groups (fan-out) ─────────────────────────────────────────────────────
+#
+# One `run_groups` row groups N sibling runs fanned out from a single recipe
+# over a channel or band scope (`runs.run_group_id`). The row itself carries
+# only id + created_at; the scope and per-target recipes live in the runs'
+# own config rows (ticket 25).
+
+def create_run_group(conn, created_at=None):
+    """Insert a run_groups row and return its id."""
+    created_at = created_at or _now()
+    cur = conn.execute(
+        "INSERT INTO run_groups (created_at) VALUES (?)", (created_at,)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_run_group(conn, run_group_id):
+    return conn.execute(
+        "SELECT * FROM run_groups WHERE id = ?", (run_group_id,)
+    ).fetchone()
+
+
+def list_run_group_runs(conn, run_group_id):
+    """The sibling runs of one fan-out, ordered by id for a stable report."""
+    return conn.execute(
+        "SELECT * FROM runs WHERE run_group_id = ? ORDER BY id", (run_group_id,)
+    ).fetchall()
 
 
 # ── detections ───────────────────────────────────────────────────────────────

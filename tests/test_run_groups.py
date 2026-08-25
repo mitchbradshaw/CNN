@@ -103,7 +103,7 @@ def test_channel_fan_out_creates_one_group_and_n_runs():
         n_groups, runs = _run_group_structure(db_path, out["run_group_id"])
         assert n_groups == 1, "a fan-out must create exactly one run_groups row"
         assert len(runs) == 3
-        assert all(run_id == run_group_id for _, run_group_id, _, _ in runs)
+        assert all(rg == out["run_group_id"] for _, rg, _, _ in runs)
         assert all(status == "completed" for _, _, _, status in runs)
         # each run is over one distinct target channel
         assert {rec_id for _, _, rec_id, _ in runs} == set(targets)
@@ -160,7 +160,7 @@ def test_band_fan_out_creates_one_group_and_n_runs():
         n_groups, runs = _run_group_structure(db_path, out["run_group_id"])
         assert n_groups == 1
         assert len(runs) == 2
-        assert all(run_id == run_group_id for _, run_group_id, _, _ in runs)
+        assert all(rg == out["run_group_id"] for _, rg, _, _ in runs)
         assert all(status == "completed" for _, _, _, status in runs)
 
         # each run's stored recipe has the matching bandpass step prepended
@@ -253,8 +253,8 @@ def test_channel_and_band_fan_out_share_the_same_code_path():
     # identical shape: one run_groups row, N runs, all referencing the group
     assert struct_c[0] == 1 and struct_b[0] == 1
     assert len(struct_c[1]) == len(struct_b[1]) == 2
-    assert all(run_id == group_id for _, group_id, _, _ in struct_c[1])
-    assert all(run_id == group_id for _, group_id, _, _ in struct_b[1])
+    assert all(rg == out_c["run_group_id"] for _, rg, _, _ in struct_c[1])
+    assert all(rg == out_b["run_group_id"] for _, rg, _, _ in struct_b[1])
     assert all(status == "completed" for _, _, _, status in struct_c[1])
     assert all(status == "completed" for _, _, _, status in struct_b[1])
 
