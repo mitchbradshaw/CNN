@@ -160,7 +160,13 @@ def test_no_parameter_selects_where_the_labels_came_from():
 
 def test_the_classifier_recovers_the_labels_it_was_trained_on():
     """A model that cannot separate two blobs six standard deviations apart
-    has not been fitted, and every other assertion here would pass anyway."""
+    has not been fitted, and every other assertion here would pass anyway.
+
+    Also pins the loading contract: the file is a bare fitted pipeline (so
+    the window matrix's own `rf` stage can consume one), and `meta` carries
+    the column names it expects — feature preprocessing may have dropped
+    some, and a `Model` is a path with nowhere to record which.
+    """
     import joblib
 
     spec = get_adapter(CLASSIFIER_NAME)
@@ -169,7 +175,10 @@ def test_the_classifier_recovers_the_labels_it_was_trained_on():
     result = _train(spec, window_set, Grouping(labels=group_ids), holdout_frac=0.0)
     pipeline = joblib.load(result.value.path)
 
-    predicted = pipeline.predict(window_set.features.to_numpy())
+    columns = result.meta["feature_names"]
+    assert set(columns) <= set(window_set.features.columns)
+
+    predicted = pipeline.predict(window_set.features[columns].to_numpy())
     assert np.array_equal(predicted, group_ids)
 
 

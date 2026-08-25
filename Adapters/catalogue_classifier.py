@@ -227,6 +227,13 @@ def _run(x, t, fs, n_estimators=300, class_weight="balanced", holdout_frac=0.25,
                 int(label): int(count)
                 for label, count in zip(*np.unique(labels, return_counts=True))
             },
+            # The columns the dumped pipeline expects, in the order it
+            # expects them. `preprocess_window_matrix` may drop constant,
+            # NaN-heavy or collinear columns, so the fitted estimator does
+            # NOT accept a raw window-matrix row — and a `Model` is a bare
+            # path with nowhere to record that. Whoever loads the file
+            # reindexes to these names first.
+            "feature_names": list(preprocessed.feature_names),
             "n_features_in": int(X.shape[1]),
             "n_features_kept": int(kept.sum()),
             "n_train": int(len(y_train)),
