@@ -384,3 +384,13 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 ## T07 — 2026-08-25 18:52
 
 - [minor] [spec] (no rule cited) "Existing tests ... pass unmodified" is in tension with the edit to tests/test_adapter_spec.py's remapped_by_ticket_07 allow-set; resolved by T06 precedent (same shared-guard-test mechanism), read as referring to per-adapter test files rather than the shared registry guard.
+
+## T32 — 2026-08-25 19:20
+
+- [major] [standards] (rule 6.4) progress text rebuilt twice in-file (tested _update_* methods vs. untested worker-thread closures) instead of closures calling the tested methods
+- [major] [standards] (rule 1.4) _stage_label hardcodes "preprocessing.bandpass", echoing Working/run_groups.py's fan-out step instead of deriving from it
+- [minor] [standards] (no rule cited) _describe_result's output_kind cascade repeats the shape of similar switches in Working/execution.py and UI/analyse/execution.py (Repeated Switches, baseline smell)
+- [minor] [spec] (no rule cited) the only live-launch test for "earlier stage stays inspectable while later runs" (criterion 3) uses a single-step chain; the two-stage version bypasses the worker-thread/on_step_result path entirely
+- [minor] [spec] (no rule cited) intra-step progress test calls _update_intra_step_progress directly rather than through execute_recipe's real run_kwargs forwarding, so no test proves an adapter's on_progress reaches the pane end-to-end
+- [minor] [spec] (no rule cited) a fully-cached recipe rerun returns before the step loop in Working/execution.py, so on_step_result never fires and stage_results stays empty despite "Done" status — root cause is out-of-scope for this ticket's file list but affects criterion 3/4
+- [major] [spec] (rule 7.1) per-target "(target X)" heading suffix is a reasonable but unspecified addition beyond the literal acceptance criteria
