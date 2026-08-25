@@ -21,6 +21,7 @@ from UI.analyse import RunPanel
 from UI.run_history import RunHistoryBrowser
 from UI.motif_browser import MotifBrowser
 from UI.workspaces.analyse import ChainBuilder
+from UI.workspaces.review import ReviewSurface
 from UI.viewer.annotations import AnnotationsMixin
 from UI.viewer.filters import FiltersMixin
 from UI.viewer.layout import LayoutMixin
@@ -170,6 +171,9 @@ class ViewerApp(
         if saved and saved.get("channel") in self.param.channel.objects:
             self.channel = saved["channel"]
         self._load_recording()
+        # Built after the recording above exists so the Review surface's
+        # first render has a recording to show rather than starting empty.
+        self.review_surface = ReviewSurface(self)
         if stale_notice:
             self.status.object = stale_notice
 
