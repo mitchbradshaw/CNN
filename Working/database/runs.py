@@ -2,8 +2,9 @@
 runs.py
 ========
 Plain functions for the run-tracking / provenance layer: `configs`
-(recipes), `runs`, `detections`, `artifacts`, `encodings` (the cache), and
-`motifs`. Same pattern as `queries.py` — plain `sqlite3`, no ORM, every
+(recipes), `runs`, `detections`, `artifacts`, `encodings` (the cache),
+`motifs`, and the shape-first library's `motif_member`/`motif_edge` rows
+(ticket 36). Same pattern as `queries.py` — plain `sqlite3`, no ORM, every
 function commits its own writes.
 
 `config_hash` throughout this module is the recipe's *short* (8-char) hash
@@ -317,6 +318,122 @@ def motif_entry_provenance(conn, entry_id):
     result = dict(row)
     result["recipe"] = json.loads(row["config_json"]) if row["config_json"] else None
     return result
+
+
+# ── motif_member / motif_edge (the shape-first library's edges) ─────────────
+#
+# A member is one span of a motif family, in any recording/channel. An edge
+# is the distance-carrying relationship between two members, with every field
+# needed to reproduce the match stored on the row (distance function name,
+# threshold, distance value, recipe hash). `insert_motif_edge` is the single
+# edge-writer signature tickets 41/46 call; they do not write raw SQL against
+# `motif_edge`.
+
+def get_or_create_motif_member(conn, entry_id, recording_id, start_idx, end_idx,
+                               commit=True):
+    """Return the id of the member for (entry_id, recording, span), creating
+    it on first use.
+
+    A member's identity is the 4-tuple (entry_id, recording_id, start_idx,
+    end_idx) — idempotent, so re-matching the same span to the same entry
+    never duplicates the member row. A member may reference any recording and
+    any channel, including one the entry's exemplar did not come from.
+    """
+    row = conn.execute(
+        """SELECT id FROM motif_member
+           WHERE entry_id = ? AND recording_id = ? AND start_idx = ? AND end_idx = ?""",
+        (entry_id, recording_id, start_idx, end_idx),
+    ).fetchone()
+    if row is not None:
+        return row["id"]
+    cur = conn.execute(
+        """INSERT INTO motif_member (entry_id, recording_id, start_idx, end_idx)
+           VALUES (?, ?, ?, ?)""",
+        (entry_id, recording_id, start_idx, end_idx),
+    )
+    if commit:
+        conn.commit()
+    return cur.lastrowid
+
+
+def get_motif_member(conn, member_id):
+    return conn.execute(
+        "SELECT * FROM motif_member WHERE id = ?", (member_id,)
+    ).fetchone()
+
+
+def list_motif_members(conn, entry_id):
+    """Every member of one motif family, ordered by recording then span."""
+    return conn.execute(
+        """SELECT * FROM motif_member WHERE entry_id = ?
+           ORDER BY recording_id, start_idx""",
+        (entry_id,),
+    ).fetchall()
+
+
+def get_motif_edge(conn, member_a_id, member_b_id, distance_function, threshold,
+                   recipe_hash):
+    """The edge between two members under this exact
+    (member_a_id, member_b_id, distance_function, threshold, recipe_hash) key,
+    or None.
+
+    Member order is significant: the match writer stores (exemplar, candidate)
+    consistently, and the cross-channel classifier (ticket 46) relies on the
+    same orientation to carry a signed lag.
+    """
+    return conn.execute(
+        """SELECT * FROM motif_edge
+           WHERE member_a_id = ? AND member_b_id = ? AND distance_function = ?
+             AND threshold = ? AND recipe_hash = ?
+           LIMIT 1""",
+        (member_a_id, member_b_id, distance_function, threshold, recipe_hash),
+    ).fetchone()
+
+
+def insert_motif_edge(conn, member_a_id, member_b_id, distance_function, threshold,
+                      distance_value, recipe_hash, lag=None,
+                      waveform_correlation=None, classification_bin=None,
+                      commit=True):
+    """Create an edge between two members. The single edge-writer signature.
+
+    Idempotent on the exact (member_a_id, member_b_id, distance_function,
+    threshold, recipe_hash) key — re-running the same match with the same
+    recipe returns the existing edge id instead of duplicating the row, and
+    leaves the existing row unchanged (any `lag`/`waveform_correlation`/
+    `classification_bin` passed on a duplicate key are ignored). The
+    cross-channel classifier (ticket 46) stores those three columns at
+    creation time.
+    """
+    existing = get_motif_edge(conn, member_a_id, member_b_id, distance_function,
+                              threshold, recipe_hash)
+    if existing is not None:
+        return existing["id"]
+    cur = conn.execute(
+        """INSERT INTO motif_edge
+               (member_a_id, member_b_id, distance_function, threshold,
+                distance_value, recipe_hash, lag, waveform_correlation,
+                classification_bin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (member_a_id, member_b_id, distance_function, threshold,
+         distance_value, recipe_hash, lag, waveform_correlation,
+         classification_bin),
+    )
+    if commit:
+        conn.commit()
+    return cur.lastrowid
+
+
+def list_motif_edges(conn, entry_id):
+    """Every edge of one motif family, reached through either endpoint's
+    membership of the entry. Ordered by id for a stable report."""
+    return conn.execute(
+        """SELECT e.* FROM motif_edge e
+           JOIN motif_member ma ON ma.id = e.member_a_id
+           JOIN motif_member mb ON mb.id = e.member_b_id
+           WHERE ma.entry_id = ? AND mb.entry_id = ?
+           ORDER BY e.id""",
+        (entry_id, entry_id),
+    ).fetchall()
 
 
 # ── legacy `motifs` wrappers ─────────────────────────────────────────────────
