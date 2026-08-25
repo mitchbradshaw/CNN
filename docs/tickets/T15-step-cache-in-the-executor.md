@@ -6,7 +6,7 @@ size: M
 blocked_by: [2, 8, 14]
 mutex: [3, 8, 13, 14, 24]
 files: ["Working/config.py", "Working/database/runs.py", "Working/execution.py", "tests/test_step_cache.py"]
-flags: []
+flags: ['done']
 level: 4
 unblocks: 12
 budget_minutes: 60

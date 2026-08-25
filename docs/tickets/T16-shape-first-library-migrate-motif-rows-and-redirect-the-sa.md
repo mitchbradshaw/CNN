@@ -6,7 +6,7 @@ size: M
 blocked_by: [2]
 mutex: [2, 17, 23, 37]
 files: ["UI/motif_browser.py", "UI/run_panel.py", "Working/database/runs.py", "Working/database/schema.py", "tests/test_motif_browser.py", "tests/test_motif_migration.py"]
-flags: []
+flags: ['done']
 level: 1
 unblocks: 8
 budget_minutes: 60

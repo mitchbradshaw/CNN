@@ -6,7 +6,7 @@ size: M
 blocked_by: [13, 15, 17]
 mutex: [8, 13, 15]
 files: ["UI/analyse/execution.py", "Working/database/runs.py", "Working/execution.py", "tests/test_execution.py"]
-flags: []
+flags: ['done']
 level: 5
 unblocks: 11
 budget_minutes: 60
