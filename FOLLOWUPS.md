@@ -305,3 +305,11 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [minor] [standards] (rule 6.2) _delete_step's ChainStateError handler is unreachable/untested since this surface never sets side_inputs yet
 - [minor] [spec] (no rule cited) "compose the three worked chains without blanking" AC is currently unsatisfiable — registry lacks train_cnn/seeded_score/banded_score adapters, a gap outside this ticket's files
 - [minor] [spec] (no rule cited) ticket's "relocates and extends RunPanel's staged-list behaviour" note points at unrelated prior art (span basket / single-algorithm select, not a step chain); building ChainBuilder fresh atop ChainState is the correct reading, not a missed relocation
+
+## T15 — 2026-08-25 13:54
+
+- [major] [standards] (rule 6.1) test fixture name "t15_scores_probe" doesn't convey it's a side-input-dependent probe
+- [minor] [standards] (rule 6.3) comment on skipping persist on cache hit restates the condition instead of explaining the rationale
+- [minor] [standards] (no rule cited) _TYPED_VALUE_CLASSES in execution.py duplicates the type-name-lowercasing already done by TYPE_KINDS in Adapters/base.py
+- [minor] [spec] (no rule cited) force=True on execute_recipe does not bypass the per-step cache, silently defeating the "recompute even if exists" contract
+- [minor] [spec] (no rule cited) cached Signal round-trip loses t and reconstructs it from the live loop variable; correct only because no current signal-output adapter changes array length
