@@ -494,3 +494,11 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) _build_library_entry_manifest hand-rolls the envelope (manifest_version/code_version/created_at) instead of calling a shared envelope builder, unlike export_run_group which calls M.build_manifest
 - [minor] [spec] (no rule cited) export_library_entry replaces ticket 27's "runs" envelope key with a differently-shaped "entry" key rather than nesting alongside it, a structural deviation from the documented manifest schema
 - [major] [spec] (rule 6.4) bins dict hardcodes the three classification-bin strings instead of importing BINS/ARTIFACT/PROPAGATION/INDEPENDENT_RECURRENCE from Working/cross_channel.py, re-declaring vocabulary owned by another module
+
+## Harness — 2026-08-26 (post-run-20260826-0543)
+
+1 merged of 2 dispatched. 10.22M tokens, $6.67 total, $2.05 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T12** FAILED (stall, gate: —) — New adapter: classifier training to a Model
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
