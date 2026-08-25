@@ -123,10 +123,11 @@ def test_a_fresh_chain_has_no_incompatible_blocks():
     """Every shipped block in a fresh chain is compatible with the root
     signal — the legacy blocks take it implicitly (`input_kind=None`) and
     the ticket-06/08 typed blocks declare `input_kind="signal"` — so
-    nothing is ever disabled in a fresh chain except `detection.threshold`
-    (`input_kind='scores'`), which a fresh chain genuinely cannot feed yet —
-    that block being disabled with its reason inline is ticket 29's own
-    acceptance criterion, not a regression."""
+    nothing is ever disabled in a fresh chain except the two blocks a fresh
+    chain genuinely cannot feed yet: `detection.threshold` (`input_kind='scores'`)
+    and `catalogue.cluster` (`input_kind='windowset'`). Those blocks being
+    disabled with their reasons inline is the type checker working, not a
+    regression."""
     from UI.workspaces.analyse.builder import ChainBuilder
 
     builder = ChainBuilder(_FakeApp())
@@ -135,6 +136,9 @@ def test_a_fresh_chain_has_no_incompatible_blocks():
         if button.name.startswith("Add Threshold"):
             assert button.disabled is True
             assert "scores" in reason.object
+        elif button.name.startswith("Add Dendrogram"):
+            assert button.disabled is True
+            assert "windowset" in reason.object
         else:
             assert button.disabled is False
 

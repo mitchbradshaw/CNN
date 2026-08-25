@@ -297,7 +297,7 @@ def _shipped_adapter_specs():
 
 def test_every_shipped_adapter_registers_without_modification():
     specs = _shipped_adapter_specs()
-    assert len(specs) == 21, f"expected the twenty-one shipped adapters, got {sorted(specs)}"
+    assert len(specs) == 22, f"expected the twenty-two shipped adapters, got {sorted(specs)}"
     # Ticket 08 remaps detection_matrix_profile (encoding -> scores) and
     # preprocessing_window_matrix (encoding -> windowset) to their correct
     # types, and adds detection_threshold, a typed (input_kind='scores')
@@ -306,9 +306,11 @@ def test_every_shipped_adapter_registers_without_modification():
     # detectors (intervals -> spanset) to their typed vocabulary. Ticket 07
     # remaps the nine encoding blocks (signal -> encoding, now with an
     # explicit input_kind). Ticket 43 adds preprocessing_surrogate, a new
-    # typed (input_kind='signal', output_kind='signal') adapter. The
-    # remaining adapters are untouched by those tickets and still use the
-    # legacy vocabulary this test was written to guard.
+    # typed (input_kind='signal', output_kind='signal') adapter. Ticket 11
+    # adds catalogue_cluster, a new typed (input_kind='windowset',
+    # output_kind='grouping') adapter. The remaining adapters are untouched
+    # by those tickets and still use the legacy vocabulary this test was
+    # written to guard.
     remapped_by_ticket_06 = {
         "preprocessing_bandpass", "preprocessing_detrend",
         "preprocessing_highpass", "preprocessing_lowpass",
@@ -323,9 +325,10 @@ def test_every_shipped_adapter_registers_without_modification():
         "detection_sax_psax", "detection_wavelet_scattering",
     }
     added_by_ticket_43 = {"preprocessing_surrogate"}
+    added_by_ticket_11 = {"catalogue_cluster"}
     remapped = (
         remapped_by_ticket_06 | remapped_by_ticket_08 | remapped_by_ticket_07
-        | added_by_ticket_43
+        | added_by_ticket_43 | added_by_ticket_11
     )
     for module_name, spec in specs.items():
         if module_name in remapped:
