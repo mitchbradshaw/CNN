@@ -85,6 +85,7 @@ SPEC = register(AdapterSpec(
     ],
     run=_run,
     output_kind="encoding",
+    input_kind="signal",
     plot=_plot,
     description=(
         "cSAX: data-adaptive quantisation via Mean-Shift clustering on the "

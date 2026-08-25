@@ -29,6 +29,7 @@ SPEC = register(AdapterSpec(
     params=[],
     run=_run,
     output_kind="encoding",
+    input_kind="signal",
     plot=_plot,
     max_span_samples=MAX_SPAN_SAMPLES,
     description=(

@@ -44,6 +44,7 @@ SPEC = register(AdapterSpec(
     ],
     run=_run,
     output_kind="encoding",
+    input_kind="signal",
     plot=_plot,
     description=(
         "Shift-stable, noise-robust summary of energy across timescales "

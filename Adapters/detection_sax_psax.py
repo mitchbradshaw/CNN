@@ -73,6 +73,7 @@ SPEC = register(AdapterSpec(
     ],
     run=_run,
     output_kind="encoding",
+    input_kind="signal",
     plot=_plot,
     description=(
         "pSAX: data-adaptive quantisation via Epanechnikov KDE + Lloyd-Max "

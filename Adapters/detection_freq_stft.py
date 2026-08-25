@@ -36,6 +36,7 @@ SPEC = register(AdapterSpec(
     ],
     run=_run,
     output_kind="encoding",
+    input_kind="signal",
     plot=None,
     description=(
         "STFT power spectrum aggregated into logarithmically spaced frequency "
