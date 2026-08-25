@@ -434,3 +434,13 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) nested duration/start loop reloads exemplar .npy from disk per candidate window
 - [minor] [spec] (no rule cited) AC4 control test only asserts strictly-fewer matches, doesn't guard against a degenerate zero-recovery control
 - [minor] [spec] (no rule cited) self-overlap not excluded beyond exact span match; default UI search-to-own-recording can write spurious self-similarity matches as real results
+
+## Harness — 2026-08-26 (post-run-20260825-1528)
+
+25 merged of 28 dispatched. 192.26M tokens, $126.52 total, $12.19 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T11** OVERLAP (no exit class, gate: overlap) — New adapter: clustering to a Grouping
+- [ ] **T34** OVERLAP (no exit class, gate: overlap) — Fold run history and the window-matrix panel into Analyse
+- [ ] **T41** FAILED (conflict, gate: —) — Cross-channel classification
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
