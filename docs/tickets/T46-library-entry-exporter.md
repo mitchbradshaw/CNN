@@ -6,7 +6,7 @@ size: M
 blocked_by: [27, 36, 41]
 mutex: [27, 36, 45]
 files: ["UI/workspaces/library/detail.py", "Working/export.py", "tests/test_export.py"]
-flags: []
+flags: ['done']
 level: 8
 unblocks: 0
 budget_minutes: 60
