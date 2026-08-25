@@ -499,6 +499,40 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 
 1 merged of 2 dispatched. 10.22M tokens, $6.67 total, $2.05 of it on work that did not land. Written by the runner; the triage below is not.
 
-- [ ] **T12** FAILED (stall, gate: —) — New adapter: classifier training to a Model
+- [x] **T12** FAILED (stall, gate: —) — New adapter: classifier training to a Model
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+**T12 — the ticket, and neither attempt was wasted.** Both agents stopped without committing and
+reported the same thing, correctly: the ticket's AC1 and AC5 are mutually exclusive. AC1 asks for
+`input_kind="WindowSet"` with a `Grouping` side input; AC5 asks for `window_matrix -> cluster ->
+classifier` to validate. `Working/chain_validation.py` types a chain as a linear spine, so a step
+whose primary input is a `WindowSet` can never follow one that produces a `Grouping`, and no
+ordering of those three specs validates. The agents did exactly what `CLAUDE.md` "When to stop"
+tells them to do when a ticket contradicts the PRD, and they were right to.
+
+Resolved by hand on 2026-08-26 in favour of AC5: the PRD's own statement of the chain ("the typed
+chain from signal through window set and grouping to a model") and the already-shipped
+`test_chain_validation.py::test_cnn_chain_validates_end_to_end` both pin
+`signal -> windowset -> grouping -> model`, so AC1's ordering was the odd one out. The classifier's
+primary input is the `Grouping`; the `WindowSet` is the side input bound to the earlier
+window-matrix step. AC2's design requirement survives the correction untouched — `run` still never
+asks where its labels came from.
+
+Two harness observations worth acting on before the next run:
+
+- [ ] **A correct stop costs a full retry.** The runner re-dispatched T12 verbatim after attempt 1
+      stopped on a ticket/PRD contradiction, and attempt 2 produced a near-identical report for
+      another $1.03. A stop-and-report with no commits and no gate failure is not a stall and should
+      not be retried on the same unchanged ticket — it should exit as its own class (`contradiction`,
+      say) that lands in `REPORT.md` under "Waiting on you" rather than under losses. The exit
+      classifier currently has no way to tell "the agent gave up" from "the agent found a real
+      blocker and said so", and those want opposite handling.
+- [ ] **`exit_class: "stall"` mislabels this in the report.** Same lesson as the `out of extra usage`
+      fix above: the classification was wrong *and* the consequence was wrong, and only the
+      consequence costs money. Test what the run loop does with the verdict, not just the verdict.
+- [ ] **Ticket-level: nothing checks a ticket's ACs against the type system before dispatch.** T12's
+      contradiction was statically decidable from `docs/tickets/T12*.md` plus the registry — AC1
+      names the input and output kinds, AC5 names the chain. A pre-flight that resolves an AC-named
+      chain through `validate_chain` would have caught it before spending $2.05 on discovering it
+      twice.
