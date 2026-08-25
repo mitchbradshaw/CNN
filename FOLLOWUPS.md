@@ -327,3 +327,9 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [minor] [standards] (no rule cited) _last_step_results initialized in _on_run instead of RunPanel.__init__, breaking the file's stated convention that shared run state lives in __init__
 - [minor] [standards] (rule 6.2) _last_step_results dict is written per-stage but never read anywhere in the tree; possible speculative generality unless it's groundwork for the ticket this one unblocks
 - [minor] [spec] (no rule cited) Working/database/schema.py is touched but absent from ticket 24's declared files list; change is a necessary, additive consequence of AC1 but should have been called out explicitly
+
+## T36 — 2026-08-25 14:52
+
+- [minor] [standards] (no rule cited) Data Clumps: edge natural key (member_a_id, member_b_id, distance_function, threshold, recipe_hash) travels together across insert_motif_edge/get_motif_edge; defensible in a plain-SQL accessor layer
+- [minor] [standards] (no rule cited) Duplicated Code: mmap-slice load pattern appears in both Working/library.py:_load_span and the recompute test's independent reload; acceptable since the test must not depend on the code it's verifying
+- [minor] [spec] (no rule cited) get_or_create_motif_member's docstring claims member identity is enforced by the 4-tuple key, but motif_member has no UNIQUE constraint at the schema level — idempotency holds only through this one code path, and schema.py is outside T36's declared file list so a fix is arguably a different ticket's job
