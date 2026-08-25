@@ -320,3 +320,10 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [minor] [spec] (no rule cited) vocabulary.py edited outside the ticket's declared file list, though necessary to support motif_entry_tags
 - [minor] [spec] (no rule cited) tag-linking (set_motif_entry_tags) is duplicated across all 4 save call sites rather than folded into the "one entry-creation helper", contrary to the "Why [O]" risk note
 - [minor] [spec] (no rule cited) insert_motif_entry's INSERT OR IGNORE silently discards label/rating/notes/sax_string updates on a re-save to an already-occupied span while still reporting success; untested
+
+## T24 — 2026-08-25 14:31
+
+- [major] [standards] (rule 1.4) schema.py edited outside declared file list; additive/idempotent and consistent with existing run-row columns, but the touch wasn't proactively flagged
+- [minor] [standards] (no rule cited) _last_step_results initialized in _on_run instead of RunPanel.__init__, breaking the file's stated convention that shared run state lives in __init__
+- [minor] [standards] (rule 6.2) _last_step_results dict is written per-stage but never read anywhere in the tree; possible speculative generality unless it's groundwork for the ticket this one unblocks
+- [minor] [spec] (no rule cited) Working/database/schema.py is touched but absent from ticket 24's declared files list; change is a necessary, additive consequence of AC1 but should have been called out explicitly
