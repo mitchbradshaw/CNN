@@ -260,7 +260,7 @@ def test_promote_writes_no_annotation_row():
     try:
         surface._on_verdict("seed")
         surface._on_promote()
-        n = conn.execute("SELECT COUNT(*) FROM annotations").fetchone()["n"]
+        n = conn.execute("SELECT COUNT(*) AS n FROM annotations").fetchone()["n"]
         assert n == 0
     finally:
         _cleanup(surface, conn, tmpdir)

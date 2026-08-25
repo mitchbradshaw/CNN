@@ -25,6 +25,7 @@ import panel as pn
 
 from Working.config import MOTIF_BOTTOM_HEIGHT, MOTIF_TOP_HEIGHT
 from Working.database import queries as q
+from Working.database import runs as R
 from UI.plots import (
     PLOT_FONTSIZE,
     build_channel_dmap,
@@ -82,6 +83,9 @@ class ReviewSurface:
         self.undo_button = pn.widgets.Button(
             name="Undo last verdict", button_type="warning", disabled=True,
         )
+        self.promote_button = pn.widgets.Button(
+            name="Promote to library", button_type="success", disabled=True,
+        )
         self.verdict_key_reference = pn.pane.Markdown(
             "**Verdict keys** (not while typing in a text field): "
             + " &nbsp;|&nbsp; ".join(
@@ -117,6 +121,7 @@ class ReviewSurface:
         self.apply_filters_button.on_click(self._on_apply_filters)
         self.next_button.on_click(self._on_next)
         self.undo_button.on_click(self._on_undo)
+        self.promote_button.on_click(self._on_promote)
         self.pad_left_input.param.watch(self._on_padding_changed, "value")
         self.pad_right_input.param.watch(self._on_padding_changed, "value")
 
@@ -134,6 +139,7 @@ class ReviewSurface:
             self.verdict_key_reference,
             self.note_input,
             self.undo_button,
+            self.promote_button,
             pn.layout.Divider(),
             pn.pane.Markdown("**Signal context**"),
             self.pad_left_input,
@@ -231,6 +237,34 @@ class ReviewSurface:
         """Undo the last verdict and return to the candidate it reversed."""
         self.queue.undo()
         self._render_current()
+
+    def _on_promote(self, _event=None):
+        """Promote the most recently scored candidate into the library.
+
+        Scoring and cataloguing are one motion: the candidate you just
+        scored is the one promotion acts on. Delegates to ticket 16's
+        entry-creation helper so the library gains no second creation path;
+        the helper is idempotent on the span, so promoting the same
+        candidate twice returns the existing entry rather than duplicating
+        it. Promotion writes no `annotations` row — it is the explicit
+        counterpart to the Review invariant, not a verdict side effect.
+        """
+        if not self.queue.history:
+            self.queue_status.object = "**Score a candidate before promoting.**"
+            return
+        scored = self.queue.history[-1]
+        candidate = self.queue.candidates[scored["index"]]
+        entry_id = R.insert_motif_entry(
+            self.conn,
+            candidate["recording_id"],
+            candidate["start_idx"],
+            candidate["end_idx"],
+            detection_id=candidate["id"],
+        )
+        self.queue_status.object = (
+            f"**Promoted detection {candidate['id']} "
+            f"to the library (entry {entry_id}).**"
+        )
 
     def _build_verdict_shortcut_widgets(self):
         """Invisible buttons and the keydown listener that clicks them.
@@ -352,6 +386,7 @@ class ReviewSurface:
     def _render_current(self):
         self._load_recording()
         self.undo_button.disabled = not bool(self.queue.history)
+        self.promote_button.disabled = not bool(self.queue.history)
         if self._range_stream is None:
             self.queue_status.object = "**No recording loaded in the Viewer.**"
             self.candidate_label.object = "*No candidates loaded.*"
