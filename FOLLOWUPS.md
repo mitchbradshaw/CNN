@@ -342,3 +342,12 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [ ] **T25** GATING (no exit class, gate: —) — Scope selection and run-group fan-out
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## Harness — 2026-08-25 (post-run-20260825-1310)
+
+4 merged of 6 dispatched. 31.12M tokens, $22.44 total, $4.24 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T19** GATING (no exit class, gate: —) — Adjudication store and divergence queries
+- [ ] **T25** GATING (no exit class, gate: —) — Scope selection and run-group fan-out
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
