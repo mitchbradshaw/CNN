@@ -23,6 +23,7 @@ merely empty.
 
 import panel as pn
 
+from UI.workspaces.analyse.compare import CompareSurface
 from UI.workspaces.builtins import BUILTIN_SECTIONS
 
 #: The four workspaces, in the order the shell presents them. Admin is a group
@@ -110,6 +111,7 @@ def reset():
     _REGISTRY.clear()
     for workspace, label, factory in BUILTIN_SECTIONS:
         register(workspace, label, factory)
+    register("Analyse", "Compare", lambda app: CompareSurface(app).layout())
 
 
 reset()
