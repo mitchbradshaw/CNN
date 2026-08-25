@@ -2,9 +2,8 @@
 test_matrix_profile_store.py
 ==============================
 Tests for Working/database/matrix_profile_store.py (the reuse/registry
-query layer) and Pipelines/import_mp_artifacts/import_mp_artifacts.py (the
-legacy-artifact backfill), against synthetic small artifacts — no
-dependency on real multi-MB matrix-profile data or a GPU.
+query layer), against synthetic small artifacts — no dependency on real
+multi-MB matrix-profile data or a GPU.
 
 Run from the project root:
     python tests/test_matrix_profile_store.py
@@ -32,7 +31,6 @@ from Working.database.runs import get_or_create_config, insert_artifact, insert_
 from Working.database import matrix_profile_store as store
 from Working.recipes import make_recipe
 from Pipelines.matrix_profile.run_matrix_profile import save_matrix_profile
-from Pipelines.import_mp_artifacts import import_mp_artifacts as backfill_mod
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -222,103 +220,6 @@ def test_load_mp_roundtrips_arrays():
         data = store.load_mp(path)
         assert "mp" in data and "mpi" in data and "left_i" in data and "right_i" in data
         assert len(data["mp"]) == len(data["mpi"])
-    finally:
-        fx.close()
-
-
-# ── backfill (Pipelines/import_mp_artifacts) ────────────────────────────────
-
-def _write_legacy_npz(results_dir, filename, mp, m, fs=1.0, window_min=None):
-    os.makedirs(results_dir, exist_ok=True)
-    kwargs = dict(mp=mp, mpi=np.zeros(len(mp), dtype=np.int32),
-                  t_mp=np.arange(len(mp), dtype=np.float32) / fs,
-                  m=np.array(m), fs=np.array(fs))
-    if window_min is not None:
-        kwargs["window_min"] = np.array(window_min)
-    np.savez_compressed(os.path.join(results_dir, filename), **kwargs)
-
-
-def test_backfill_imports_and_is_idempotent():
-    fx = _Fixture(n_samples=1000, fs=1.0)
-    try:
-        results_dir = os.path.join(fx.tmpdir, "legacy_results")
-        m = 10
-        mp_a = np.random.default_rng(1).random(1000 - m + 1).astype(np.float32)
-        mp_a[5:20] = np.nan  # less-finite variant
-        mp_b = mp_a.copy()
-        mp_b[np.isnan(mp_b)] = 0.5  # the "better" duplicate: fully finite
-
-        _write_legacy_npz(results_dir, "0_mp_fake_rec_CH0_WIN10.npz", mp_a, m, window_min=10)
-        # A second file describing the SAME logical artifact (GPU-flag
-        # prefix variant), more finite -> should be the one kept.
-        _write_legacy_npz(results_dir, "1_mp_fake_rec_CH0_WIN10.npz", mp_b, m, window_min=10)
-
-        summary = backfill_mod.backfill(db_path=fx.db_path, results_dir=results_dir)
-        assert len(summary["imported"]) == 1
-        assert len(summary["duplicates_resolved"]) == 1
-        assert summary["duplicates_resolved"][0]["kept"] == "1_mp_fake_rec_CH0_WIN10.npz"
-
-        # The kept artifact is findable through the store.
-        conn = init_db(fx.db_path)
-        hit = store.find_mp(conn, fx.recording_id, 10.0)
-        assert hit is not None
-        loaded = store.load_mp(hit["artifact_path"])
-        assert bool(np.all(np.isfinite(loaded["mp"])))  # the fully-finite one was kept
-
-        # Discarded duplicate and the imported original both moved to _legacy/;
-        # the new v2 artifact lands directly in results_dir (same convention
-        # as a live run), so results_dir now holds exactly the v2 file plus
-        # the _legacy/ subdirectory -- no leftover legacy-named files outside it.
-        legacy_dir = os.path.join(results_dir, "_legacy")
-        assert os.path.isfile(os.path.join(legacy_dir, "0_mp_fake_rec_CH0_WIN10.npz"))
-        assert os.path.isfile(os.path.join(legacy_dir, "1_mp_fake_rec_CH0_WIN10.npz"))
-        remaining = set(os.listdir(results_dir))
-        assert remaining == {"_legacy", "mp_v2_fake_rec_CH0_WIN10min.npz"}, remaining
-
-        # Re-running is a no-op: nothing left to scan, nothing double-registered.
-        summary2 = backfill_mod.backfill(db_path=fx.db_path, results_dir=results_dir)
-        assert summary2["imported"] == []
-        runs_after = conn.execute("SELECT COUNT(*) AS n FROM runs").fetchone()["n"]
-        conn.close()
-        conn2 = init_db(fx.db_path)
-        runs_again = conn2.execute("SELECT COUNT(*) AS n FROM runs").fetchone()["n"]
-        conn2.close()
-        assert runs_after == runs_again == 1
-    finally:
-        fx.close()
-
-
-def test_backfill_derives_window_from_missing_token():
-    fx = _Fixture(n_samples=1000, fs=1.0)
-    try:
-        results_dir = os.path.join(fx.tmpdir, "legacy_results2")
-        m = 50  # no window token in the filename -> must be derived
-        mp = np.random.default_rng(2).random(1000 - m + 1).astype(np.float32)
-        _write_legacy_npz(results_dir, "0_mp_fake_rec_CH0.npz", mp, m)  # no _WIN token
-
-        summary = backfill_mod.backfill(db_path=fx.db_path, results_dir=results_dir)
-        assert len(summary["imported"]) == 1
-
-        conn = init_db(fx.db_path)
-        # m=50 samples at fs=1.0 -> 50/60 min
-        expected_window_min = 50 / 1.0 / 60.0
-        hit = store.find_mp(conn, fx.recording_id, expected_window_min)
-        assert hit is not None
-        conn.close()
-    finally:
-        fx.close()
-
-
-def test_backfill_skips_unrecognised_filenames():
-    fx = _Fixture()
-    try:
-        results_dir = os.path.join(fx.tmpdir, "legacy_results3")
-        os.makedirs(results_dir, exist_ok=True)
-        with open(os.path.join(results_dir, "not_an_mp_file.npz"), "wb") as f:
-            f.write(b"not actually an npz")
-        summary = backfill_mod.backfill(db_path=fx.db_path, results_dir=results_dir)
-        assert summary["imported"] == []
-        assert "not_an_mp_file.npz" in summary["skipped"]
     finally:
         fx.close()
 

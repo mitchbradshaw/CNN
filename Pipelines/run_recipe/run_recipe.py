@@ -38,6 +38,8 @@ import argparse
 import json
 import sys
 
+from Working import manifest
+from Working.database.schema import init_db
 from Working.execution import RecipeExecutionError, execute_recipe
 from Working.recipes import make_recipe
 
@@ -58,6 +60,8 @@ def main():
     parser.add_argument("--force", action="store_true",
                          help="Recompute even if a completed run for this exact recipe already exists.")
     parser.add_argument("--db", default=None, help="Override the database path.")
+    parser.add_argument("--out-dir", default=None,
+                         help="Where to write the manifest (default: beside the run's artifacts).")
     args = parser.parse_args()
 
     recipe = load_recipe_from_file(args.config)
@@ -71,7 +75,24 @@ def main():
         result = execute_recipe(recipe, db_path=args.db, force=args.force, on_progress=_progress)
     except RecipeExecutionError as e:
         print(f"FAILED: {e}", file=sys.stderr)
+        # Every invocation writes a manifest, including a failed run: the run
+        # row already exists (status='failed'), and the manifest records the
+        # status, error text, and any partial step timings.
+        conn = init_db(args.db)
+        try:
+            run_id = manifest.resolve_run_id_for_recipe(conn, recipe)
+            if run_id is not None:
+                manifest_path = manifest.write_manifest(conn, [run_id], out_dir=args.out_dir)
+                print(f"manifest: {manifest_path}", file=sys.stderr)
+        finally:
+            conn.close()
         sys.exit(1)
+
+    conn = init_db(args.db)
+    try:
+        manifest_path = manifest.write_manifest(conn, [result["run_id"]], out_dir=args.out_dir)
+    finally:
+        conn.close()
 
     status = "reused prior run" if result["reused"] else "computed"
     print(
@@ -80,6 +101,7 @@ def main():
     )
     for i, elapsed in sorted(result["step_timings"].items(), key=lambda kv: int(kv[0])):
         print(f"  step {i}: {elapsed:.3f}s")
+    print(f"manifest: {manifest_path}")
 
 
 if __name__ == "__main__":
