@@ -303,9 +303,11 @@ def test_every_shipped_adapter_registers_without_modification():
     # types, and adds detection_threshold, a typed (input_kind='scores')
     # adapter. Ticket 06 remaps the four preprocessing filters (signal ->
     # signal, now with an explicit input_kind) and the three interval
-    # detectors (intervals -> spanset) to their typed vocabulary. The
-    # remaining adapters are untouched by those tickets and still use the
-    # legacy vocabulary this test was written to guard.
+    # detectors (intervals -> spanset) to their typed vocabulary. Ticket 07
+    # remaps the nine encoding blocks (signal -> encoding, now with an
+    # explicit input_kind). The remaining adapters are untouched by those
+    # tickets and still use the legacy vocabulary this test was written to
+    # guard.
     remapped_by_ticket_06 = {
         "preprocessing_bandpass", "preprocessing_detrend",
         "preprocessing_highpass", "preprocessing_lowpass",
@@ -313,7 +315,13 @@ def test_every_shipped_adapter_registers_without_modification():
     }
     remapped_by_ticket_08 = {"detection_matrix_profile", "preprocessing_window_matrix",
                               "detection_threshold"}
-    remapped = remapped_by_ticket_06 | remapped_by_ticket_08
+    remapped_by_ticket_07 = {
+        "catalogue_gramian_fusion", "catalogue_gramian_gadf",
+        "catalogue_gramian_gasf", "catalogue_gramian_recurrence",
+        "detection_freq_stft", "detection_sax_csax", "detection_sax_dsax",
+        "detection_sax_psax", "detection_wavelet_scattering",
+    }
+    remapped = remapped_by_ticket_06 | remapped_by_ticket_08 | remapped_by_ticket_07
     for module_name, spec in specs.items():
         if module_name in remapped:
             continue
