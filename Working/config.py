@@ -152,6 +152,16 @@ ZOOM_PRESETS_SECONDS = [
 # pure UI/session state, not data.
 SESSION_STATE_PATH = os.path.join("DATA", "db", "ui_session.json")
 
+# ── Step cache (Working/execution.py, Part 2) ───────────────────────────────
+#
+# A step's typed output is cached only when its measured runtime exceeds
+# this many seconds, so trivial filters cost no disk while expensive stages
+# are never recomputed just to retune something downstream. `STEP_CACHE_ROOT`
+# is the on-disk directory under which each recipe-prefix hash gets one
+# subdirectory per step.
+STEP_CACHE_WRITE_THRESHOLD_S = 1.0
+STEP_CACHE_ROOT = os.path.join("DATA", "derived", "step_cache")
+
 # ── Run algorithm tab (UI/run_panel.py, Part 5) ────────────────────────────
 #
 # One height for the pre-run "staged span" preview AND each Before/After

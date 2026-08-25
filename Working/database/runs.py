@@ -186,6 +186,30 @@ def list_artifacts_for_recording(conn, recording_id):
     ).fetchall()
 
 
+# ── step_artifacts (the per-step recipe-prefix cache) ────────────────────────
+
+def get_step_artifact(conn, recipe_prefix_hash, step_index):
+    """Return the cached artifact row for a step's recipe-prefix hash, or
+    None on a miss. The path points at a directory containing the typed
+    step output written by its `Working.types` serialiser."""
+    return conn.execute(
+        "SELECT * FROM step_artifacts WHERE recipe_prefix_hash = ? AND step_index = ?",
+        (recipe_prefix_hash, step_index),
+    ).fetchone()
+
+
+def insert_step_artifact(conn, recipe_prefix_hash, step_index, path):
+    """Record a step's cached artifact. `INSERT OR REPLACE` so a missing
+    on-disk artifact that gets recomputed can update its path under the same
+    unique (recipe_prefix_hash, step_index) key."""
+    conn.execute(
+        "INSERT OR REPLACE INTO step_artifacts (recipe_prefix_hash, step_index, path) "
+        "VALUES (?, ?, ?)",
+        (recipe_prefix_hash, step_index, path),
+    )
+    conn.commit()
+
+
 # ── encodings (the cache) ────────────────────────────────────────────────────
 
 def get_encoding_by_hash(conn, config_hash):

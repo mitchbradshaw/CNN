@@ -9,30 +9,50 @@ goes. Importable and runnable from a bare script with no Panel installed
 
 Nothing here imports a UI library, directly or transitively — `Adapters/`
 and `Working/` don't either, so this whole chain stays cluster-safe.
+
+Step cache
+----------
+The executor caches a step's typed `Working.types` output to
+`step_artifacts` when its measured runtime exceeds
+`Working.config.STEP_CACHE_WRITE_THRESHOLD_S`. A cached step is restored
+through the type's own `from_path` serialiser, never through a per-type
+code path.
+
+Interaction with `Working.encoding_cache`: it is **not used by the
+executor**. `encoding_cache.py` remains the storage layer for the UI's
+encoding-view lookups (SAX/Gramian encodings, keyed by whole-recipe hash).
+The step cache stores typed step outputs (the seven `Working.types`) under
+a recipe-*prefix* hash; it does not duplicate or replace `encoding_cache`.
 """
 
 import datetime
 import inspect
 import json
+import os
 import time
 import traceback
 
 import numpy as np
 
+from Adapters.base import AdapterResult
 from Adapters.registry import discover_adapters, get_adapter
 from Working.chain_validation import validate_recipe_steps
 from Working.database import queries as q
 from Working.database.runs import (
     find_completed_run,
     get_or_create_config,
+    get_step_artifact,
     insert_artifact,
     insert_detection,
     insert_run,
+    insert_step_artifact,
     list_detections,
     update_run,
 )
+from Working.recipes import recipe_hash
 from Working.side_inputs import resolve_side_inputs, typed_step_value
 from Working.types import Signal
+import Working.types as interchange_types
 
 
 class RecipeExecutionError(RuntimeError):
@@ -79,6 +99,58 @@ def _load_signal(recording, span):
     x = np.asarray(x_full[start:end])
     t = np.arange(start, end) / recording["fs"]
     return x, t
+
+
+_TYPED_VALUE_CLASSES = {name.lower(): getattr(interchange_types, name)
+                        for name in interchange_types.__all__}
+
+
+def _recipe_prefix_hash(recipe, up_to_index):
+    """The step-cache key: hash of the recipe prefix through `up_to_index`.
+
+    The prefix is a full recipe whose `steps` are truncated after the step,
+    so every field that affects the step — recording, span, params, and any
+    side-input bindings on the prefix steps — enters the hash.
+    """
+    prefix = dict(recipe)
+    prefix["steps"] = recipe["steps"][:up_to_index + 1]
+    return recipe_hash(prefix)
+
+
+def _load_cached_result(spec, cached_path, t):
+    """Load a cached typed step output into an `AdapterResult`.
+
+    Returns None when `spec.output_kind` has no `Working.types` serialiser
+    or the cached directory is missing/corrupt, so the caller falls back to
+    recomputation. A legacy `signal` output is reconstructed as the
+    `(x, t)`-style result the rest of the loop expects.
+    """
+    value_cls = _TYPED_VALUE_CLASSES.get(spec.output_kind)
+    if value_cls is None or not os.path.isdir(cached_path):
+        return None
+    try:
+        value = value_cls.from_path(cached_path)
+    except Exception:
+        return None
+    if spec.output_kind == "signal":
+        return AdapterResult(output_kind="signal", x=value.x, t=t)
+    return AdapterResult(output_kind=spec.output_kind, value=value)
+
+
+def _cache_step_result(conn, recipe, step_index, result, elapsed_s, fs, cache_root,
+                       threshold_s):
+    """Persist a step's typed output to `step_artifacts` when it was slow
+    enough to be worth the disk. No eviction — missing/corrupt cached
+    directories are simply overwritten on the next recomputation."""
+    if elapsed_s <= threshold_s:
+        return
+    value = typed_step_value(result, fs)
+    if value is None or not isinstance(value, tuple(_TYPED_VALUE_CLASSES.values())):
+        return
+    prefix_hash = _recipe_prefix_hash(recipe, step_index)
+    cache_dir = os.path.join(cache_root, prefix_hash, str(step_index))
+    value.to_path(cache_dir)
+    insert_step_artifact(conn, prefix_hash, step_index, cache_dir)
 
 
 def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_cancel=None,
@@ -154,8 +226,13 @@ def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_c
 
 
 def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, run_kwargs=None):
-    from Working.config import HELD_OUT_RECORDING_FILE, HELD_OUT_UNLOCK
-    
+    from Working.config import (
+        HELD_OUT_RECORDING_FILE,
+        HELD_OUT_UNLOCK,
+        STEP_CACHE_ROOT,
+        STEP_CACHE_WRITE_THRESHOLD_S,
+    )
+
     recording = q.get_recording_by_id(conn, recipe["recording_id"])
     if recording is None:
         raise ValueError(f"No recording with id={recipe['recording_id']}")
@@ -230,25 +307,41 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
                     "size scales with the square of the span length."
                 )
 
-            accepted = inspect.signature(spec.run).parameters
-            extra = {}
-            if run_kwargs:
-                extra = {k: v for k, v in run_kwargs.items() if k in accepted}
-            if spec.side_inputs:
-                extra.update(resolve_side_inputs(
-                    conn, spec, step.get("side_inputs") or {},
-                    root_signal=root_signal, step_results=step_results,
-                ))
-            # A typed (non-root-signal) step whose `run` declares a `value`
-            # param receives the previous typed step's output directly —
-            # this is what lets a chain like matrix_profile -> threshold
-            # thread a `Scores` through without going back via (x, t).
-            if spec.input_kind is not None and "value" in accepted:
-                extra["value"] = current_value
+            # Resume walk: the cache key is the recipe prefix through this
+            # step. A hit restores the step's typed output from disk and
+            # skips `spec.run`; a miss computes it and (if slow enough)
+            # writes the next cache entry.
+            prefix_hash = _recipe_prefix_hash(recipe, i)
+            cached = get_step_artifact(conn, prefix_hash, i)
+            result = _load_cached_result(spec, cached["path"], t) if cached is not None else None
+            from_cache = result is not None
 
-            t0 = time.time()
-            result = spec.run(x, t, fs, **params, **extra)
-            step_timings[i] = time.time() - t0
+            if from_cache:
+                step_timings[i] = 0.0
+            else:
+                accepted = inspect.signature(spec.run).parameters
+                extra = {}
+                if run_kwargs:
+                    extra = {k: v for k, v in run_kwargs.items() if k in accepted}
+                if spec.side_inputs:
+                    extra.update(resolve_side_inputs(
+                        conn, spec, step.get("side_inputs") or {},
+                        root_signal=root_signal, step_results=step_results,
+                    ))
+                # A typed (non-root-signal) step whose `run` declares a `value`
+                # param receives the previous typed step's output directly —
+                # this is what lets a chain like matrix_profile -> threshold
+                # thread a `Scores` through without going back via (x, t).
+                if spec.input_kind is not None and "value" in accepted:
+                    extra["value"] = current_value
+
+                t0 = time.time()
+                result = spec.run(x, t, fs, **params, **extra)
+                step_timings[i] = time.time() - t0
+                _cache_step_result(
+                    conn, recipe, i, result, step_timings[i], fs,
+                    STEP_CACHE_ROOT, STEP_CACHE_WRITE_THRESHOLD_S,
+                )
 
             if i in referenced_steps:
                 step_results[i] = typed_step_value(result, fs)
@@ -275,22 +368,20 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
             if result.value is not None:
                 current_value = result.value
 
-            if spec.persist is not None:
+            if spec.persist is not None and not from_cache:
                 # Opt-in only (see AdapterSpec.persist's docstring) — an
                 # adapter that declares this hook gets its output written
                 # to disk and registered automatically, so a headless
                 # run_recipe.py invocation (e.g. an HPC job) produces a
                 # browsable artifact with no separate import step. Any of
                 # the seven types may declare `persist`, not just 'encoding'.
+                # Skipped on a cache hit because only the typed value was
+                # restored, not the adapter's raw persist payload.
                 artifact_path = spec.persist(
                     conn, run_id, hash8, recording, span_start, span_end, params, result
                 )
                 if artifact_path is not None:
                     insert_artifact(conn, run_id, kind="encoding", path=artifact_path)
-            # An output with no `persist` hook is left on `result` for the
-            # caller — caching is a separate, explicit decision (see
-            # Working.encoding_cache), not something every step does
-            # automatically.
 
         duration_s = sum(step_timings.values())
         update_run(
