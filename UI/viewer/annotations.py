@@ -9,10 +9,17 @@ never to `detections` or `adjudications` (coding standard 2.5).
 import panel as pn
 
 from Working.database import queries as q
+from Working.database import runs as R
 from Working.database import vocabulary as v
 
 from UI.plots import format_scale_viewed
 from UI.viewer.constants import ANNOTATION_TAG_CATEGORIES
+
+#: The exemplar verdict, read from ticket 04's shared vocabulary rather than
+#: written as a second copy of the term. `self.verdict` is already restricted
+#: to `q.VERDICTS` by the Param selector, so this comparison can only fire for
+#: the shared seed term.
+_SEED_VERDICT = q.VERDICTS[q.VERDICTS.index("seed")]
 
 
 class AnnotationsMixin:
@@ -135,6 +142,16 @@ class AnnotationsMixin:
             v.set_annotation_tags(self.conn, aid, "quality", self.quality_widget.value)
         if self.structure_widget.value:
             v.set_annotation_tags(self.conn, aid, "structure", self.structure_widget.value)
+        # A span recognised by eye as exemplar-worthy anchors a library entry
+        # with no detection pointer (PRD story 5) — the case the detection-keyed
+        # schema could not express. The annotation and the entry stay separate
+        # objects; `insert_motif_entry` is the shared helper (ticket 16) and is
+        # idempotent on the span.
+        if self.verdict == _SEED_VERDICT:
+            R.insert_motif_entry(
+                self.conn, self._recording_id, start_idx, end_idx,
+                detection_id=None,
+            )
 
         self._pending_bounds = None
         self._sync_time_fields_from_bounds()
