@@ -132,27 +132,41 @@ def test_construction_builds_a_non_none_layout_listing_every_block():
 
 
 def test_a_fresh_chain_has_no_incompatible_blocks():
-    """Every shipped block in a fresh chain is compatible with the root
-    signal — the legacy blocks take it implicitly (`input_kind=None`) and
-    the ticket-06/08 typed blocks declare `input_kind="signal"` — so
-    nothing is ever disabled in a fresh chain except the two blocks a fresh
-    chain genuinely cannot feed yet: `detection.threshold` (`input_kind='scores'`)
-    and `catalogue.cluster` (`input_kind='windowset'`). Those blocks being
-    disabled with their reasons inline is the type checker working, not a
-    regression."""
+    """Every shipped block that takes the root signal is offered in a fresh
+    chain — the legacy blocks take it implicitly (`input_kind=None`) and the
+    ticket-06/08 typed blocks declare `input_kind="signal"`. A block
+    declaring any *other* input kind genuinely cannot be fed yet, and is
+    offered disabled with the kind it wants named inline. That is the type
+    checker working, not a regression.
+
+    Derived from the registry rather than from a list of block names. This
+    test used to name the two typed blocks it expected to be disabled and
+    assert every other button was enabled, which meant each new typed block
+    the backlog added broke it — it had stopped testing the builder and
+    started tracking the backlog.
+    """
     from UI.workspaces.analyse.builder import ChainBuilder
+    from Working.chain_validation import ROOT_SIGNAL_KIND
 
     builder = ChainBuilder(_FakeApp())
-    for row in builder.add_column.objects:
+    blocks = [block for block, _ok, _reason in builder.chain.available_blocks()]
+    rows = builder.add_column.objects
+    assert len(rows) == len(blocks)
+
+    typed = 0
+    for block, row in zip(blocks, rows):
         button, reason = row[0], row[1]
-        if button.name.startswith("Add Threshold"):
-            assert button.disabled is True
-            assert "scores" in reason.object
-        elif button.name.startswith("Add Dendrogram"):
-            assert button.disabled is True
-            assert "windowset" in reason.object
+        expected = block.input_kind or ROOT_SIGNAL_KIND
+        if expected == ROOT_SIGNAL_KIND:
+            assert button.disabled is False, block.name
         else:
-            assert button.disabled is False
+            typed += 1
+            assert button.disabled is True, block.name
+            assert expected in reason.object, block.name
+
+    # Both branches must actually be exercised, or the loop above would pass
+    # just as happily against a registry that had lost its typed blocks.
+    assert typed >= 2, "expected at least two typed blocks a fresh chain cannot feed"
 
 
 # ── add: appends, revalidates, re-renders ────────────────────────────────────
