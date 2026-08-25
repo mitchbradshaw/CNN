@@ -282,7 +282,13 @@ def test_both_expensive_adapters_declare_estimate_delegating_to_cost():
 
     with scratch_calibration(wm_cost):
         wm_cost.calibrate(stages=("catch22",))
-        est_wm = wm_adapter.SPEC.estimate(span, None, 1.0, window_min=1.0)
+        # The adapter's estimate delegates to the cost module, so only the
+        # calibrated stage is selected -- fast_entropy/slow_entropy would
+        # return None (uncalibrated) and the whole estimate is None.
+        est_wm = wm_adapter.SPEC.estimate(
+            span, None, 1.0, window_min=1.0,
+            fast_entropy=False, slow_entropy=False,
+        )
         assert est_wm is not None and est_wm > 0
 
 

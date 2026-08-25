@@ -33,7 +33,7 @@ import json
 import math
 import os
 
-from Working.config import HPC_REMOTE_REPO_ROOT
+from Working.config import CLUSTER_ROUTING_CEILING_S, HPC_REMOTE_REPO_ROOT
 from Working.database import queries as q
 from Working.database.runs import get_or_create_config
 from Working.recipes import make_recipe
@@ -61,6 +61,84 @@ def _slurm_time_from_estimate(est_seconds):
     return f"{h:02d}:{m:02d}:00"
 
 
+class _Span:
+    """Lightweight stand-in for a signal array so an adapter's `estimate`
+    can be evaluated for a span without materialising the array. Only `len`
+    (and `shape`/`size`) are guaranteed -- the two estimators this module
+    knows about need no more than the span length and `fs`."""
+
+    def __init__(self, n):
+        self._n = int(n)
+        self.shape = (self._n,)
+        self.size = self._n
+
+    def __len__(self):
+        return self._n
+
+
+def estimate_recipe_seconds(recipe, n_samples, fs):
+    """Sum of per-step runtime estimates for a recipe over a span of
+    `n_samples` at `fs`, multiplied by fan-out width (PRD "Cluster routing").
+
+    A step whose adapter declares no `estimate` contributes zero -- "Blocks
+    without an estimator count as free". An estimator that returns `None`
+    (uncalibrated on this machine) also contributes zero, matching the cost
+    modules' never-guess contract; callers that need to distinguish "unknown"
+    from "cheap" should use `route_recipe`, which reports the former.
+    """
+    from Adapters.registry import get_adapter
+
+    total = 0.0
+    for step in recipe["steps"]:
+        spec = get_adapter(f"{step['stage']}.{step['algorithm']}")
+        est = spec.estimate
+        if est is None:
+            continue
+        value = est(_Span(n_samples), None, fs, **step["params"])
+        if value is not None:
+            total += float(value)
+    fan = recipe.get("fan_out")
+    if fan:
+        total *= len(fan["targets"])
+    return total
+
+
+def route_recipe(recipe, n_samples, fs, ceiling_s=CLUSTER_ROUTING_CEILING_S):
+    """Where a recipe should run: `'cluster'` | `'local'` | `'unknown'`.
+
+    `'cluster'` when the summed per-step estimate (times fan-out width)
+    exceeds `ceiling_s`. `'unknown'` when any step's estimator is present but
+    uncalibrated (returns `None`) -- the sum is then a lower bound, and
+    routing on it could send a long job to the local path. Otherwise
+    `'local'`.
+
+    The value is a headless string a run surface reads to promote "export
+    cluster job" to the primary action (PRD "Cluster routing") -- not a UI
+    behaviour buried in a widget callback.
+    """
+    from Adapters.registry import get_adapter
+
+    total = 0.0
+    any_unknown = False
+    for step in recipe["steps"]:
+        spec = get_adapter(f"{step['stage']}.{step['algorithm']}")
+        est = spec.estimate
+        if est is None:
+            continue
+        value = est(_Span(n_samples), None, fs, **step["params"])
+        if value is None:
+            any_unknown = True
+        else:
+            total += float(value)
+    fan = recipe.get("fan_out")
+    if fan:
+        total *= len(fan["targets"])
+    if any_unknown:
+        # Even the known part exceeding the ceiling is enough to be certain.
+        return "cluster" if total > ceiling_s else "unknown"
+    return "cluster" if total > ceiling_s else "local"
+
+
 _SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --chdir={remote_root}
@@ -69,6 +147,7 @@ _SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --time={slurm_time}
 #SBATCH --gres=gpu:a100
 #SBATCH --cpus-per-task=4
+{array_line}
 
 echo "========================================"
 echo "Job ID       : $SLURM_JOB_ID"
@@ -85,7 +164,7 @@ module load cuda/12.2
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate torch_env
 
-python Pipelines/run_recipe/run_recipe.py --config {recipe_repo_path}
+{run_command}
 
 echo "========================================"
 echo "Finished : $(date)"
@@ -93,19 +172,140 @@ echo "========================================"
 """
 
 
+def _materialize_snippet(recipe_repo_path, per_target_repo_path):
+    """Bash snippet that materialises this array task's per-target recipe
+    from the fan-out list baked into the recipe JSON, then runs it.
+
+    The per-target recipe is written by `Working.run_groups.materialize_target`
+    (the same function `fan_out_recipe` uses locally), so the cluster path and
+    the local path cannot drift on what a task index means.
+    """
+    return (
+        "# Materialise this array task's per-target recipe from the fan-out\n"
+        "# list baked into the recipe JSON.\n"
+        f"python - {recipe_repo_path} \"$SLURM_ARRAY_TASK_ID\" {per_target_repo_path} <<'PY'\n"
+        "import json, sys\n"
+        "from Working.run_groups import materialize_target\n"
+        "recipe_path, task_id, out_path = sys.argv[1], int(sys.argv[2]), sys.argv[3]\n"
+        "with open(recipe_path) as f:\n"
+        "    recipe = json.load(f)\n"
+        "with open(out_path, \"w\") as f:\n"
+        "    json.dump(materialize_target(recipe, task_id), f)\n"
+        "PY\n"
+    )
+
+
+def export_job(recipe, *, out_dir, base_name, job_name, est_seconds=None,
+               slurm_time=None, resumable=False, max_chain=12, uses_gpu=True,
+               artifact_repo_path=None, timeout_s=None):
+    """Write a recipe JSON + `sbatch` script for an arbitrary recipe.
+
+    This is the single generic exporter both `export_mp_job` and
+    `export_wm_job` now wrap. If `recipe` carries a `fan_out` scope, it
+    exports a SINGLE SLURM array job whose task index selects its target from
+    the recipe's baked-in list (via `Working.run_groups.materialize_target`).
+
+    `resumable=True` uses the window-matrix chain template (resubmits on an
+    incomplete build) and requires `artifact_repo_path`; `uses_gpu` toggles
+    the GPU directive/module for that template.
+
+    Returns `{"script_path", "recipe_path", "artifact_path", "sbatch_command",
+    "job_name", "slurm_time", "timeout_s"}`.
+    """
+    if slurm_time is None:
+        slurm_time = _slurm_time_from_estimate(est_seconds)
+
+    os.makedirs(out_dir, exist_ok=True)
+    recipe_path = os.path.join(out_dir, f"{base_name}.json")
+    with open(recipe_path, "w") as f:
+        json.dump(recipe, f, indent=2)
+
+    # The paths baked into the script are REPO-RELATIVE (forward slashes,
+    # regardless of the OS this was generated on) -- the job's own `--chdir`
+    # puts it at HPC_REMOTE_REPO_ROOT, so a relative path here is what
+    # resolves correctly once the generated pair is synced across to the
+    # cluster at the same relative location.
+    recipe_repo_path = recipe_path.replace(os.sep, "/")
+    script_path = os.path.join(out_dir, f"{base_name}.sh")
+    script_repo_path = script_path.replace(os.sep, "/")
+
+    fan = recipe.get("fan_out")
+    n_targets = len(fan["targets"]) if fan else 0
+    array_line = f"#SBATCH --array=0-{n_targets - 1}" if fan else ""
+    # The per-target recipe each array task writes sits next to the shared
+    # fan-out recipe, named by task index so parallel tasks never collide.
+    per_target_repo_path = os.path.join(
+        out_dir, f"{base_name}_task$SLURM_ARRAY_TASK_ID.json",
+    ).replace(os.sep, "/")
+
+    if resumable:
+        materialize = _materialize_snippet(recipe_repo_path, per_target_repo_path) if fan else ""
+        run_command = (
+            materialize
+            + f"python Pipelines/run_recipe/run_recipe.py --config "
+              f"{per_target_repo_path if fan else recipe_repo_path} --force"
+        )
+        resubmit_line = (
+            f"sbatch --array=$SLURM_ARRAY_TASK_ID {script_repo_path} \"$NEXT\""
+            if fan else f"sbatch {script_repo_path} \"$NEXT\""
+        )
+        manual_resubmit_line = (
+            f"sbatch --array=$SLURM_ARRAY_TASK_ID {script_repo_path} 1"
+            if fan else f"sbatch {script_repo_path} 1"
+        )
+        script = _WM_SCRIPT_TEMPLATE.format(
+            job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
+            slurm_time=slurm_time, max_chain=int(max_chain),
+            gpu_line=("#SBATCH --gres=gpu:a100\n#SBATCH --partition=gpu" if uses_gpu
+                      else "# CPU-only build (no CNN stage) -- no GPU requested."),
+            module_line=("module load cuda/12.2\n" if uses_gpu else ""),
+            artifact_repo_path=artifact_repo_path,
+            array_line=array_line,
+            run_command=run_command,
+            resubmit_line=resubmit_line,
+            manual_resubmit_line=manual_resubmit_line,
+        )
+    else:
+        materialize = _materialize_snippet(recipe_repo_path, per_target_repo_path) if fan else ""
+        run_command = (
+            materialize
+            + f"python Pipelines/run_recipe/run_recipe.py --config "
+              f"{per_target_repo_path if fan else recipe_repo_path}"
+        )
+        script = _SCRIPT_TEMPLATE.format(
+            job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
+            slurm_time=slurm_time, array_line=array_line, run_command=run_command,
+        )
+    with open(script_path, "w") as f:
+        f.write(script)
+
+    return {
+        "script_path": script_path, "recipe_path": recipe_path,
+        "artifact_path": artifact_repo_path,
+        "sbatch_command": f"sbatch {script_repo_path}",
+        "job_name": job_name, "slurm_time": slurm_time, "timeout_s": timeout_s,
+    }
+
+
 def export_mp_job(conn, recording_id, window_min, span=None, *,
-                   est_seconds=None, backend="auto", out_dir=DEFAULT_OUT_DIR):
+                   est_seconds=None, backend="auto", out_dir=DEFAULT_OUT_DIR,
+                   fan_out=None):
     """Generate a recipe JSON + `sbatch` script for a
     `detection.matrix_profile` run of `window_min` minutes over
     `recording_id` (`span=None` means the whole channel).
+
+    `fan_out` is an optional `{"kind": "channels"|"bands", "targets": [...]}`
+    scope; when present the recipe is exported as a SINGLE SLURM array job
+    whose task index selects its target from the baked-in list.
 
     Named by config hash (`{base_name}.json` / `.sh`), so re-exporting the
     exact same job overwrites its own prior export rather than
     accumulating a new pair every time.
 
-    Returns `{"script_path", "recipe_path", "sbatch_command", "job_name"}`
-    (all paths local/relative — see module docstring for what still needs
-    to happen before `sbatch_command` can actually run anywhere).
+    Returns `{"script_path", "recipe_path", "sbatch_command", "job_name",
+    "slurm_time", "timeout_s", "artifact_path"}` (all paths
+    local/relative — see module docstring for what still needs to happen
+    before `sbatch_command` can actually run anywhere).
     """
     recording = q.get_recording_by_id(conn, recording_id)
     if recording is None:
@@ -114,7 +314,7 @@ def export_mp_job(conn, recording_id, window_min, span=None, *,
     recipe = make_recipe(recording_id, [
         {"stage": "detection", "algorithm": "matrix_profile",
          "params": {"window_min": float(window_min), "backend": backend}},
-    ], span=span)
+    ], span=span, fan_out=fan_out)
     _config_id, hash8 = get_or_create_config(conn, recipe)
 
     channel = recording["channel"]
@@ -122,29 +322,10 @@ def export_mp_job(conn, recording_id, window_min, span=None, *,
     base_name = f"mp_{stem}_CH{channel}_WIN{window_min:g}min_{hash8}"
     job_name = f"mp_CH{channel}_WIN{window_min:g}min"
 
-    os.makedirs(out_dir, exist_ok=True)
-    recipe_path = os.path.join(out_dir, f"{base_name}.json")
-    with open(recipe_path, "w") as f:
-        json.dump(recipe, f, indent=2)
-
-    # The path baked into the script is REPO-RELATIVE (forward slashes,
-    # regardless of the OS this was generated on) -- the job's own
-    # `--chdir` puts it at HPC_REMOTE_REPO_ROOT, so a relative path here
-    # is what resolves correctly once the generated pair is synced across
-    # to the cluster at the same relative location.
-    recipe_repo_path = recipe_path.replace(os.sep, "/")
-    script_path = os.path.join(out_dir, f"{base_name}.sh")
-    script = _SCRIPT_TEMPLATE.format(
-        job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
-        slurm_time=_slurm_time_from_estimate(est_seconds), recipe_repo_path=recipe_repo_path,
+    return export_job(
+        recipe, out_dir=out_dir, base_name=base_name, job_name=job_name,
+        est_seconds=est_seconds, resumable=False, uses_gpu=True,
     )
-    with open(script_path, "w") as f:
-        f.write(script)
-
-    return {
-        "script_path": script_path, "recipe_path": recipe_path,
-        "sbatch_command": f"sbatch {script_path.replace(os.sep, '/')}", "job_name": job_name,
-    }
 
 
 # ===========================================================================
@@ -175,6 +356,7 @@ _WM_SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 {gpu_line}
+{array_line}
 # Chain position, incremented on each resubmit. Capped at {max_chain} so a
 # bug that always reports "incomplete" terminates instead of burning the
 # allocation -- the failure mode the hand-written wm_job.sh has today.
@@ -200,7 +382,7 @@ conda activate torch_env
 # time (the resume path is baked in from the first export, deliberately, so
 # the config hash never changes), so without it execute_recipe would reuse
 # the previous job's partial run instead of continuing it.
-python Pipelines/run_recipe/run_recipe.py --config {recipe_repo_path} --force
+{run_command}
 
 echo "========================================"
 echo "Run finished : $(date)"
@@ -215,11 +397,11 @@ elif [ "$STATUS" -ge 3 ]; then
     exit "$STATUS"
 elif [ "$CHAIN_INDEX" -ge "$MAX_CHAIN" ]; then
     echo ">>> Work remains but the chain cap ($MAX_CHAIN) is reached -- stopping."
-    echo ">>> Resubmit manually if this is expected: sbatch {script_repo_path} 1"
+    echo ">>> Resubmit manually if this is expected: {manual_resubmit_line}"
 else
     NEXT=$((CHAIN_INDEX + 1))
     echo ">>> Work remains -- submitting job $NEXT of $MAX_CHAIN ..."
-    sbatch {script_repo_path} "$NEXT"
+    {resubmit_line}
     echo ">>> Submitted. Monitor with: squeue -u $USER"
 fi
 
@@ -232,10 +414,17 @@ def export_wm_job(conn, recording_id, window_min, span=None, *, step_frac=1.0,
                   stages=("catch22", "fast_entropy", "slow_entropy"),
                   est_seconds=None, timeout_s=None, max_chain=12,
                   cnn_model_dir="models", rf_model_path="",
-                  out_dir=DEFAULT_WM_OUT_DIR, results_dir=None):
+                  out_dir=DEFAULT_WM_OUT_DIR, results_dir=None, fan_out=None):
     """Generate a recipe JSON + resubmitting `sbatch` script for a
     `preprocessing.window_matrix` run of `window_min` minutes over
     `recording_id` (`span=None` means the whole channel).
+
+    `fan_out` is an optional `{"kind": "channels"|"bands", "targets": [...]}`
+    scope; when present the recipe is exported as a SINGLE SLURM array job
+    whose task index selects its target from the baked-in list. NOTE: the
+    chain script's `wm_status --artifact` path is derived from the BASE
+    recording, so a multi-target fan-out should be verified against each
+    target's actual artifact path before submission.
 
     Named by config hash, so re-exporting the exact same job overwrites its
     own prior export rather than accumulating a new pair every time.
@@ -291,7 +480,7 @@ def export_wm_job(conn, recording_id, window_min, span=None, *, step_frac=1.0,
     }
     recipe = make_recipe(recording_id, [
         {"stage": "preprocessing", "algorithm": "window_matrix", "params": params},
-    ], span=span)
+    ], span=span, fan_out=fan_out)
     _config_id, hash8 = get_or_create_config(conn, recipe)
 
     channel = recording["channel"]
@@ -300,29 +489,10 @@ def export_wm_job(conn, recording_id, window_min, span=None, *, step_frac=1.0,
     base_name = f"wm_{stem}_CH{channel}_WIN{window_min:g}min_STEP{step_pct}pct_{hash8}"
     job_name = f"wm_CH{channel}_WIN{window_min:g}min"
 
-    os.makedirs(out_dir, exist_ok=True)
-    recipe_path = os.path.join(out_dir, f"{base_name}.json")
-    with open(recipe_path, "w") as f:
-        json.dump(recipe, f, indent=2)
-
-    script_path = os.path.join(out_dir, f"{base_name}.sh")
-    uses_gpu = "cnn" in stages
-    script = _WM_SCRIPT_TEMPLATE.format(
-        job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
-        slurm_time=slurm_time, max_chain=int(max_chain),
-        gpu_line=("#SBATCH --gres=gpu:a100\n#SBATCH --partition=gpu" if uses_gpu
-                  else "# CPU-only build (no CNN stage) -- no GPU requested."),
-        module_line=("module load cuda/12.2\n" if uses_gpu else ""),
-        recipe_repo_path=recipe_path.replace(os.sep, "/"),
-        script_repo_path=script_path.replace(os.sep, "/"),
+    return export_job(
+        recipe, out_dir=out_dir, base_name=base_name, job_name=job_name,
+        est_seconds=est_seconds, slurm_time=slurm_time, resumable=True,
+        max_chain=max_chain, uses_gpu="cnn" in stages,
         artifact_repo_path=artifact_path.replace(os.sep, "/"),
+        timeout_s=timeout_s,
     )
-    with open(script_path, "w") as f:
-        f.write(script)
-
-    return {
-        "script_path": script_path, "recipe_path": recipe_path,
-        "artifact_path": artifact_path,
-        "sbatch_command": f"sbatch {script_path.replace(os.sep, '/')}",
-        "job_name": job_name, "slurm_time": slurm_time, "timeout_s": timeout_s,
-    }

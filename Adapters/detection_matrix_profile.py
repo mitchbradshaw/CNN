@@ -86,6 +86,20 @@ def _run(x, t, fs, window_min=10.0, backend="auto", scrump_percentage=1.0):
     )
 
 
+def _estimate(x, t, fs, window_min=10.0, backend="auto", scrump_percentage=1.0):
+    """Predicted runtime in seconds for a span `x`, delegating to
+    `Working.Detection.matrix_profiling.cost.estimate_seconds`.
+
+    Returns `None` when uncalibrated on this machine — the same "counts as
+    free" signal the cost module returns, never a guessed number. `backend`
+    is passed through; the cost module already maps unknown backends
+    (`"auto"`, `"scrump"`) to the calibrated `"stump"` constant, which is a
+    conservative upper bound for routing.
+    """
+    from Working.Detection.matrix_profiling.cost import estimate_seconds as mp_estimate
+    return mp_estimate(len(x), backend)
+
+
 def _persist(conn, run_id, config_hash, recording, span_start, span_end, params, result):
     from Working.database.matrix_profile_store import compute_data_sha1
     import os
@@ -117,6 +131,7 @@ SPEC = register(AdapterSpec(
                   min=0.0, max=1.0),
     ],
     run=_run,
+    estimate=_estimate,
     output_kind="scores",
     plot=None,
     max_span_samples=max_span_samples_for_background(),

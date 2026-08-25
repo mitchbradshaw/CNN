@@ -131,6 +131,29 @@ def _run(x, t, fs, window_min=10.0, step_frac=1.0, catch22=True,
     )
 
 
+def _estimate(x, t, fs, window_min=10.0, step_frac=1.0, catch22=True,
+              fast_entropy=True, slow_entropy=True, cnn=False, rf=False,
+              partial_tail=False, **params):
+    """Predicted runtime in seconds for a span `x`, delegating to
+    `Working.Preprocessing.window_matrix.cost.estimate_seconds`.
+
+    Mirrors `_run`'s geometry derivation (m from window_min/fs, step from
+    step_frac, n_windows from the span length) so the estimate is for the
+    exact build the run would perform. Returns `None` when any selected
+    stage is uncalibrated on this machine — the same "counts as free"
+    signal the cost module returns, never a guessed number.
+    """
+    from Working.Preprocessing.window_matrix.cost import estimate_seconds as wm_estimate
+
+    m = int(round(window_min * 60 * fs))
+    step = store.step_samples(m, step_frac)
+    n_windows = store.n_windows_for(len(x), m, step, partial_tail=partial_tail)
+    stages = _selected_stages(catch22, fast_entropy, slow_entropy, cnn, rf)
+    if not stages:
+        return 0.0
+    return wm_estimate(n_windows, m, stages)
+
+
 def _persist(conn, run_id, config_hash, recording, span_start, span_end, params, result):
     from Working.database.matrix_profile_store import compute_data_sha1
 
@@ -213,6 +236,7 @@ SPEC = register(AdapterSpec(
                   "comparable to the rest of its column and is not."),
     ],
     run=_run,
+    estimate=_estimate,
     output_kind="windowset",
     plot=None,
     # Derived from this machine's calibration at REGISTRATION time, so the
