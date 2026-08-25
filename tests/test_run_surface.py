@@ -333,7 +333,10 @@ def test_launch_starts_background_run_group_and_creates_run_rows():
             n_groups = conn.execute("SELECT COUNT(*) FROM run_groups").fetchone()[0]
             assert n_groups == 1, "a fan-out launch must create exactly one run_groups row"
             n_runs = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
-            assert n_runs == 2, "a 2-channel fan-out launch must create two run rows"
+            assert n_runs == 4, (
+                "a 2-channel fan-out with surrogate control on (the default) "
+                "must create two original runs and two surrogate runs"
+            )
         finally:
             conn.close()
     finally:
