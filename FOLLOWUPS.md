@@ -333,3 +333,12 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 - [minor] [standards] (no rule cited) Data Clumps: edge natural key (member_a_id, member_b_id, distance_function, threshold, recipe_hash) travels together across insert_motif_edge/get_motif_edge; defensible in a plain-SQL accessor layer
 - [minor] [standards] (no rule cited) Duplicated Code: mmap-slice load pattern appears in both Working/library.py:_load_span and the recompute test's independent reload; acceptable since the test must not depend on the code it's verifying
 - [minor] [spec] (no rule cited) get_or_create_motif_member's docstring claims member identity is enforced by the 4-tuple key, but motif_member has no UNIQUE constraint at the schema level — idempotency holds only through this one code path, and schema.py is outside T36's declared file list so a fix is arguably a different ticket's job
+
+## Harness — 2026-08-25 (post-run-20260825-1310)
+
+4 merged of 6 dispatched. 31.12M tokens, $22.44 total, $4.24 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T19** GATING (no exit class, gate: —) — Adjudication store and divergence queries
+- [ ] **T25** GATING (no exit class, gate: —) — Scope selection and run-group fan-out
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
