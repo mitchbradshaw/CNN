@@ -27,6 +27,7 @@ from Working.Detection.analysis.dehshibi_detection_analysis import (
     detect_spikes,
     plot_spike_detection,
 )
+from Working.types import SpanSet
 
 
 def _run(x, t, fs, n_p=60, min_spike_duration=60, min_roi_wavelet=30, epsilon_factor=0.05):
@@ -35,7 +36,11 @@ def _run(x, t, fs, n_p=60, min_spike_duration=60, min_roi_wavelet=30, epsilon_fa
         min_roi_wavelet=min_roi_wavelet, epsilon_factor=epsilon_factor,
     )
     return AdapterResult(
-        output_kind="intervals", intervals=spikes,
+        output_kind="spanset", intervals=spikes,
+        value=SpanSet(
+            starts=tuple(s for s, _ in spikes),
+            ends=tuple(e for _, e in spikes),
+        ),
         meta={"pseudo_spikes": pseudo_spikes, "n_spikes": len(spikes),
               "n_pseudo_spikes": len(pseudo_spikes), "n_chunks": len(info["chunks"])},
     )
@@ -56,7 +61,8 @@ SPEC = register(AdapterSpec(
         ParamSpec("epsilon_factor", float, 0.05, "Candidate-region prominence threshold (fraction of range)", min=0.0, max=1.0),
     ],
     run=_run,
-    output_kind="intervals",
+    input_kind="signal",
+    output_kind="spanset",
     plot=_plot,
     description=(
         "Full Morse-wavelet + analytic-envelope spike detection pipeline "

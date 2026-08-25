@@ -138,7 +138,7 @@ class ExecutionMixin:
         spec = get_adapter(f"{last_step['stage']}.{last_step['algorithm']}")
         result = out["result"]
 
-        if spec.output_kind == "intervals":
+        if spec.output_kind in ("intervals", "spanset"):
             dets = R.list_detections(conn_w, out["run_id"])
             return {"kind": "intervals", "detections": [dict(d) for d in dets]}
 

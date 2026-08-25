@@ -106,11 +106,11 @@ def test_reorder_revalidates_the_chain():
     assert chain.is_valid is True
 
     # rupture (wants signal) before lowpass: root signal still feeds rupture
-    # fine, but lowpass after rupture wants signal and gets 'intervals'.
+    # fine, but lowpass after rupture wants signal and gets 'spanset'.
     chain.reorder([1, 0])
     assert [s["algorithm"] for s in chain.steps] == ["rupture", "lowpass"]
     assert chain.is_valid is False
-    assert "intervals" in chain.invalid_reason
+    assert "spanset" in chain.invalid_reason
 
 
 def test_reorder_rejects_a_non_permutation():

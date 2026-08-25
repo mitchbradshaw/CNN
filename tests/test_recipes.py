@@ -88,9 +88,10 @@ def test_short_hash_is_first_8_chars_of_full_hash():
 
 
 def test_chained_steps_order_matters_for_hash():
-    # Both steps output_kind="signal" and declare no input_kind, so the
-    # chain validates in either order (ticket 13, "chain validation") —
-    # this test is only about hash order-sensitivity, not chain validity.
+    # Both steps output_kind="signal" and declare input_kind="signal"
+    # (ticket 06), so the chain validates in either order (ticket 13,
+    # "chain validation") — this test is only about hash
+    # order-sensitivity, not chain validity.
     steps_ab = [
         {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
         {"stage": "preprocessing", "algorithm": "highpass", "params": {"cutoff_hz": 0.01}},
