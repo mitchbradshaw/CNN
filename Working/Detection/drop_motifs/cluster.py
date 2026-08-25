@@ -43,9 +43,8 @@ is the only place normalisation happens.
 Ward on the resampled vectors rather than average-linkage on a pairwise
 matrix
 --------------------------------------------------------------------
-`family_search.cluster_order` builds an O(n^2) `scale_invariant_distance`
-matrix and runs average linkage on it. That is the right tool there,
-because its exemplars are of wildly different lengths and the pairwise
+Average linkage on a pairwise `scale_invariant_distance` matrix is the
+right tool when exemplars are of wildly different lengths and the pairwise
 resampling is unavoidable. Here every event is resampled to one common
 length anyway, so the vectors are directly Euclidean-comparable and Ward
 applies - the same choice `Working/Catalogue/dendrogram/dendrogram_cluster
@@ -90,8 +89,8 @@ DEFAULT_MAX_ROUGHNESS = 2.0     # matches seed_replicas.DEFAULT_MAX_ROUGHNESS
 def roughness(values):
     """RMS first difference of the z-normalised span.
 
-    Identical definition to `Pipelines.motif_report.seed_replicas.
-    roughness`, restated here rather than imported because `Working/` must
+    The same roughness the seed-replica report used, restated here rather
+    than imported because `Working/` must
     not depend on `Pipelines/` - the dependency runs the other way, the
     same rule `dsax._letter` documents for `Adapters/`. Four lines, and
     `tests/test_drop_motifs_detect.py` is where a divergence would show.
@@ -131,10 +130,7 @@ def feature_matrix(waveforms, n_samples=DEFAULT_RESAMPLE_LENGTH):
 
 def distance_matrix(waveforms, metric=DISTANCE_SCALE_INVARIANT):
     """Pairwise distance, divided by sqrt(n) so it reads as RMS z-score
-    difference per sample and stays comparable across lengths - the same
-    convention `motif_report --max-distance-norm` and
-    `family_search.cross_scale_matrix` already use, so a number here is
-    directly comparable to a number on the existing figures.
+    difference per sample and stays comparable across lengths.
     """
     n = len(waveforms)
     D = np.zeros((n, n), dtype=float)
@@ -362,8 +358,7 @@ def cluster_events(events, snippets, *, n_clusters=None, height=None,
 
 
 def condensed_from_matrix(D):
-    """`squareform` with checks off - the same call `family_search.
-    cluster_order` makes, kept here so the control path (average linkage
-    on the scale-invariant matrix) is one line for a caller that wants to
-    compare it against the Ward tree."""
+    """`squareform` with checks off - kept here so the control path
+    (average linkage on the scale-invariant matrix) is one line for a
+    caller that wants to compare it against the Ward tree."""
     return squareform(np.asarray(D, dtype=float), checks=False)

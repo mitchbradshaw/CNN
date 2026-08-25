@@ -2,7 +2,7 @@
 retrofit_provenance.py
 ========================
 One-time (idempotent) retrofit: tag every existing `source='imported_10min'`
-annotation (the ~11,000 windows from `import_10min_labels.py`) with
+annotation (the ~11,000 manually-sorted 10-minute windows) with
 `provenance='manually_sorted_for_cnn'`.
 
 This is a distinct concept from the existing `source` column: `source`

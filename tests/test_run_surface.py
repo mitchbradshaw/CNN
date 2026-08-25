@@ -48,6 +48,7 @@ from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.hpc.job_export import estimate_recipe_seconds
 from Working.Detection.matrix_profiling import cost as mp_cost
+from Working.types import SpanSet
 from tests._calibration_isolation import scratch_calibration
 from UI.analyse.chain_state import ChainState
 
@@ -419,14 +420,17 @@ def test_stage_results_append_and_earlier_stage_stays_inspectable():
         0, AdapterResult(output_kind="signal", x=np.zeros(4)), recipe,
     )
     surface._append_stage_result(
-        1, AdapterResult(output_kind="intervals", intervals=[(0, 2)]), recipe,
+        1, AdapterResult(
+            output_kind="spanset",
+            value=SpanSet(starts=(0,), ends=(2,)),
+        ), recipe,
     )
 
     objects = surface.stage_results.objects
     assert len(objects) == 2
     assert "preprocessing.lowpass" in objects[0].object
     assert "detection.matrix_profile" in objects[1].object
-    assert "1 detection" in objects[1].object
+    assert "1 span(s)" in objects[1].object
 
 
 def test_launch_renders_stage_results_as_they_land():

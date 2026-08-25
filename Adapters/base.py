@@ -29,13 +29,9 @@ TYPE_KINDS = tuple(name.lower() for name in _interchange_types.__all__)
 # library exemplar.
 SOURCE_KINDS = ("root_signal", "earlier_step", "library_exemplar")
 
-# Legacy output vocabulary, predating the seven interchange types. Kept
-# alongside them (not replaced) so no adapter breaks on the day this lands —
-# see ticket 05. `signal` and `encoding` already coincide with two of the
-# seven type names; `intervals` does not, so it stays as its own entry.
-_LEGACY_OUTPUT_KINDS = ("signal", "intervals", "encoding")
-
-OUTPUT_KINDS = tuple(dict.fromkeys(_LEGACY_OUTPUT_KINDS + TYPE_KINDS))
+# `output_kind` must be one of the seven interchange types (see
+# `Working.types`). There is no separate legacy vocabulary.
+OUTPUT_KINDS = TYPE_KINDS
 
 
 @dataclass
@@ -122,7 +118,7 @@ class AdapterResult:
     output_kind: str
     x: Any = None            # 'signal': the processed array
     t: Any = None            # 'signal': matching timestamps
-    intervals: Optional[list] = None   # 'intervals': [(start, end[, score]), ...]
+    intervals: Optional[list] = None   # legacy carrier: [(start, end[, score]), ...]
     encoding: Any = None     # 'encoding': array, string, or other value
     value: Any = None        # a typed object from `Working.types` (ticket 01)
     meta: dict = field(default_factory=dict)
@@ -148,10 +144,9 @@ class AdapterSpec:
         onto the underlying function" the brief asks for; that mapping
         lives entirely inside `run`, nowhere else.
     output_kind : str
-        One of `OUTPUT_KINDS` — the legacy `signal`/`intervals`/`encoding`
-        vocabulary, or one of the seven `TYPE_KINDS`, accepted side by side
-        (ticket 05, expand phase). Every existing adapter keeps its legacy
-        value; new adapters (later tickets) declare a `TYPE_KINDS` value.
+        One of the seven `TYPE_KINDS` (the contents of `OUTPUT_KINDS`). The
+        legacy `intervals` output vocabulary is gone; `signal` and
+        `encoding` survive as the type names they already coincided with.
     input_kind : str, optional
         One of `TYPE_KINDS`, or None meaning "root signal" — the primary
         input this step expects. Every existing adapter takes the raw

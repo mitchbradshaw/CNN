@@ -9,8 +9,7 @@ This is the complement to `Working/Detection/matrix_profiling`, not a
 replacement for it. Matrix-profile discovery answers "which whole
 subsequences recur"; this answers "does the rise-then-drop dynamic itself
 have a small vocabulary of shapes". The two find different things on the
-same recording and the difference is the point - see
-`Pipelines/drop_motifs/README.md`.
+same recording and the difference is the point.
 
 Three modules, split along the one boundary that matters:
 
@@ -22,7 +21,6 @@ Three modules, split along the one boundary that matters:
                Pure numpy/pandas.
 
 None of them import a plotting library, which is what lets a detection run
-happen on a compute node and what makes the figures in
-`Pipelines/drop_motifs/figures.py` replayable from storage alone
-(CLAUDE.md rule 1).
+happen on a compute node and what makes a figure reproducible from storage
+alone (CLAUDE.md rule 1).
 """

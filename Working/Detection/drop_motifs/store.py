@@ -35,9 +35,8 @@ later wants more context than was materialised. That is the real safety
 net; the stored snippet is the convenience copy, independent of whether
 `DATA/` is reachable at all.
 
-Amplitudes are stored in mV, matching `motif_report.transform_snippet`'s
-convention, so a number read off this table is directly comparable to one
-read off `Plots/motif_families/`.
+Amplitudes are stored in mV, so a number read off this table is directly
+comparable to one read off `Plots/motif_families/`.
 
 No plotting library - CLAUDE.md rule 1.
 """

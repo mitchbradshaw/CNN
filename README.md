@@ -112,9 +112,6 @@ so both the UI and headless scripts share one API:
 # one-time: extract DATA/raw/*.mat into per-channel .npy + `recordings` rows
 python Pipelines/materialize_channels/materialize_channels.py
 
-# import the ~11k manually-sorted 10-minute windows as annotations
-python Pipelines/import_labels/import_10min_labels.py
-
 # browse a channel, see existing labels, and add new ones
 panel serve UI/serve.py --show
 ```
@@ -151,6 +148,43 @@ is the object most analysis flows through: rows are windows keyed by start
 sample index, columns are features added incrementally. Populated matrices in
 `MATRICES/` currently carry ~60 columns — CNN scores for four encodings, SAX
 symbol strings, six entropies and all 22 Catch22 features.
+
+### The Pipeline GUI workspaces
+
+`panel serve UI/serve.py` opens a tabbed shell with four workspaces plus an
+Admin group:
+
+| Tab | Content |
+|---|---|
+| **Explore** | The signal viewer |
+| **Analyse** | Run algorithm · Run history · Chain builder · Compare · Export run group · Block inspector |
+| **Review** | Candidate queue |
+| **Library** | Motif browser |
+| **Admin** (group) | Vocabulary admin · Import recording |
+
+Workspace content is mounted by registration (`UI.workspaces.register`) rather
+than named in the shell, so a new surface is added without editing the layout.
+
+### The seven interchange types
+
+Pipeline blocks are typed: a block may only follow one whose output type it
+declares as its input. The seven interchange types
+([`Working/types/`](Working/types)) are **Encoding**, **Grouping**, **Model**,
+**Scores**, **Signal**, **SpanSet**, **WindowSet**. A step's `output_kind` must
+be one of these — the legacy `signal`/`intervals`/`encoding` output vocabulary
+is gone — and a block with an `input_kind` may only be fed by a producer of
+that exact type; the root signal is always a `Signal`.
+
+### The manifest
+
+Every run — and every exported run group — carries a version-1 manifest
+([`Working/manifest.py`](Working/manifest.py)): a JSON file whose top level is
+`manifest_version`, `code_version`, `created_at` and a `runs` array. Each run
+block embeds the exact recipe that ran, its 8-character `config_hash` (equal to
+`Working.recipes.short_hash` of the recipe), the recording's content, the run's
+status and timings, its detections, and its artifact paths. Paths are stored
+forward-slashed so a manifest written on the Linux cluster reads correctly on a
+Windows worktree.
 
 ---
 

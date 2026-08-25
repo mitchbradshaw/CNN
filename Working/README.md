@@ -32,6 +32,9 @@ execution.py       execute_recipe() — headless, runs a recipe's steps through
                     see Pipelines/run_recipe/run_recipe.py for the CLI wrapper.
 artifacts.py       Plots/ filename convention + explicit-save helper.
 encoding_cache.py  Hash-keyed cache under DATA/derived/encodings/.
+manifest.py        The single owner of the manifest schema — the version-1 JSON
+                    written beside run artifacts (and exported run groups) and
+                    read back by the manifest importer. See "The manifest".
 database/          SQLite schema + plain-function queries: recordings,
                     annotations, reviewed spans, tag vocabulary, and the
                     run-tracking tables (configs/runs/detections/encodings/
@@ -56,6 +59,27 @@ Catalogue/
 Comparison/
   test_cnn.py      inference / accuracy scoring CLI
 ```
+
+## The seven interchange types
+
+Pipeline blocks are typed: a block may only follow one whose output type it
+declares as its input. `Working/types/` defines the seven interchange types —
+**Encoding**, **Grouping**, **Model**, **Scores**, **Signal**, **SpanSet**,
+**WindowSet**. A step's `output_kind` must be one of these, and a block with an
+`input_kind` may only be fed by a producer of that exact type.
+`Working/chain_validation.check_step_compatibility` answers "can this output
+type feed this block, and if not, why not".
+
+## The manifest
+
+`Working/manifest.py` is the single owner of the manifest schema. A manifest is
+the portability payload written beside a run's artifacts (or an exported run
+group): a JSON file with `manifest_version`, `code_version`, `created_at` and a
+`runs` array. Each run block embeds the exact recipe that ran, its 8-character
+`config_hash` (equal to `Working.recipes.short_hash` of the recipe), the
+recording's content, the run's status and timings, its detections, and its
+artifact paths. Paths are stored forward-slashed so a manifest written on the
+Linux cluster reads correctly on a Windows worktree.
 
 ## Imports
 
