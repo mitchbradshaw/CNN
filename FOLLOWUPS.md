@@ -343,6 +343,48 @@ Six defects addressed together, on `fix/runner-usage-resilience`. Orchestrator s
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
 
+### Triage — all three landed by hand, none was a bad ticket
+
+**T11 — harness.** Held on `_run`, which is the adapter entry-point
+convention: twenty shipped adapters already define it and T11 adds a
+twenty-first (`Adapters/catalogue_cluster.py`). A per-module convention name
+is not two implementations of one idea, which is what the gate exists to
+catch. Every future adapter ticket will hit this. Merged at d16f675.
+
+- [ ] [major] `orchestrator/gates/overlap.py` compares module-private
+  top-level symbols across the whole tree. Adapters are required to define
+  `_run`, so the gate reports a collision for doing the thing the contract
+  demands. Adding `Adapters/` to `[overlap] ignore_paths` would fix this case
+  and hide genuine adapter collisions with it; scoping the comparison to
+  symbols within one module path is the narrower fix. Same shape as the
+  `_run_all()` test-footer false positive already fixed by `ignore_paths`.
+
+**T34 — harness.** Held on `_fmt_seconds`, which T34 never wrote. It *moved*
+`UI/window_matrix_panel.py` to `UI/workspaces/analyse/window_matrix.py`; the
+symbol travelled with the file, and the gate read the rename as an addition.
+Merged at 8af1bcf.
+
+- [ ] [major] The overlap gate does not detect renames. `git diff -M` would
+  tell it the symbol is the same one that already existed.
+- [ ] [minor] The duplication the gate pointed at is nonetheless real, and is
+  now inside one package: `_fmt_seconds` is defined in both
+  `UI/workspaces/analyse/run_surface.py` (T31) and
+  `UI/workspaces/analyse/window_matrix.py` (pre-existing, relocated by T34).
+  One should import the other.
+
+**T41 — neither, but it exposes a gap.** Every gate passed; it failed at
+merge as `conflict`, because T39 and T40 landed first and touched the same
+two places. `Working/library.py` took appended functions from both. And both
+T39 and T41 independently created `UI/workspaces/library/detail.py` for
+unrelated classes — `EntryDetail` and `CrossChannelClassifier`. T41's class
+is now `cross_channel.py`. Merged at 884cbd0, nothing dropped.
+
+- [ ] [major] The overlap gate compares symbols, not paths, so two tickets
+  creating the *same file* with *different* symbols passes it cleanly and
+  fails later at merge, after the full budget has been spent. A path-level
+  check would have held T41 in the same cheap way T11 and T34 were held.
+
+
 ## Harness — 2026-08-25 (post-run-20260825-1310)
 
 4 merged of 6 dispatched. 31.12M tokens, $22.44 total, $4.24 of it on work that did not land. Written by the runner; the triage below is not.
