@@ -24,6 +24,7 @@ merely empty.
 import panel as pn
 
 from UI.workspaces.analyse.compare import CompareSurface
+from UI.workspaces.analyse.export import RunGroupExporter
 from UI.workspaces.builtins import BUILTIN_SECTIONS
 
 #: The four workspaces, in the order the shell presents them. Admin is a group
@@ -112,6 +113,8 @@ def reset():
     for workspace, label, factory in BUILTIN_SECTIONS:
         register(workspace, label, factory)
     register("Analyse", "Compare", lambda app: CompareSurface(app).layout())
+    register("Analyse", "Export run group",
+             lambda app: RunGroupExporter(app).layout())
 
 
 reset()

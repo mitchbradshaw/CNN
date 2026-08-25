@@ -7,5 +7,6 @@ Import from here, not from a submodule.
 """
 
 from UI.workspaces.analyse.builder import ChainBuilder
+from UI.workspaces.analyse.export import RunGroupExporter
 
-__all__ = ["ChainBuilder"]
+__all__ = ["ChainBuilder", "RunGroupExporter"]
