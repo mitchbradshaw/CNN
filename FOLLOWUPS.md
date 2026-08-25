@@ -425,3 +425,12 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 
 - [major] [standards] (rule 6.1) _SEED_VERDICT round-trips the literal "seed" through VERDICTS.index()/[]; comment claims it avoids a second copy of the term but the literal key is still hardcoded
 - [major] [spec] (rule 7.1) test_non_seed_annotation_does_not_create_a_library_entry is not asked for by any acceptance criterion; defensible as regression coverage for the seed-only behaviour, but arguably scope beyond what was requested
+
+## T40 — 2026-08-26 00:25
+
+- [major] [standards] (rule 5.2) recording_id hashed by row id, not content, in the search recipe dict
+- [minor] [standards] (no rule cited) "recall" field is a raw match count, not a normalized recall rate (Mysterious Name)
+- [minor] [standards] (no rule cited) recording fetched from DB twice for the same entry in detail.py (Duplicated Code)
+- [minor] [standards] (no rule cited) nested duration/start loop reloads exemplar .npy from disk per candidate window
+- [minor] [spec] (no rule cited) AC4 control test only asserts strictly-fewer matches, doesn't guard against a degenerate zero-recovery control
+- [minor] [spec] (no rule cited) self-overlap not excluded beyond exact span match; default UI search-to-own-recording can write spurious self-similarity matches as real results
