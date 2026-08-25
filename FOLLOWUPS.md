@@ -406,3 +406,10 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 
 - [minor] [standards] (no rule cited) _run seeds with np.random.RandomState while every stochastic site in Working/ uses np.random.default_rng; no rule mandates either but it diverges from repo convention
 - [minor] [standards] (no rule cited) Adding the adapter forced a companion edit to tests/test_adapter_spec.py (count bump + new membership set) — Shotgun Surgery smell, though arguably inherent to that test's role as a registry-completeness guard
+
+## T38 — 2026-08-25 20:15
+
+- [minor] [standards] (no rule cited) motif_browser.py's layout() now changes for two unrelated reasons (motif-browsing UI vs Library-workspace tab composition) — Divergent Change smell.
+- [minor] [standards] (no rule cited) grid.py repeats review/surface.py's 2-line single-occurrence-group dict-literal glue before calling build_motif_waveform_overlay — cosmetic Duplicated Code smell.
+- [major] [spec] (rule 4.5) LibraryGrid is instantiated unconditionally inside MotifBrowser.__init__, but no test asserts the composed MotifBrowser.layout() (the actual Library surface) returns non-None panes — only LibraryGrid is tested standalone against a fake app.
+- [minor] [spec] (no rule cited) "Absorbing" the motif browser was implemented as a hand-rolled nested pn.Tabs inside MotifBrowser.layout() instead of registering "Library grid" as a second section through the existing UI/workspaces registry, bypassing the sibling-registration pattern used elsewhere.
