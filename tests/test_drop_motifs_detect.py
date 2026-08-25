@@ -197,8 +197,6 @@ def test_a_short_detrend_window_manufactures_a_spurious_slow_fall():
     reader is most likely to reproduce on their own data, and because the
     giveaway is visible in the output - a fall duration two orders of
     magnitude longer than its neighbours, at a fraction of their depth.
-    `Pipelines/drop_motifs/README.md` gives the measured detrend windows
-    per span for the same reason.
     """
     x, (peak_a, peak_b) = two_events()
 
@@ -225,7 +223,7 @@ def test_min_separation_collapses_two_events_into_the_deeper_one():
     counted several times through several UP regions. Set wider than the
     engineered spacing it must collapse the pair, and the survivor must be
     the DEEPER of the two - depth is the quality score here, the same role
-    distance plays in `family_search.dedupe_matches`."""
+    distance plays in a nearest-neighbour dedupe."""
     x, (peak_a, peak_b) = two_events()
     x[peak_b:peak_b + 4] = np.linspace(20.0, 0.0, 4)      # make the 2nd deeper
     x[peak_b - 400:peak_b] = np.linspace(0.0, 20.0, 400)

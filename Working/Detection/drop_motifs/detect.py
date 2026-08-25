@@ -32,8 +32,7 @@ around a real icicle read `SSSSSSSSDSSSSSS`: the fall is classified, the
 rise never is, and "the first fall after a rise" therefore matches
 nothing. Quantile mode sets the band by OCCUPANCY instead, which is
 scale-free with respect to how big the drops are, and the same icicle
-reads `SSSUDDUDDU` - a rise, then the fall. See
-`Pipelines/drop_motifs/README.md` for the measured comparison.
+reads `SSSUDDUDDU` - a rise, then the fall.
 
 A second, free benefit: quantile mode touches no RNG at all (dSAX's own
 "Determinism" note), so detection is reproducible without depending on
@@ -128,8 +127,7 @@ class DetectionParams:
     # Rolling-mean window. Long relative to noise, comparable to one spike:
     # too short and the spike is treated as drift and removed, too long and
     # the drift survives into the trend alphabet. Validated by eye per
-    # recording; the chosen values and the reasoning are in
-    # Pipelines/drop_motifs/README.md.
+    # recording.
 
     segment_seconds: float
     # dSAX segment duration. Must be short enough that the rise spans
@@ -491,8 +489,8 @@ def detect_drops(x, fs, params):
     """Every spike-drop in `x`.
 
     `x` is in the recording's native units (volts here); amplitudes on the
-    returned events are in mV, matching `motif_report.transform_snippet`'s
-    convention so the numbers are comparable to the existing figures.
+    returned events are in mV so the numbers are comparable to the existing
+    figures.
     """
     started = time.time()
     x = np.asarray(x, dtype=float).ravel()
@@ -596,8 +594,8 @@ def detect_drops(x, fs, params):
     counts["rejected_shallow"] = len(candidates) - len(kept)
 
     # -- separation filter, deepest wins ----------------------------------
-    # Same shape as `family_search.dedupe_matches` / `motif_report.
-    # enforce_separation`, with depth in the role distance plays there.
+    # Greedy deepest-wins de-duplication, with depth in the role distance
+    # plays in a nearest-neighbour dedupe.
     separation = params.min_separation_s * fs
     if separation > 0:
         survivors = []

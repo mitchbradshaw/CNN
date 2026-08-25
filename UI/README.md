@@ -21,7 +21,6 @@ README). Also requires the database to be populated first:
 
 ```bash
 python Pipelines/materialize_channels/materialize_channels.py
-python Pipelines/import_labels/import_10min_labels.py
 ```
 
 ## Visual verification during development
@@ -110,6 +109,26 @@ run_panel.py    "Run algorithm" tab — configure and launch a
 run_history.py  "Run history" tab — browse past runs, reopen one's
                 artifacts, jump back to the Viewer tab at that run's span.
 ```
+
+## Workspaces
+
+The app opens as a tabbed shell with four workspaces plus an Admin group.
+Sections are mounted by registration into `UI/workspaces` rather than named in
+the shell, so a ticket adds a surface without editing the layout
+(`UI/viewer/layout.py` is frozen):
+
+| Workspace | Sections |
+|---|---|
+| **Explore** | The signal viewer |
+| **Analyse** | Run algorithm · Run history · Chain builder · Compare · Export run group · Block inspector |
+| **Review** | Candidate queue |
+| **Library** | Motif browser |
+| **Admin** (group) | Vocabulary admin · Import recording |
+
+A workspace with one section renders it directly; with several it renders
+sub-tabs; with none it renders a placeholder that says so (a workspace that
+rendered `None` would be the silently-blank-pane failure this repo has hit
+twice).
 
 ## How the plot stays responsive and honest
 
