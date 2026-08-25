@@ -207,7 +207,7 @@ def test_changing_filters_rerenders_without_blanking_the_panes():
     surface, conn, tmpdir, d1, d2 = _make_surface()
     try:
         surface.method_input.value = "rupture"
-        surface._apply_filters()
+        surface._on_apply_filters()
 
         assert [c["id"] for c in surface.queue.candidates] == [d1]
         assert surface.signal_pane.object is not None

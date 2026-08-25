@@ -102,7 +102,7 @@ def test_register_makes_a_section_reachable():
     try:
         workspaces.register("Review", "Queue", lambda app: pn.pane.Markdown("queue"))
         labels = [label for label, _ in workspaces.sections("Review")]
-        assert labels == ["Queue"]
+        assert "Queue" in labels
     finally:
         workspaces.reset()
 
@@ -127,14 +127,17 @@ def test_registry_holds_factories_not_built_panes():
     """A pane belongs to one app. The registry outlives every app, so holding
     built panes here would hand a second app the first app's widgets."""
     try:
-        workspaces.register("Review", "Queue", lambda app: pn.pane.Markdown(app.token))
+        # Explore has no builtin sections, so a single registration renders
+        # directly -- the right shape for asserting a factory is called once
+        # per app rather than a built pane being shared.
+        workspaces.register("Explore", "Queue", lambda app: pn.pane.Markdown(app.token))
 
         class _FakeApp:
             def __init__(self, token):
                 self.token = token
 
-        first = workspaces.build("Review", _FakeApp("one"))
-        second = workspaces.build("Review", _FakeApp("two"))
+        first = workspaces.build("Explore", _FakeApp("one"))
+        second = workspaces.build("Explore", _FakeApp("two"))
         assert first is not second
         assert first.object == "one" and second.object == "two"
     finally:
@@ -146,8 +149,8 @@ def test_an_empty_workspace_builds_a_non_none_placeholder():
     is the blank-pane failure this file exists to catch."""
     try:
         workspaces.reset()
-        # Review has no builtin content until tickets 20/21 land.
-        pane = workspaces.build("Review", object())
+        # Explore remains the one workspace with no builtin content.
+        pane = workspaces.build("Explore", object())
         assert pane is not None
     finally:
         workspaces.reset()
@@ -156,7 +159,7 @@ def test_an_empty_workspace_builds_a_non_none_placeholder():
 def test_reset_restores_the_pre_split_surfaces():
     workspaces.register("Review", "Temporary", lambda app: pn.pane.Markdown("x"))
     workspaces.reset()
-    assert [label for label, _ in workspaces.sections("Review")] == []
+    assert [label for label, _ in workspaces.sections("Review")] == ["Candidate queue"]
     analyse = [label for label, _ in workspaces.sections("Analyse")]
     assert "Run algorithm" in analyse and "Run history" in analyse
 
@@ -258,7 +261,11 @@ def test_a_registered_section_reaches_the_shell_without_editing_it():
     try:
         review = _pane_named(app.tabs, "Review")
         assert review is not None
-        assert getattr(review, "object", None) == "the queue"
+        # Review already carries the built-in Candidate queue, so a second
+        # registration makes it a tab group rather than a single pane.
+        queue = _pane_named(review, "Queue")
+        assert queue is not None
+        assert queue.object == "the queue"
     finally:
         _close_and_unlink(app, db_path)
         workspaces.reset()

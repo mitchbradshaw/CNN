@@ -182,6 +182,8 @@ class AnnotationsMixin:
     def _on_tab_changed(self, event):
         if event.new == 1 and self.run_panel is not None:  # "Analyse" — holds the run panel
             self.run_panel._on_span_context_changed()
+        if event.new == 2 and self.review_surface is not None:  # "Review" — candidate queue
+            self.review_surface.on_tab_activated()
         if event.new == 3 and self.motif_browser is not None:  # "Library" — holds the motif browser
             self.motif_browser.on_tab_activated()
 

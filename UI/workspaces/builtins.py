@@ -26,5 +26,6 @@ BUILTIN_SECTIONS = (
     # `UI/viewer/app.py`, same as `run_panel`/`run_history` above -- this
     # table only ever reads the attribute off `app`, per its own docstring.
     ("Analyse", "Chain builder", lambda app: app.chain_builder.layout()),
+    ("Review", "Candidate queue", lambda app: app.review_surface.layout()),
     ("Library", "Motif browser", lambda app: app.motif_browser.layout()),
 )
