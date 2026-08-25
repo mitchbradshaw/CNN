@@ -300,6 +300,109 @@ def test_cancel_wires_cooperative_cancel_event():
     assert "Cancelling" in surface.status.object
 
 
+# ── T32: progress indicator and per-stage results ──────────────────────────
+
+def test_progress_and_stage_result_panes_are_present():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(_FakeApp(), chain=_lowpass_chain())
+    layout = surface.layout()
+
+    assert layout is not None
+    assert surface.progress_pane is not None
+    assert surface.stage_results is not None
+    # Both start empty: no progress before a run, no stage results yet.
+    assert surface.progress_pane.object == ""
+    assert len(surface.stage_results.objects) == 0
+
+
+def test_progress_indicator_appears_only_above_configured_threshold():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(
+        _FakeApp(), chain=_lowpass_chain(), progress_threshold_s=60,
+    )
+    surface._estimate_seconds = 59.9
+    surface._set_progress("Starting ...")
+    assert surface.progress_pane.object == ""
+
+    surface._estimate_seconds = 60.1
+    surface._set_progress("Starting ...")
+    assert "Estimated finish" in surface.progress_pane.object
+    assert "Starting" in surface.progress_pane.object
+
+
+def test_step_and_intra_step_progress_render_in_indicator():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(
+        _FakeApp(), chain=_lowpass_chain(), progress_threshold_s=1,
+    )
+    surface._estimate_seconds = 10.0
+    surface._set_progress("Starting ...")
+
+    surface._update_step_progress(0, 2, "preprocessing", "lowpass")
+    assert "Step 1/2" in surface.progress_pane.object
+    assert "preprocessing.lowpass" in surface.progress_pane.object
+
+    surface._update_intra_step_progress(5, 10, "catch22")
+    assert "catch22" in surface.progress_pane.object
+    assert "5/10" in surface.progress_pane.object
+
+
+def test_stage_results_append_and_earlier_stage_stays_inspectable():
+    from Adapters.base import AdapterResult
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    surface = RunSurface(_FakeApp(), chain=_lowpass_chain())
+    recipe = {"steps": [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+        {"stage": "detection", "algorithm": "matrix_profile", "params": {}},
+    ]}
+
+    surface._clear_stage_results()
+    surface._append_stage_result(
+        0, AdapterResult(output_kind="signal", x=np.zeros(4)), recipe,
+    )
+    surface._append_stage_result(
+        1, AdapterResult(output_kind="intervals", intervals=[(0, 2)]), recipe,
+    )
+
+    objects = surface.stage_results.objects
+    assert len(objects) == 2
+    assert "preprocessing.lowpass" in objects[0].object
+    assert "detection.matrix_profile" in objects[1].object
+    assert "1 detection" in objects[1].object
+
+
+def test_launch_renders_stage_results_as_they_land():
+    from UI.workspaces.analyse.run_surface import RunSurface
+
+    db_path, tmpdir, ids = _fresh_db_with_channels(1)
+    try:
+        conn = init_db(db_path)
+        try:
+            chain = ChainState(recording_id=ids[0])
+            chain.add_step("preprocessing", "lowpass", params={"cutoff_hz": 0.05})
+            app = _FakeApp(recording_id=ids[0], fs=1.0, n_samples=200, conn=conn)
+            surface = RunSurface(app, chain=chain)
+
+            surface._on_run()
+            deadline = time.time() + 30
+            while surface._thread is not None and surface._thread.is_alive() \
+                    and time.time() < deadline:
+                time.sleep(0.02)
+            time.sleep(0.05)  # grace for completion callbacks to land
+
+            assert "Done" in surface.status.object, surface.status.object
+            assert len(surface.stage_results.objects) == 1
+            assert "preprocessing.lowpass" in surface.stage_results.objects[0].object
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 # ── runner ───────────────────────────────────────────────────────────────────
 
 def _run_all():
