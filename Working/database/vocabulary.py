@@ -231,6 +231,24 @@ def get_motif_tags(conn, motif_id):
     return _get_tags(conn, "motif_tags", "motif_id", motif_id)
 
 
+# ── shape-first motif entry tags ─────────────────────────────────────────────
+
+def set_motif_entry_tags(conn, entry_id, category, values, commit=True):
+    """Entry equivalent of `set_motif_tags` — same controlled vocabulary,
+    stored in `motif_entry_tags` (keyed by entry id, not legacy motif id)."""
+    _set_tags(conn, "motif_entry_tags", "entry_id", entry_id, category, values, commit)
+
+
+def add_motif_entry_tag(conn, entry_id, category, value, commit=True):
+    """Entry equivalent of `add_motif_tag`."""
+    _add_tag(conn, "motif_entry_tags", "entry_id", entry_id, category, value, commit)
+
+
+def get_motif_entry_tags(conn, entry_id):
+    """Entry equivalent of `get_motif_tags`."""
+    return _get_tags(conn, "motif_entry_tags", "entry_id", entry_id)
+
+
 def annotations_matching_tags(conn, recording_id, tag_filters):
     """Return the set of annotation ids under `recording_id` that carry at
     least one of `values` in *every* requested category.

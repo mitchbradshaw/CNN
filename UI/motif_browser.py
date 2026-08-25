@@ -390,14 +390,17 @@ class MotifBrowser:
         if g is None or "detection_id" not in g:
             self.motif_status.object = "**No group selected.**"
             return
-        motif_id = R.insert_motif(
-            self.conn, g["detection_id"],
+        det = R.get_detection(self.conn, g["detection_id"])
+        run = R.get_run(self.conn, det["run_id"])
+        entry_id = R.insert_motif_entry(
+            self.conn, run["recording_id"], det["start_idx"], det["end_idx"],
+            detection_id=g["detection_id"],
             label=self.motif_label.value or None, rating=self.motif_rating.value or None,
             notes=self.motif_notes.value or None,
         )
         if self.motif_elements.value:
-            v.set_motif_tags(self.conn, motif_id, "element", self.motif_elements.value)
-        self.motif_status.object = f"Saved motif id={motif_id} (detection_id={g['detection_id']})."
+            v.set_motif_entry_tags(self.conn, entry_id, "element", self.motif_elements.value)
+        self.motif_status.object = f"Saved motif id={entry_id} (detection_id={g['detection_id']})."
         self._clear_motif_fields()
 
     # ── Segment mode (§4) ────────────────────────────────────────────────
