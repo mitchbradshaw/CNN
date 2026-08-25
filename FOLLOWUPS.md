@@ -486,3 +486,11 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [ ] **T41** FAILED (conflict, gate: —) — Cross-channel classification
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T46 — 2026-08-26 06:21
+
+- [major] [standards] (rule 1.3) gather_entry_members/entry_edges_by_member placed in export.py rather than library.py, defensible given T46's declared file list but worth a note for future cross-file work
+- [minor] [standards] (no rule cited) _copy_entry_plots duplicates _copy_plots's makedirs/isfile/used-names dedup logic within the same module instead of a shared helper
+- [minor] [standards] (no rule cited) _build_library_entry_manifest hand-rolls the envelope (manifest_version/code_version/created_at) instead of calling a shared envelope builder, unlike export_run_group which calls M.build_manifest
+- [minor] [spec] (no rule cited) export_library_entry replaces ticket 27's "runs" envelope key with a differently-shaped "entry" key rather than nesting alongside it, a structural deviation from the documented manifest schema
+- [major] [spec] (rule 6.4) bins dict hardcodes the three classification-bin strings instead of importing BINS/ARTIFACT/PROPAGATION/INDEPENDENT_RECURRENCE from Working/cross_channel.py, re-declaring vocabulary owned by another module
