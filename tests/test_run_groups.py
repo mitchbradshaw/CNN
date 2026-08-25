@@ -81,6 +81,115 @@ def _run_group_structure(db_path, run_group_id):
         conn.close()
 
 
+# ── paired surrogate runs (ticket 44) ────────────────────────────────────────
+
+def test_surrogate_recipe_prepends_surrogate_step():
+    recipe = make_recipe(
+        1,
+        [{"stage": "preprocessing", "algorithm": "lowpass",
+          "params": {"cutoff_hz": 0.05}}],
+        span=(0, 100),
+    )
+    surrogate = run_groups.surrogate_recipe(recipe)
+
+    assert surrogate["steps"][0]["stage"] == "preprocessing"
+    assert surrogate["steps"][0]["algorithm"] == "surrogate"
+    assert surrogate["steps"][1] == recipe["steps"][0]
+
+
+def test_run_paired_recipe_creates_surrogate_run_linked_by_surrogate_of_run_id():
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        recipe["surrogate"] = True
+
+        out = run_groups.run_paired_recipe(recipe, db_path=db_path)
+
+        assert out.get("surrogate_run_id") is not None
+        conn = init_db(db_path)
+        try:
+            original = R.get_run(conn, out["run_id"])
+            surrogate = R.get_run(conn, out["surrogate_run_id"])
+            assert surrogate["surrogate_of_run_id"] == original["id"]
+
+            stored_original = R.load_recipe(conn, original["config_id"])
+            assert stored_original["surrogate"] is True
+
+            stored_surrogate = R.load_recipe(conn, surrogate["config_id"])
+            assert stored_surrogate["steps"][0]["algorithm"] == "surrogate"
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_run_paired_recipe_surrogate_off_is_recorded_on_the_run():
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        recipe["surrogate"] = False
+
+        out = run_groups.run_paired_recipe(recipe, db_path=db_path)
+
+        assert out.get("surrogate_run_id") is None
+        conn = init_db(db_path)
+        try:
+            run = R.get_run(conn, out["run_id"])
+            stored = R.load_recipe(conn, run["config_id"])
+            assert stored["surrogate"] is False
+            assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_surrogate_run_gets_no_recordings_row_and_cannot_create_motif_entry():
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "detection", "algorithm": "spike_v1", "params": {}}],
+            span=(0, 100),
+        )
+        recipe["surrogate"] = True
+
+        out = run_groups.run_paired_recipe(recipe, db_path=db_path)
+        assert out.get("surrogate_run_id") is not None
+
+        conn = init_db(db_path)
+        try:
+            # The surrogate signal is transient: it adds no recordings row.
+            assert conn.execute("SELECT COUNT(*) FROM recordings").fetchone()[0] == 1
+
+            surrogate_detections = R.list_detections(conn, out["surrogate_run_id"])
+            assert surrogate_detections, "expected the surrogate run to produce detections"
+
+            det = surrogate_detections[0]
+            with pytest.raises(ValueError):
+                R.insert_motif_entry(
+                    conn, rec_id, det["start_idx"], det["end_idx"],
+                    detection_id=det["id"],
+                )
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 # ── channel fan-out ──────────────────────────────────────────────────────────
 
 def test_channel_fan_out_creates_one_group_and_n_runs():

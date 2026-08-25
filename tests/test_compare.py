@@ -57,6 +57,28 @@ def _close(conn):
 
 # ── headless core: Working.compare ─────────────────────────────────────────
 
+def test_exactly_one_run_set_overlap_implementation_in_repository():
+    """Ticket 44 consumes the run-set overlap rather than reimplementing it.
+
+    The only function named `compare_run_sets` in the working/UI source tree
+    must be the one in `Working/compare.py`.
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(PROJECT_ROOT)
+    definitions = []
+    for base in ("Working", "UI"):
+        for path in (root / base).rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                        and node.name == "compare_run_sets":
+                    definitions.append(str(path.relative_to(root)))
+
+    assert definitions == ["Working" + os.sep + "compare.py"], definitions
+
+
 def test_compare_reports_intersection_and_exclusive_remainders():
     from Working.compare import compare_run_sets
 

@@ -12,14 +12,15 @@ to promote "export cluster job" to the primary action above the configured
 ceiling while demoting (never removing) local execution, feeds the ticket-25
 scope selector (recordings/channels, span, bands) into the recipe's fan-out,
 and wires launch/cancel to the ticket-24 background-run machinery
-(`execute_recipe` / `fan_out_recipe` on a daemon thread with a cooperative
+(`run_paired_recipe` / `fan_out_recipe` on a daemon thread with a cooperative
 `should_cancel`).
 
-The surrogate toggle is deliberately NOT here — ticket 44 owns that control
-(merge risk MEDIUM vs 44). Ticket 32 adds the slow-run progress indicator
-(estimated finish appears only above `MP_INTERACTIVE_BUDGET_S`) and the
-per-stage results pane that accumulates each landed step, so this surface
-decides, launches, cancels, and shows how a launched run is getting on.
+Ticket 44 adds the surrogate toggle that defaults to on: every launch is
+paired with a surrogate null run unless the researcher turns it off, and the
+completion status shows detected-versus-surrogate counts rather than a bare
+detection count. Ticket 32 adds the slow-run progress indicator (estimated
+finish appears only above `MP_INTERACTIVE_BUDGET_S`) and the per-stage
+results pane that accumulates each landed step.
 """
 
 import datetime
@@ -27,12 +28,13 @@ import threading
 
 import panel as pn
 
+from Working.compare import compare_run_sets
 from Working.config import CLUSTER_ROUTING_CEILING_S, MP_INTERACTIVE_BUDGET_S
 from Working.database import queries as q
-from Working.execution import RecipeCancelled, RecipeExecutionError, execute_recipe
+from Working.execution import RecipeCancelled, RecipeExecutionError
 from Working.hpc.job_export import estimate_recipe_seconds, export_job, route_recipe
 from Working.recipes import recipe_summary
-from Working.run_groups import fan_out_recipe
+from Working.run_groups import fan_out_recipe, run_paired_recipe
 
 from UI.analyse.chain_state import ChainState
 from UI.analyse.ui_thread import _run_on_ui_thread
@@ -94,6 +96,9 @@ class RunSurface:
         self.span_start = pn.widgets.IntInput(name="Span start", value=0, start=0)
         self.span_end = pn.widgets.IntInput(name="Span end", value=0, start=0)
 
+        self.surrogate_toggle = pn.widgets.Checkbox(
+            name="Surrogate control", value=True,
+        )
         self.local_button = pn.widgets.Button(name="Run locally", button_type="primary")
         self.export_button = pn.widgets.Button(name="Export cluster job", button_type="default")
         self.cancel_button = pn.widgets.Button(name="Cancel", button_type="danger", disabled=True)
@@ -118,6 +123,7 @@ class RunSurface:
             self.channel_scope,
             self.band_scope,
             pn.layout.Divider(),
+            pn.Row(self.surrogate_toggle),
             pn.Row(self.local_button, self.export_button, self.cancel_button),
             self.status,
             pn.layout.Divider(),
@@ -164,6 +170,7 @@ class RunSurface:
         self.whole_channel.param.watch(lambda _e: self._refresh(), "value")
         self.span_start.param.watch(lambda _e: self._refresh(), "value")
         self.span_end.param.watch(lambda _e: self._refresh(), "value")
+        self.surrogate_toggle.param.watch(lambda _e: self._refresh(), "value")
 
     # ── recipe / scope ─────────────────────────────────────────────────────
 
@@ -175,6 +182,7 @@ class RunSurface:
         if fan:
             recipe["fan_out"] = fan
         recipe["span"] = self._current_span()
+        recipe["surrogate"] = bool(self.surrogate_toggle.value)
         return recipe
 
     def _build_fan_out(self):
@@ -361,6 +369,7 @@ class RunSurface:
         self._set_progress("Starting ...")
 
         db_path = self.app.conn.execute("PRAGMA database_list").fetchone()[2] or None
+        self._db_path = db_path
         doc = pn.state.curdoc  # captured here, on the serving thread
 
         def _worker():
@@ -409,14 +418,16 @@ class RunSurface:
                         on_progress=on_target_progress,
                         run_kwargs=run_kwargs,
                         on_step_result=on_step_result,
+                        surrogate=recipe["surrogate"],
                     )
                 else:
-                    out = execute_recipe(
+                    out = run_paired_recipe(
                         recipe, db_path=db_path,
                         should_cancel=self._cancel_event.is_set,
                         on_progress=on_step_progress,
                         run_kwargs=run_kwargs,
                         on_step_result=on_step_result,
+                        surrogate=recipe["surrogate"],
                     )
                 _run_on_ui_thread(doc, lambda: self._on_run_finished(out))
             except RecipeCancelled:
@@ -450,15 +461,65 @@ class RunSurface:
 
     # ── completion handlers ────────────────────────────────────────────────
 
+    def _paired_pairs(self, out):
+        """(original_run_id, surrogate_run_id) pairs produced by a launch."""
+        if "run_group_id" in out:
+            return [(r["run_id"], r.get("surrogate_run_id"))
+                    for r in out.get("runs", [])]
+        return [(out["run_id"], out.get("surrogate_run_id"))]
+
+    def _paired_summary(self, out):
+        """Detected-versus-surrogate counts, computed through the one
+        run-set overlap implementation in `Working.compare`.
+
+        The completion handler runs on the background worker thread when
+        there is no Bokeh session, so it must not reuse the app's live,
+        thread-affined connection. When a launch supplied a database path,
+        open a fresh connection for the comparison.
+        """
+        from Working.database.schema import init_db
+
+        db_path = getattr(self, "_db_path", None)
+        owns_conn = False
+        if db_path:
+            conn = init_db(db_path)
+            owns_conn = True
+        else:
+            conn = getattr(self.app, "conn", None)
+        if conn is None:
+            return ""
+
+        try:
+            pairs = self._paired_pairs(out)
+            if all(surrogate_run_id is None for _, surrogate_run_id in pairs):
+                return "surrogate control off (no null run)"
+            total_detected = 0
+            total_surrogate = 0
+            for run_id, surrogate_run_id in pairs:
+                if surrogate_run_id is None:
+                    continue
+                comparison = compare_run_sets(conn, run_id, surrogate_run_id)
+                total_detected += comparison.counts["a_total"]
+                total_surrogate += comparison.counts["b_total"]
+            return (f"{total_detected} detection(s) vs "
+                    f"{total_surrogate} surrogate detection(s)")
+        finally:
+            if owns_conn:
+                conn.close()
+
     def _on_run_finished(self, out):
         self.local_button.disabled = False
         self.export_button.disabled = False
         self.cancel_button.disabled = True
         self.progress_pane.object = ""
         if "run_group_id" in out:
-            self.status.object = f"Done. run_group_id={out['run_group_id']}"
+            status = f"Done. run_group_id={out['run_group_id']}"
         else:
-            self.status.object = f"Done. run_id={out['run_id']}"
+            status = f"Done. run_id={out['run_id']}"
+        summary = self._paired_summary(out)
+        if summary:
+            status += f" — {summary}"
+        self.status.object = status
 
     def _on_run_cancelled(self):
         self.local_button.disabled = False

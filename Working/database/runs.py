@@ -81,10 +81,10 @@ def insert_run(conn, config_id, recording_id, span_start, span_end,
 def update_run(conn, run_id, **fields):
     """Update editable run fields: status, finished_at, duration_s,
     error_text, step_timings_json, artifact_path, current_step,
-    run_group_id."""
+    run_group_id, surrogate_of_run_id."""
     allowed = {"status", "finished_at", "duration_s", "error_text",
                "step_timings_json", "artifact_path", "current_step",
-               "run_group_id"}
+               "run_group_id", "surrogate_of_run_id"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
@@ -294,6 +294,21 @@ def insert_motif_entry(conn, recording_id, start_idx, end_idx, detection_id=None
     same span, the existing entry id is returned rather than raising on the
     UNIQUE constraint.
     """
+    if detection_id is not None:
+        surrogate_of = conn.execute(
+            """SELECT r.surrogate_of_run_id
+               FROM detections d JOIN runs r ON r.id = d.run_id
+               WHERE d.id = ?""",
+            (detection_id,),
+        ).fetchone()
+        if surrogate_of is None:
+            raise ValueError(f"Unknown detection id {detection_id}")
+        if surrogate_of["surrogate_of_run_id"] is not None:
+            raise ValueError(
+                f"Detection {detection_id} belongs to a surrogate run; "
+                "surrogate-derived spans cannot enter the library."
+            )
+
     created_at = created_at or _now()
     conn.execute(
         """INSERT OR IGNORE INTO motif_entry
