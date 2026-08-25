@@ -206,6 +206,140 @@ def test_distance_above_threshold_writes_no_member_or_edge():
         assert R.list_motif_members(conn, entry_id) == []
 
 
+# ── T40: search at other scales ─────────────────────────────────────────────
+
+def _make_scale_library(npy_dir):
+    """A scratch library for the search-at-other-scales tests:
+    - recording A holds a single full sine cycle over 100 samples; that span
+      is the exemplar entry.
+    - recording B is 800 samples of zeros with the same sine planted at three
+      durations (50, 150, 200) at non-overlapping spans.
+
+    Returns (conn, entry_id, rec_a, rec_b, planted) where `planted` is a list
+    of (duration, start_idx, end_idx).
+    """
+    conn = init_db(":memory:")
+    m = 100
+    sine = np.sin(2 * np.pi * np.arange(m) / m)
+    rec_a = _write_recording(conn, npy_dir, "A.mat", 0, sine)
+    entry_id = R.insert_motif_entry(conn, rec_a, 0, m, label="sine")
+
+    n = 800
+    x = np.zeros(n)
+    planted = [(50, 10, 60), (150, 300, 450), (200, 550, 750)]
+    for dur, start, end in planted:
+        x[start:end] = np.sin(2 * np.pi * np.arange(dur) / dur)
+    rec_b = _write_recording(conn, npy_dir, "B.mat", 0, x)
+    return conn, entry_id, rec_a, rec_b, planted
+
+
+def test_search_across_durations_recovers_motif_at_three_scales():
+    import Working.library as lib
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, entry_id, rec_a, rec_b, planted = _make_scale_library(npy_dir)
+        try:
+            durations = list(range(50, 201, 50))  # [50, 100, 150, 200]
+            result = lib.search_entry_across_durations(
+                conn, entry_id, rec_b,
+                durations=durations,
+                threshold=0.1, recipe_hash="h_scale",
+                distance_function=DISTANCE_SCALE_INVARIANT,
+            )
+            matched = set(result["matched_spans"])
+            for dur, start, end in planted:
+                assert (start, end) in matched, (
+                    f"scale-invariant search missed planted span {(start, end)}"
+                )
+            assert len(result["matches"]) >= len(planted)
+
+            # Every written edge records the distance function used.
+            edges = R.list_motif_edges(conn, entry_id)
+            assert edges
+            assert all(
+                e["distance_function"] == DISTANCE_SCALE_INVARIANT for e in edges
+            )
+        finally:
+            conn.close()
+
+
+def test_search_across_durations_native_length_control_recovers_fewer():
+    import Working.library as lib
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, entry_id, rec_a, rec_b, planted = _make_scale_library(npy_dir)
+        try:
+            durations = list(range(50, 201, 50))
+            result = lib.search_entry_across_durations(
+                conn, entry_id, rec_b,
+                durations=durations,
+                threshold=0.1, recipe_hash="h_native",
+                distance_function=DISTANCE_NATIVE_LENGTH,
+            )
+            # The native-length control does not reconcile duration away:
+            # the same shape at a different duration is a large distance, so
+            # fewer than all three planted spans are recovered.
+            assert len(result["matched_spans"]) < len(planted), (
+                f"native-length control recovered {len(result['matched_spans'])} "
+                f"of {len(planted)} planted spans; expected fewer"
+            )
+        finally:
+            conn.close()
+
+
+def test_entry_detail_search_action_constructs_and_runs():
+    import panel as pn
+    import holoviews as hv
+    pn.extension("tabulator")
+    hv.extension("bokeh")
+    from UI.workspaces.library.detail import EntryDetail
+
+    class _FakeApp:
+        def __init__(self, conn):
+            self.conn = conn
+
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, entry_id, rec_a, rec_b, planted = _make_scale_library(npy_dir)
+        try:
+            detail = EntryDetail(_FakeApp(conn))
+            # The search action's panes are present and non-None.
+            assert detail.search_recording is not None
+            assert detail.search_min_duration is not None
+            assert detail.search_max_duration is not None
+            assert detail.search_step is not None
+            assert detail.search_threshold is not None
+            assert detail.search_run_button is not None
+            assert detail.search_results_pane is not None
+            assert detail.layout() is not None
+
+            # Drive the action: select the exemplar, point the search at
+            # recording B, run it.
+            detail.select_entry(entry_id)
+            detail.search_recording.value = rec_b
+            detail.search_min_duration.value = 50
+            detail.search_max_duration.value = 200
+            detail.search_step.value = 50
+            detail.search_threshold.value = 0.1
+            detail._on_search_run(None)
+
+            text = detail.search_results_pane.object
+            assert "scale_invariant" in text
+            assert "native_length" in text
+
+            # The action ran both distances side by side; the scale-invariant
+            # arm recovered the planted spans, the native-length arm did not.
+            results = detail.last_search_results
+            assert results[DISTANCE_SCALE_INVARIANT]["recall"] >= len(planted)
+            assert results[DISTANCE_NATIVE_LENGTH]["recall"] < len(planted)
+
+            # The search wrote members and edges recording the distance used.
+            edges = R.list_motif_edges(conn, entry_id)
+            assert edges
+            assert all(
+                e["distance_function"] == DISTANCE_SCALE_INVARIANT for e in edges
+            )
+        finally:
+            conn.close()
+
+
 # ── runner ──────────────────────────────────────────────────────────────────
 
 def _run_all():
