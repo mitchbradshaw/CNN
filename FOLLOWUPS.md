@@ -365,3 +365,9 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 
 - [minor] [standards] (no rule cited) Dead `import pytest` in tests/test_review_surface.py:35, never used
 - [minor] [standards] (no rule cited) `_load_recording`'s recording-is-None branch leaves stale `_dmap`/`_range_stream`/`_x` from a prior recording instead of resetting them
+
+## T31 — 2026-08-25 18:15
+
+- [minor] [standards] (no rule cited) summary
+- [minor] [standards] (no rule cited) _recording_n_samples/_recording_fs reach three attrs off self.app plus a DB fallback (possible Feature Envy, minor)
+- [minor] [standards] (no rule cited) fan-out scope passed as raw dict rather than a small type (possible Primitive Obsession, consistent with existing recipe-dict convention)
