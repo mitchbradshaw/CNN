@@ -225,6 +225,15 @@ CREATE TABLE IF NOT EXISTS motif_entry (
     start_idx     INTEGER NOT NULL,
     end_idx       INTEGER NOT NULL,
     detection_id  INTEGER REFERENCES detections(id),
+    -- Legacy presentation/notes columns carried across from `motifs` so the
+    -- migration loses nothing the old table stored. The shape-first identity
+    -- stays (recording_id, start_idx, end_idx); none of these are keys.
+    label         TEXT,
+    rating        INTEGER,
+    notes         TEXT,
+    tags          TEXT,
+    sax_string    TEXT,
+    created_at    TEXT,
     UNIQUE (recording_id, start_idx, end_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_motif_entry_recording ON motif_entry(recording_id);
@@ -333,6 +342,20 @@ _MOTIFS_NEW_COLUMNS = [
     ("sax_string", "TEXT"),
 ]
 
+# `motif_entry` += the legacy presentation columns carried across from
+# `motifs` by the shape-first migration (ticket 16). They are nullable
+# because an entry may be created by eye with no detection to inherit from,
+# and because ALTER TABLE ADD COLUMN cannot add a NOT NULL column without a
+# default to a table that already has rows.
+_MOTIF_ENTRY_NEW_COLUMNS = [
+    ("label", "TEXT"),
+    ("rating", "INTEGER"),
+    ("notes", "TEXT"),
+    ("tags", "TEXT"),
+    ("sax_string", "TEXT"),
+    ("created_at", "TEXT"),
+]
+
 
 def _migrate_columns(conn, table, new_columns):
     existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -352,6 +375,51 @@ def _migrate_runs_columns(conn):
 
 def _migrate_motifs_columns(conn):
     _migrate_columns(conn, "motifs", _MOTIFS_NEW_COLUMNS)
+
+
+def _migrate_motif_entry_columns(conn):
+    _migrate_columns(conn, "motif_entry", _MOTIF_ENTRY_NEW_COLUMNS)
+
+
+def _backfill_motif_entries(conn):
+    """Copy legacy `motifs` rows into `motif_entry`, then their tag links.
+
+    Idempotent: entries are only inserted for (recording, sample range)
+    spans that aren't already present, and `motif_entry_tags` has a UNIQUE
+    pair, so re-running this never doubles either the entries or their
+    links. The legacy `motifs` table is left in place — this migration is
+    additive, not a destructive rebuild (standards rule 2.2).
+
+    A motif's detection pointer is retained as `motif_entry.detection_id`;
+    the entry's own identity is the span it was found at.
+    """
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO motif_entry
+            (recording_id, start_idx, end_idx, detection_id,
+             label, rating, notes, tags, sax_string, created_at)
+        SELECT r.recording_id, d.start_idx, d.end_idx, d.id,
+               m.label, m.rating, m.notes, m.tags, m.sax_string, m.created_at
+        FROM motifs m
+        JOIN detections d ON d.id = m.detection_id
+        JOIN runs r ON r.id = d.run_id
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO motif_entry_tags (entry_id, tag_id)
+        SELECT e.id, mt.tag_id
+        FROM motif_tags mt
+        JOIN motifs m ON m.id = mt.motif_id
+        JOIN detections d ON d.id = m.detection_id
+        JOIN runs r ON r.id = d.run_id
+        JOIN motif_entry e
+          ON e.recording_id = r.recording_id
+         AND e.start_idx = d.start_idx
+         AND e.end_idx = d.end_idx
+        """
+    )
+    conn.commit()
 
 
 # ── The verdict-constraint rebuild ────────────────────────────────────────────
@@ -548,6 +616,10 @@ def init_db(db_path=None):
     _migrate_annotations_columns(conn)
     _migrate_runs_columns(conn)
     _migrate_motifs_columns(conn)
+    _migrate_motif_entry_columns(conn)
+    # The backfill must run after `motif_entry` has every column it copies
+    # into, and after `motifs.sax_string` exists on legacy databases.
+    _backfill_motif_entries(conn)
     # Must run after the column migrations: the rebuild copies whatever columns
     # the live table has, so they need to be there first.
     _migrate_annotations_verdict(conn, db_path)

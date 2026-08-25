@@ -80,15 +80,15 @@ class MotifsMixin:
             pattern_note = (f"morphology pattern: {self.enc_search_input.value} "
                             f"({len(self._search_matches)} matches in this span)")
             notes = f"{notes}\n{pattern_note}" if notes else pattern_note
-        motif_id = R.insert_motif(
-            self.conn, detection_id,
+        entry_id = R.insert_motif_entry(
+            self.conn, recording["id"], start, end, detection_id=detection_id,
             label=self.motif_label.value or None, rating=self.motif_rating.value or None,
             notes=notes,
             sax_string=symbols_to_string(symbols, symbol_letters(details)),
         )
         if self.motif_elements.value:
-            v.set_motif_tags(self.conn, motif_id, "element", self.motif_elements.value)
-        self.enc_seed_motif_status.object = f"Saved motif id={motif_id} with this encoding's seed string."
+            v.set_motif_entry_tags(self.conn, entry_id, "element", self.motif_elements.value)
+        self.enc_seed_motif_status.object = f"Saved motif id={entry_id} with this encoding's seed string."
         self._clear_motif_fields()
 
     def _find_sax_string_for_span(self, recording_id, start, end):
@@ -104,16 +104,16 @@ class MotifsMixin:
 
     def _save_motif(self, detection_id, recording_id, start, end):
         sax_string = self._find_sax_string_for_span(recording_id, start, end)
-        motif_id = R.insert_motif(
-            self.conn, detection_id,
+        entry_id = R.insert_motif_entry(
+            self.conn, recording_id, start, end, detection_id=detection_id,
             label=self.motif_label.value or None,
             rating=self.motif_rating.value or None,
             notes=self.motif_notes.value or None,
             sax_string=sax_string,
         )
         if self.motif_elements.value:
-            v.set_motif_tags(self.conn, motif_id, "element", self.motif_elements.value)
-        return motif_id
+            v.set_motif_entry_tags(self.conn, entry_id, "element", self.motif_elements.value)
+        return entry_id
 
     def _on_save_detection_as_motif(self, _event=None):
         self.motif_status.object = ""

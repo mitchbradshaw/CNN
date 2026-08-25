@@ -219,55 +219,107 @@ def list_encodings(conn, recording_id=None):
     ).fetchall()
 
 
-# ── motifs ───────────────────────────────────────────────────────────────────
+# ── motifs (shape-first entries) ─────────────────────────────────────────────
+#
+# The library is keyed by recording + sample range, not by detection. The
+# functions below are the entry-based equivalents of the old detection-keyed
+# `motifs` functions; the old names are kept as thin wrappers so existing
+# callers/tests keep working while the UI moves onto `insert_motif_entry`.
 
-def insert_motif(conn, detection_id, label=None, rating=None, notes=None,
-                  sax_string=None, created_at=None):
+def insert_motif_entry(conn, recording_id, start_idx, end_idx, detection_id=None,
+                       label=None, rating=None, notes=None, tags=None,
+                       sax_string=None, created_at=None, commit=True):
+    """Create (or return) a shape-first motif entry.
+
+    The entry's identity is `(recording_id, start_idx, end_idx)`. The
+    detection pointer is optional provenance only — an eye-flagged exemplar
+    has none. Idempotent on the span: if an entry already exists for the
+    same span, the existing entry id is returned rather than raising on the
+    UNIQUE constraint.
+    """
     created_at = created_at or _now()
-    cur = conn.execute(
-        """INSERT INTO motifs (detection_id, label, rating, notes, sax_string, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (detection_id, label, rating, notes, sax_string, created_at),
+    conn.execute(
+        """INSERT OR IGNORE INTO motif_entry
+               (recording_id, start_idx, end_idx, detection_id,
+                label, rating, notes, tags, sax_string, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (recording_id, start_idx, end_idx, detection_id,
+         label, rating, notes, tags, sax_string, created_at),
     )
-    conn.commit()
-    return cur.lastrowid
+    if commit:
+        conn.commit()
+    row = conn.execute(
+        """SELECT id FROM motif_entry
+           WHERE recording_id = ? AND start_idx = ? AND end_idx = ?""",
+        (recording_id, start_idx, end_idx),
+    ).fetchone()
+    return row["id"]
 
 
-def get_motif(conn, motif_id):
-    return conn.execute("SELECT * FROM motifs WHERE id = ?", (motif_id,)).fetchone()
+def get_motif_entry(conn, entry_id):
+    return conn.execute(
+        "SELECT * FROM motif_entry WHERE id = ?", (entry_id,)
+    ).fetchone()
 
 
-def list_motifs(conn):
-    return conn.execute("SELECT * FROM motifs ORDER BY created_at DESC").fetchall()
+def list_motif_entries(conn):
+    return conn.execute(
+        "SELECT * FROM motif_entry ORDER BY created_at DESC, id DESC"
+    ).fetchall()
 
 
-def motif_provenance(conn, motif_id):
-    """Full inherited metadata for a motif — recording, channel, span, and
-    full recipe — walked through `detection_id -> run -> config/recording`.
-    This is the mechanism behind "metadata must be inherited from the run,
-    not typed by me": nothing here is re-entered, only looked up.
+def motif_entry_provenance(conn, entry_id):
+    """Full metadata for a shape-first motif entry.
 
     Returns
     -------
-    dict, or None if the motif doesn't exist. Includes everything from the
-    `motifs` row plus recording_id/source_file/channel/fs, start_idx/end_idx,
-    and the parsed `recipe` dict.
+    dict, or None if the entry doesn't exist. Includes the entry's own span
+    and recording (source_file/channel/fs) plus, when the entry retains a
+    detection pointer, the parsed recipe that produced it. A pointerless
+    eye-flagged entry returns `recipe` as None rather than failing.
     """
     row = conn.execute(
-        """SELECT m.*, d.start_idx, d.end_idx, d.run_id,
-                  r.recording_id, r.config_id,
-                  rec.source_file, rec.channel, rec.fs,
-                  c.config_json
-           FROM motifs m
-           JOIN detections d ON d.id = m.detection_id
-           JOIN runs r ON r.id = d.run_id
-           JOIN recordings rec ON rec.id = r.recording_id
-           JOIN configs c ON c.id = r.config_id
-           WHERE m.id = ?""",
-        (motif_id,),
+        """SELECT e.*, rec.source_file, rec.channel, rec.fs, c.config_json
+           FROM motif_entry e
+           JOIN recordings rec ON rec.id = e.recording_id
+           LEFT JOIN detections d ON d.id = e.detection_id
+           LEFT JOIN runs r ON r.id = d.run_id
+           LEFT JOIN configs c ON c.id = r.config_id
+           WHERE e.id = ?""",
+        (entry_id,),
     ).fetchone()
     if row is None:
         return None
     result = dict(row)
-    result["recipe"] = json.loads(row["config_json"])
+    result["recipe"] = json.loads(row["config_json"]) if row["config_json"] else None
     return result
+
+
+# ── legacy `motifs` wrappers ─────────────────────────────────────────────────
+
+def insert_motif(conn, detection_id, label=None, rating=None, notes=None,
+                  sax_string=None, created_at=None, tags=None):
+    """Legacy wrapper: create an entry from a detection pointer.
+
+    Kept so pre-entry callers don't break. Resolves the detection's span and
+    recording, then delegates to the single entry-creation helper.
+    """
+    detection = get_detection(conn, detection_id)
+    run = get_run(conn, detection["run_id"])
+    return insert_motif_entry(
+        conn, run["recording_id"], detection["start_idx"], detection["end_idx"],
+        detection_id=detection_id, label=label, rating=rating, notes=notes,
+        tags=tags, sax_string=sax_string, created_at=created_at,
+    )
+
+
+def get_motif(conn, motif_id):
+    return get_motif_entry(conn, motif_id)
+
+
+def list_motifs(conn):
+    return list_motif_entries(conn)
+
+
+def motif_provenance(conn, motif_id):
+    return motif_entry_provenance(conn, motif_id)
