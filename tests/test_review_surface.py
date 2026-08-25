@@ -49,6 +49,7 @@ hv.extension("bokeh")
 
 from Working.database.schema import init_db
 from Working.database import queries as q
+from Working.database import runs as R
 from UI.workspaces.review.surface import ReviewSurface
 
 FS = 1.0
@@ -214,6 +215,75 @@ def test_changing_filters_rerenders_without_blanking_the_panes():
         assert surface.waveform_pane.object is not None
         assert surface.signal_pane.object[()] is not None
         assert isinstance(surface.waveform_pane.object[()], hv.Overlay)
+    finally:
+        _cleanup(surface, conn, tmpdir)
+
+
+# ── promotion into the library (T23) ────────────────────────────────────────
+#
+# Scoring and cataloguing are one continuous motion: adjudicating writes an
+# `adjudications` row and nothing else, and only the explicit Promote action
+# creates a `motif_entry`. The entry retains a provenance pointer back to the
+# detection, writes no `annotations` row, and is queryable immediately through
+# the same `list_motif_entries` the Library grid renders.
+
+def test_promote_creates_motif_entry_with_provenance():
+    surface, conn, tmpdir, d1, d2 = _make_surface()
+    try:
+        # Score the first candidate as a seed exemplar, then promote it.
+        surface._on_verdict("seed")
+        surface._on_promote()
+
+        entries = R.list_motif_entries(conn)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry["detection_id"] == d1
+        assert entry["start_idx"] == 400
+        assert entry["end_idx"] == 500
+    finally:
+        _cleanup(surface, conn, tmpdir)
+
+
+def test_adjudicating_every_candidate_creates_zero_entries():
+    surface, conn, tmpdir, d1, d2 = _make_surface()
+    try:
+        surface._on_verdict("seed")
+        surface._on_verdict("interesting")
+        assert surface.queue.current is None
+        assert R.list_motif_entries(conn) == []
+    finally:
+        _cleanup(surface, conn, tmpdir)
+
+
+def test_promote_writes_no_annotation_row():
+    surface, conn, tmpdir, d1, d2 = _make_surface()
+    try:
+        surface._on_verdict("seed")
+        surface._on_promote()
+        n = conn.execute("SELECT COUNT(*) FROM annotations").fetchone()["n"]
+        assert n == 0
+    finally:
+        _cleanup(surface, conn, tmpdir)
+
+
+def test_promoted_entry_appears_in_library_immediately():
+    surface, conn, tmpdir, d1, d2 = _make_surface()
+    try:
+        surface._on_verdict("seed")
+        surface._on_promote()
+        assert any(e["detection_id"] == d1 for e in R.list_motif_entries(conn))
+    finally:
+        _cleanup(surface, conn, tmpdir)
+
+
+def test_promote_button_is_in_the_layout():
+    surface, conn, tmpdir, d1, d2 = _make_surface()
+    try:
+        assert surface.promote_button is not None
+        assert surface.promote_button.name == "Promote to library"
+        layout = surface.layout()
+        sidebar = layout.objects[0]
+        assert surface.promote_button in list(sidebar.objects)
     finally:
         _cleanup(surface, conn, tmpdir)
 
