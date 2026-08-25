@@ -154,18 +154,32 @@ def _split(X, labels, holdout_frac, random_state):
     return X_train, y_train, X_holdout, y_holdout
 
 
-def _model_path(preprocessed, labels, params):
+def _model_path(preprocessed, X, labels, params):
     """A deterministic, content-addressed path for the fitted model.
 
-    Keyed on the labels, the feature columns and the training parameters —
-    everything that changes what gets fitted. Re-running an identical
-    training overwrites its own file; training the same windows from a
-    different `Grouping` (RQ1's whole point) lands somewhere else, so the
-    two models can be compared rather than one silently replacing the other.
+    Keyed on everything that changes what gets fitted: the labels, the
+    feature columns, the feature *values*, and the training parameters.
+    Re-running an identical training overwrites its own file; training the
+    same windows from a different `Grouping` (RQ1's whole point) lands
+    somewhere else, so the two models can be compared rather than one
+    silently replacing the other.
+
+    The values are in the key, not just the column names, because two
+    recordings can easily produce the same label vector over the same
+    feature columns — a name-only key would quietly serve one recording's
+    model for another's.
     """
+    import hashlib
+
+    import numpy as np
+
+    values = hashlib.sha256(
+        np.ascontiguousarray(X, dtype=np.float64).tobytes()
+    ).hexdigest()
     digest = recipe_hash({
         "labels": labels.tolist(),
         "features": list(preprocessed.feature_names),
+        "values": values,
         "params": params,
     })[:16]
     return os.path.join(MODEL_ROOT, f"catalogue_classifier_{digest}.joblib")
@@ -207,7 +221,7 @@ def _run(x, t, fs, n_estimators=300, class_weight="balanced", holdout_frac=0.25,
     )
     pipeline.fit(X_train, y_train)
 
-    path = _model_path(preprocessed, labels, params)
+    path = _model_path(preprocessed, X, labels, params)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     joblib.dump(pipeline, path)
 
@@ -253,7 +267,7 @@ def _derive(x, t, fs, params, value=None, windows=None):
     there is nothing to describe, so the readout says so instead of
     inventing a number.
     """
-    if value is None or windows is None:
+    if value is None or windows is None or windows.features is None:
         return [("Training set", "run the window-matrix and grouping steps first", "warn")]
 
     import numpy as np

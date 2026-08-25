@@ -150,6 +150,35 @@ def test_the_same_block_trains_from_cluster_and_manual_labels():
     assert from_cluster.value.path != from_manual.value.path
 
 
+def test_two_recordings_with_the_same_labels_get_different_model_files():
+    """The model path is content-addressed. Keying it on the label vector
+    and column names alone would collide here — same labels, same columns,
+    different data — and one recording's model would quietly be served for
+    the other's."""
+    spec = get_adapter(CLASSIFIER_NAME)
+    first, group_ids = _synthetic_window_set(seed=0)
+    second, other_ids = _synthetic_window_set(seed=7)
+
+    assert np.array_equal(group_ids, other_ids)
+    assert list(first.features.columns) == list(second.features.columns)
+    assert not np.allclose(first.features.to_numpy(), second.features.to_numpy())
+
+    from_first = _train(spec, first, Grouping(labels=group_ids))
+    from_second = _train(spec, second, Grouping(labels=other_ids))
+    assert from_first.value.path != from_second.value.path
+
+
+def test_the_same_training_twice_lands_on_one_file():
+    """The other half of content-addressing: re-running an identical
+    training must not accumulate a new artefact each time."""
+    spec = get_adapter(CLASSIFIER_NAME)
+    window_set, group_ids = _synthetic_window_set()
+
+    first = _train(spec, window_set, Grouping(labels=group_ids))
+    again = _train(spec, window_set, Grouping(labels=group_ids))
+    assert first.value.path == again.value.path
+
+
 def test_no_parameter_selects_where_the_labels_came_from():
     """The label source is a binding, not a setting. A param that named it
     would be the branch AC2 forbids, wearing a different hat."""
