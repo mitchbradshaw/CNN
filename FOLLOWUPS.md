@@ -394,3 +394,10 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [spec] (no rule cited) intra-step progress test calls _update_intra_step_progress directly rather than through execute_recipe's real run_kwargs forwarding, so no test proves an adapter's on_progress reaches the pane end-to-end
 - [minor] [spec] (no rule cited) a fully-cached recipe rerun returns before the step loop in Working/execution.py, so on_step_result never fires and stage_results stays empty despite "Done" status — root cause is out-of-scope for this ticket's file list but affects criterion 3/4
 - [major] [spec] (rule 7.1) per-target "(target X)" heading suffix is a reasonable but unspecified addition beyond the literal acceptance criteria
+
+## T33 — 2026-08-25 19:36
+
+- [major] [standards] (rule 6.1) Working/compare.py defaults iou_threshold to SIMILARITY_IOU_THRESHOLD, a constant named/scoped for annotation-duplicate warnings, reused undocumented for run-set overlap comparison
+- [minor] [standards] (no rule cited) UI/workspaces/__init__.py imports CompareSurface from the analyse.compare submodule, contradicting analyse/__init__.py's stated "import from here, not a submodule" convention
+- [minor] [standards] (rule 6.2) tests/test_compare.py adds a hand-rolled _run_all()/__main__ test runner duplicating pytest, unrequested machinery
+- [minor] [standards] (no rule cited) CompareSurface._route_to_review reaches through app.review_surface.queue and app.review_surface.on_tab_activated via getattr guards, borderline Feature Envy/Message Chain
