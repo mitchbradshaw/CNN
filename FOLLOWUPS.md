@@ -420,3 +420,8 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [major] [standards] (rule 4.4) tests/test_end_to_end.py is a new file rather than an extension of an existing seam-test file, though the ticket explicitly names it as a deliverable
 - [minor] [standards] (no rule cited) Adapters/base.py's intervals field comment calls it a "legacy carrier" though it is still actively read by several detection adapters' plot helpers (Mysterious Name/comment smell)
 - [minor] [spec] (no rule cited) AC "gone from the tree, not merely unused" is not fully met: an archived snapshot directory still contains references to the deleted import_10min_labels.py path and the removed output_kind == "intervals" vocabulary
+
+## T37 — 2026-08-25 23:51
+
+- [major] [standards] (rule 6.1) _SEED_VERDICT round-trips the literal "seed" through VERDICTS.index()/[]; comment claims it avoids a second copy of the term but the literal key is still hardcoded
+- [major] [spec] (rule 7.1) test_non_seed_annotation_does_not_create_a_library_entry is not asked for by any acceptance criterion; defensible as regression coverage for the seed-only behaviour, but arguably scope beyond what was requested
