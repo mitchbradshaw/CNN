@@ -6,7 +6,7 @@ size: M
 blocked_by: [20]
 mutex: [20, 39]
 files: ["UI/plots.py", "UI/workspaces/review/surface.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 4
 unblocks: 4
 budget_minutes: 60

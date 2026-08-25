@@ -6,7 +6,7 @@ size: M
 blocked_by: [5]
 mutex: [5, 8, 9]
 files: ["Adapters/catalogue_gramian_gasf.py", "Adapters/detection_sax_csax.py", "Adapters/detection_wavelet_scattering.py", "catalogue_gramian_fusion.py", "catalogue_gramian_gadf.py", "catalogue_gramian_recurrence.py", "detection_freq_stft.py", "detection_sax_dsax.py", "detection_sax_psax.py"]
-flags: []
+flags: ['done']
 level: 2
 unblocks: 3
 budget_minutes: 60

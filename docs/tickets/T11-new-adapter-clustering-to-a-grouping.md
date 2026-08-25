@@ -6,7 +6,7 @@ size: M
 blocked_by: [5, 7]
 mutex: [5, 12]
 files: ["Adapters/catalogue_cluster.py", "Working/Catalogue/dendrogram/dendrogram_cluster.py", "tests/test_grouping_adapter.py"]
-flags: []
+flags: ['done']
 level: 3
 unblocks: 2
 budget_minutes: 60

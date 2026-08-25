@@ -6,7 +6,7 @@ size: M
 blocked_by: [23, 27, 36, 44, 45]
 mutex: []
 files: ["README.md", "UI/README.md", "Working/README.md", "tests/test_end_to_end.py"]
-flags: []
+flags: ['done']
 level: 11
 unblocks: 1
 budget_minutes: 60

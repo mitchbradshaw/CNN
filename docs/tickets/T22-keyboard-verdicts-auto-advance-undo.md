@@ -6,7 +6,7 @@ size: M
 blocked_by: [21]
 mutex: []
 files: ["UI/workspaces/review/queue_state.py", "UI/workspaces/review/surface.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 5
 unblocks: 3
 budget_minutes: 60

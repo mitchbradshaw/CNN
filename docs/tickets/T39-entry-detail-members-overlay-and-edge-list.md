@@ -6,7 +6,7 @@ size: M
 blocked_by: [38]
 mutex: [21, 38]
 files: ["UI/workspaces/library/detail.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 4
 unblocks: 1
 budget_minutes: 60

@@ -6,7 +6,7 @@ size: S
 blocked_by: [16, 19, 22]
 mutex: [16, 37]
 files: ["UI/workspaces/review/surface.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 6
 unblocks: 2
 budget_minutes: 30

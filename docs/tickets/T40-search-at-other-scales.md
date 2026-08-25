@@ -6,7 +6,7 @@ size: M
 blocked_by: [35, 36, 39]
 mutex: []
 files: ["UI/workspaces/library/detail.py", "Working/library.py", "tests/test_library_edges.py"]
-flags: []
+flags: ['done']
 level: 5
 unblocks: 0
 budget_minutes: 60

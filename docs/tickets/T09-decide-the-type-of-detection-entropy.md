@@ -6,7 +6,7 @@ size: S
 blocked_by: [5, 8]
 mutex: [5, 7]
 files: ["Adapters/detection_entropy.py", "Working/types/windowset.py", "tests/test_analysis_modules.py"]
-flags: []
+flags: ['done']
 level: 3
 unblocks: 1
 budget_minutes: 30

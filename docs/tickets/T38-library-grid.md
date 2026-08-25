@@ -6,7 +6,7 @@ size: M
 blocked_by: [16, 18, 36]
 mutex: [34, 39]
 files: ["UI/motif_browser.py", "UI/workspaces/library/grid.py", "tests/test_motif_browser.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 3
 unblocks: 3
 budget_minutes: 60

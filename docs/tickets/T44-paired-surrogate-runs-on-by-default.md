@@ -6,7 +6,7 @@ size: M
 blocked_by: [24, 32, 33, 43]
 mutex: [25, 31, 32, 33]
 files: ["UI/workspaces/analyse/run_surface.py", "Working/compare.py", "Working/run_groups.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 10
 unblocks: 2
 budget_minutes: 60

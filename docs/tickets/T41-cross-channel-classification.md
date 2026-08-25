@@ -6,7 +6,7 @@ size: M
 blocked_by: [36]
 mutex: [35, 36]
 files: ["UI/workspaces/library/detail.py", "Working/cross_channel.py", "Working/library.py", "tests/test_cross_channel.py"]
-flags: []
+flags: ['done']
 level: 3
 unblocks: 1
 budget_minutes: 60

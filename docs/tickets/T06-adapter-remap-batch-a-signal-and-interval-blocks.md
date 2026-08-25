@@ -6,7 +6,7 @@ size: M
 blocked_by: [5]
 mutex: [5, 43]
 files: ["Adapters/detection_rupture.py", "Adapters/preprocessing_bandpass.py", "detection_dehshibi_spikes.py", "detection_spike_v1.py", "preprocessing_detrend.py", "preprocessing_highpass.py", "preprocessing_lowpass.py"]
-flags: []
+flags: ['done']
 level: 2
 unblocks: 5
 budget_minutes: 60

@@ -6,7 +6,7 @@ size: M
 blocked_by: [2, 4]
 mutex: [2, 4]
 files: ["Working/database/adjudications.py", "Working/database/queries.py", "tests/test_adjudications.py"]
-flags: []
+flags: ['done']
 level: 2
 unblocks: 7
 budget_minutes: 60

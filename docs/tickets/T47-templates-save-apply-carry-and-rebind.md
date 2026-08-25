@@ -6,7 +6,7 @@ size: M
 blocked_by: [14, 30]
 mutex: [14, 30]
 files: ["Working/database/runs.py", "Working/templates.py", "tests/test_templates.py"]
-flags: []
+flags: ['done']
 level: 6
 unblocks: 0
 budget_minutes: 60

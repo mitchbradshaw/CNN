@@ -6,7 +6,7 @@ size: M
 blocked_by: [24, 25]
 mutex: [18, 45, 46]
 files: ["Pipelines/import_mp_artifacts/import_mp_artifacts.py", "Pipelines/import_wm_artifacts/import_wm_artifacts.py", "Pipelines/run_recipe/run_recipe.py", "UI/admin.py", "Working/manifest.py", "tests/test_manifest.py"]
-flags: []
+flags: ['done']
 level: 7
 unblocks: 6
 budget_minutes: 60

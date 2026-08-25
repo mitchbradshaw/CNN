@@ -6,7 +6,7 @@ size: M
 blocked_by: [5, 25]
 mutex: [12]
 files: ["Adapters/detection_matrix_profile.py", "Adapters/preprocessing_window_matrix.py", "Working/config.py", "Working/hpc/job_export.py", "tests/test_job_export.py"]
-flags: []
+flags: ['done']
 level: 7
 unblocks: 5
 budget_minutes: 60

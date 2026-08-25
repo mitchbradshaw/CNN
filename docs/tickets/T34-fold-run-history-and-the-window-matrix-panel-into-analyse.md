@@ -6,7 +6,7 @@ size: M
 blocked_by: [18, 29]
 mutex: [29, 30, 31, 32, 38]
 files: ["UI/run_history.py", "UI/window_matrix_panel.py", "UI/workspaces/analyse/__init__.py", "UI/workspaces/analyse/history.py", "UI/workspaces/analyse/window_matrix.py", "tests/test_run_panel_matrix_profile.py", "tests/test_window_matrix_panel.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 5
 unblocks: 0
 budget_minutes: 60

@@ -6,7 +6,7 @@ size: M
 blocked_by: [5, 6]
 mutex: [5, 6, 25]
 files: ["Adapters/preprocessing_surrogate.py", "tests/test_surrogate.py"]
-flags: []
+flags: ['done']
 level: 3
 unblocks: 3
 budget_minutes: 60

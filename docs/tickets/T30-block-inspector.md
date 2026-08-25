@@ -6,7 +6,7 @@ size: L
 blocked_by: [14, 29]
 mutex: [14, 29, 34, 47]
 files: ["UI/workspaces/analyse/inspector.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 5
 unblocks: 1
 budget_minutes: 120

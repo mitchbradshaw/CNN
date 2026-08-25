@@ -6,7 +6,7 @@ size: S
 blocked_by: [16, 18]
 mutex: [16, 23]
 files: []
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 3
 unblocks: 0
 budget_minutes: 30

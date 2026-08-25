@@ -6,7 +6,7 @@ size: M
 blocked_by: [26, 29]
 mutex: [29, 32, 34, 44]
 files: ["UI/workspaces/analyse/run_surface.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 8
 unblocks: 4
 budget_minutes: 60
