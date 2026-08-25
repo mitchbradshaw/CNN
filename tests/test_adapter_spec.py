@@ -294,7 +294,7 @@ def _shipped_adapter_specs():
 
 def test_every_shipped_adapter_registers_without_modification():
     specs = _shipped_adapter_specs()
-    assert len(specs) == 21, f"expected the twenty-one shipped adapters, got {sorted(specs)}"
+    assert len(specs) == 22, f"expected the twenty-two shipped adapters, got {sorted(specs)}"
     # Ticket 08 remaps detection_matrix_profile (encoding -> scores) and
     # preprocessing_window_matrix (encoding -> windowset) to their correct
     # types, and adds detection_threshold, a typed (input_kind='scores')

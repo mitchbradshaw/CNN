@@ -69,8 +69,8 @@ def test_discover_adapters_registers_the_expected_count():
         name for _, name, _ in pkgutil.iter_modules(Adapters.__path__)
         if name not in ("base", "registry") and not name.startswith("_")
     )
-    assert len(module_names) == 21, (
-        f"expected 21 shipped adapter modules, got {len(module_names)}"
+    assert len(module_names) == 22, (
+        f"expected 22 shipped adapter modules, got {len(module_names)}"
     )
 
     discover_adapters()
