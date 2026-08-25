@@ -57,6 +57,7 @@ class ExecutionMixin:
     def _on_run(self, _event=None):
         self.status.object = ""
         self.motif_status.object = ""
+        self._last_step_results = {}  # per-stage results as they land (T24)
         if self._thread is not None and self._thread.is_alive():
             self.status.object = "**A run is already in progress.**"
             return
@@ -91,10 +92,20 @@ class ExecutionMixin:
                     self.status.object = f"Running step {i + 1}/{n}: {s}.{a} ..."
                 _run_on_ui_thread(doc, _update)
 
+            # Each stage's typed result is handed to the UI thread the moment
+            # it lands, so the run surface can render per-stage results as
+            # they complete rather than waiting for the whole run (T24).
+            def on_step_result(i, result):
+                def _update():
+                    self._last_step_results[i] = result
+                    self.status.object = f"Step {i + 1} complete: {result.output_kind}"
+                _run_on_ui_thread(doc, _update)
+
             try:
                 out = execute_recipe(
                     recipe, db_path=db_path, on_progress=on_progress,
                     should_cancel=self._cancel_event.is_set,
+                    on_step_result=on_step_result,
                 )
                 conn_w = init_db(db_path)
                 try:

@@ -418,6 +418,83 @@ def test_cancellation_marks_run_failed_with_note_and_current_step():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def test_invalid_chain_raises_before_any_run_row():
+    """AC4: chain validation hard-fails before the first step, so an invalid
+    recipe (here: a hand-edited dict that bypasses make_recipe's own check)
+    never starts computing and never creates a run row."""
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(200)
+    try:
+        # lowpass produces a signal; threshold expects Scores. Validated only
+        # at execution because this recipe was built by hand, not make_recipe.
+        recipe = {
+            "recording_id": 1,
+            "span": [0, 200],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass",
+                 "params": {"cutoff_hz": 0.05}},
+                {"stage": "detection", "algorithm": "threshold",
+                 "params": {"threshold": -1.0}},
+            ],
+        }
+
+        try:
+            execute_recipe(recipe, db_path=db_path)
+            assert False, "expected ValueError from chain validation"
+        except ValueError as e:
+            assert "Invalid chain" in str(e)
+
+        conn = init_db(db_path)
+        try:
+            assert len(R.list_runs(conn)) == 0, "an invalid chain must never create a run row"
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_step_and_intra_step_progress_both_fire():
+    """AC5: the step-level on_progress and the finer intra-step
+    run_kwargs['on_progress'] are two distinct callbacks with distinct
+    signatures, and both fire."""
+    import Adapters.preprocessing_window_matrix as wm_adapter
+
+    db_path, tmpdir = _fresh_db_with_synthetic_recording(400)
+    results_dir = os.path.join(tmpdir, "results")
+    prior_results_dir = wm_adapter.RESULTS_DIR
+    wm_adapter.RESULTS_DIR = results_dir
+    try:
+        recipe = make_recipe(1, [
+            {"stage": "preprocessing", "algorithm": "window_matrix",
+             "params": {"window_min": 1.0, "step_frac": 1.0, "catch22": True,
+                        "fast_entropy": False, "slow_entropy": False,
+                        "cnn": False, "rf": False}},
+        ], span=(0, 400))
+
+        step_progress = []
+        intra_progress = []
+
+        def on_progress(i, n, s, a):
+            step_progress.append((i, n, s, a))
+
+        def intra(done, total, stage):
+            intra_progress.append((done, total, stage))
+
+        out = execute_recipe(
+            recipe, db_path=db_path,
+            on_progress=on_progress,
+            run_kwargs={"on_progress": intra},
+        )
+
+        assert out["reused"] is False
+        assert step_progress, "step-level on_progress must fire once per step"
+        assert len(step_progress[0]) == 4, "step-level signature: (i, n, stage, algorithm)"
+        assert intra_progress, "intra-step run_kwargs['on_progress'] must fire"
+        assert len(intra_progress[0]) == 3, "intra-step signature: (done, total, stage)"
+    finally:
+        wm_adapter.RESULTS_DIR = prior_results_dir
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 # ── runner ───────────────────────────────────────────────────────────────────
 
 def _run_all():

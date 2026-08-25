@@ -79,9 +79,9 @@ def insert_run(conn, config_id, recording_id, span_start, span_end,
 
 def update_run(conn, run_id, **fields):
     """Update editable run fields: status, finished_at, duration_s,
-    error_text, step_timings_json, artifact_path."""
+    error_text, step_timings_json, artifact_path, current_step."""
     allowed = {"status", "finished_at", "duration_s", "error_text",
-               "step_timings_json", "artifact_path"}
+               "step_timings_json", "artifact_path", "current_step"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")

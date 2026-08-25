@@ -154,7 +154,7 @@ def _cache_step_result(conn, recipe, step_index, result, elapsed_s, fs, cache_ro
 
 
 def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_cancel=None,
-                   run_kwargs=None):
+                   run_kwargs=None, on_step_result=None):
     """Run every step of `recipe` in order.
 
     Idempotent: if a completed run already exists for this exact recipe
@@ -196,6 +196,16 @@ def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_c
         fires once per STEP; a step's own `run_kwargs["on_progress"]`, if it
         uses one, fires at whatever finer grain that adapter defines (e.g.
         once per window) — the two must not be conflated into one signature.
+    on_step_result : callable(step_index, result), optional
+        Called after each step's result lands, with the step index and that
+        step's `AdapterResult`. Lets a caller render/emit each stage as it
+        completes rather than waiting for the whole run — the "per-stage
+        results as they land" behaviour (PIPELINE_PRD.md, Execution). Fires
+        for cached and recomputed steps alike, after the step's detections
+        and any `persist` artifact have been written, so the callback sees a
+        fully-landed stage. This is a distinct channel from `on_progress`
+        (before the step) and from `run_kwargs["on_progress"]` (inside the
+        step at the adapter's own granularity).
 
     Returns
     -------
@@ -214,7 +224,9 @@ def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_c
     conn = init_db(db_path)
 
     try:
-        return _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, run_kwargs)
+        return _execute_recipe_with_conn(
+            conn, recipe, force, on_progress, should_cancel, run_kwargs, on_step_result,
+        )
     finally:
         # This function always opens its own fresh connection (unlike the
         # UI, which keeps one open for an app's whole lifetime) — nothing
@@ -225,7 +237,8 @@ def execute_recipe(recipe, db_path=None, force=False, on_progress=None, should_c
         conn.close()
 
 
-def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, run_kwargs=None):
+def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, run_kwargs=None,
+                              on_step_result=None):
     from Working.config import (
         HELD_OUT_RECORDING_FILE,
         HELD_OUT_UNLOCK,
@@ -290,6 +303,12 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
         for i, step in enumerate(recipe["steps"]):
             if should_cancel is not None and should_cancel():
                 raise RecipeCancelled(f"Cancelled before step {i} ({step['stage']}.{step['algorithm']}).")
+
+            # The run row is the poller's progress channel: record which step
+            # is about to execute so a UI can read status/current_step/error
+            # off the row without any callback plumbing. Set AFTER the cancel
+            # check, so a cancellation never claims a step actually started.
+            update_run(conn, run_id, current_step=i)
 
             if on_progress is not None:
                 on_progress(i, n_steps, step["stage"], step["algorithm"])
@@ -382,6 +401,12 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
                 )
                 if artifact_path is not None:
                     insert_artifact(conn, run_id, kind="encoding", path=artifact_path)
+
+            # Emit the stage as it lands — after detections are committed and
+            # any persist artifact is written, so the callback sees a fully
+            # landed result. Fires for cached and recomputed steps alike.
+            if on_step_result is not None:
+                on_step_result(i, result)
 
         duration_s = sum(step_timings.values())
         update_run(
