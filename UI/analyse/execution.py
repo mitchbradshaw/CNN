@@ -128,7 +128,7 @@ class ExecutionMixin:
 
         The last step's adapter spec (not `out["result"]`, which is None
         for a reused run) tells us the *actual* output kind regardless of
-        whether anything was recomputed. `intervals` are persisted
+        whether anything was recomputed. Span-set outputs are persisted
         (`detections`), so a reused run can still show them; `signal`/
         `encoding` outputs are not persisted anywhere the UI can cheaply
         re-read, so a reused run reports that rather than fabricating a
@@ -138,9 +138,9 @@ class ExecutionMixin:
         spec = get_adapter(f"{last_step['stage']}.{last_step['algorithm']}")
         result = out["result"]
 
-        if spec.output_kind in ("intervals", "spanset"):
+        if spec.output_kind == "spanset":
             dets = R.list_detections(conn_w, out["run_id"])
-            return {"kind": "intervals", "detections": [dict(d) for d in dets]}
+            return {"kind": "spanset", "detections": [dict(d) for d in dets]}
 
         # Not every adapter that reaches here is SAX-shaped (a details dict +
         # x/t + a discrete symbol array). `detection.matrix_profile` and
@@ -324,7 +324,7 @@ class ExecutionMixin:
             "encoding", "encoding_cached_only", "encoding_too_large",
         )
 
-        if display_data["kind"] == "intervals":
+        if display_data["kind"] == "spanset":
             self._show_detections(display_data["detections"])
         elif display_data["kind"] == "signal":
             self._show_before_after(display_data["recording"], display_data["result_x"], display_data["result_t"])

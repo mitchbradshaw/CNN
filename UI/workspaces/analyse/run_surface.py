@@ -309,8 +309,6 @@ class RunSurface:
 
     def _describe_result(self, result):
         kind = result.output_kind
-        if kind == "intervals":
-            return f"{len(result.intervals or [])} detection(s)"
         if kind == "spanset":
             return f"{len(getattr(result.value, 'starts', ()))} span(s)"
         if kind == "signal":

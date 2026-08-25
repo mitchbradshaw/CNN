@@ -33,7 +33,7 @@ from Working.database import runs as R
 from Working.execution import RecipeExecutionError, execute_recipe
 from Working.recipes import make_recipe
 from Working.side_inputs import SideInputResolutionError, resolve_side_inputs, typed_step_value
-from Working.types import Signal
+from Working.types import Signal, SpanSet
 
 
 def _spec(side_inputs, name="test.side_input_probe", run=None):
@@ -200,7 +200,7 @@ def test_typed_step_value_wraps_a_legacy_signal_output():
 
 
 def test_typed_step_value_is_none_for_an_unresolvable_output():
-    result = AdapterResult(output_kind="intervals", intervals=[(0, 10)])
+    result = AdapterResult(output_kind="spanset")
     assert typed_step_value(result, fs=1.0) is None
 
 
@@ -221,9 +221,10 @@ def _register_exemplar_probe_adapter():
         name="detection.side_input_probe", display_name="Side-input probe",
         stage="detection", params=[],
         run=lambda x, t, fs, exemplar=None: AdapterResult(
-            output_kind="intervals", intervals=[(0, 1, float(exemplar.x[0]))],
+            output_kind="spanset",
+            value=SpanSet(starts=(0,), ends=(1,), scores=(float(exemplar.x[0]),)),
         ),
-        output_kind="intervals",
+        output_kind="spanset",
         side_inputs=[SideInputSpec(name="exemplar", type_kind="signal", sources=["library_exemplar"])],
     ))
 
@@ -233,10 +234,13 @@ def _register_dual_probe_adapter():
         name="detection.dual_side_input_probe", display_name="Dual side-input probe",
         stage="detection", params=[],
         run=lambda x, t, fs, root=None, ref=None: AdapterResult(
-            output_kind="intervals",
-            intervals=[(0, 1, float(root.x[0]) + float(ref.x[0]))],
+            output_kind="spanset",
+            value=SpanSet(
+                starts=(0,), ends=(1,),
+                scores=(float(root.x[0]) + float(ref.x[0]),),
+            ),
         ),
-        output_kind="intervals",
+        output_kind="spanset",
         side_inputs=[
             SideInputSpec(name="root", type_kind="signal", sources=["root_signal"]),
             SideInputSpec(name="ref", type_kind="signal", sources=["earlier_step"]),

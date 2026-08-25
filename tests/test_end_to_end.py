@@ -11,12 +11,14 @@ manifest's recipe hash equals the run's recipe hash. A second test pins
 by a broken optional dependency.
 """
 
+import importlib
 import json
 import os
+import pkgutil
 
 import numpy as np
 
-from Adapters.registry import discover_adapters
+from Adapters.registry import discover_adapters, get_adapter
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.database.adjudications import insert_adjudication
@@ -49,16 +51,34 @@ def _three_step_chain(recording_id):
 
 
 def test_discover_adapters_registers_the_expected_count():
-    """No adapter is silently skipped by a broken optional dependency.
+    """No shipped adapter is silently skipped by a broken optional dependency.
 
     The wavelet-scattering adapter imports its heavy dependency lazily, so it
     registers even when kymatio is broken against the installed scipy. If any
-    adapter module fails to import, this count drops and the test fails.
+    adapter module fails to import, `discover_adapters()` skips it and the
+    per-module `get_adapter` lookup below raises.
+
+    The count is taken from the adapter *modules* on disk rather than from
+    `len(discover_adapters())`, because other tests register throwaway probe
+    adapters into the global registry (e.g. test_side_inputs); those probes
+    are not shipped and must not change the expected count.
     """
-    specs = discover_adapters()
-    assert len(specs) == 20, (
-        f"expected 20 registered adapters, got {len(specs)}"
+    import Adapters
+
+    module_names = sorted(
+        name for _, name, _ in pkgutil.iter_modules(Adapters.__path__)
+        if name not in ("base", "registry") and not name.startswith("_")
     )
+    assert len(module_names) == 20, (
+        f"expected 20 shipped adapter modules, got {len(module_names)}"
+    )
+
+    discover_adapters()
+    for modname in module_names:
+        module = importlib.import_module(f"Adapters.{modname}")
+        # KeyError here means discover_adapters() silently skipped the module.
+        spec = get_adapter(module.SPEC.name)
+        assert spec is not None
 
 
 def test_synthetic_signal_flows_to_exported_run_group(tmp_path):

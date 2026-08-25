@@ -13,10 +13,9 @@ The chain's root is always the recording's raw signal, so a step's
 "producing type" starts as `ROOT_SIGNAL_KIND` and becomes each step's own
 declared `output_kind` for the step after it. A block's declared
 `input_kind=None` (see `Adapters.base.AdapterSpec`) means "wants the root
-signal", the same as the legacy `output_kind="signal"` value produced by
-every one of the nineteen shipped adapters — the two strings are made to
-coincide deliberately (see `Adapters/base.py`'s `OUTPUT_KINDS` union) so
-this module doesn't need a separate legacy/typed mapping table.
+signal", and `ROOT_SIGNAL_KIND` is `"signal"` — the same string as the
+`Signal` interchange type — so this module doesn't need a separate
+legacy/typed mapping table.
 """
 
 from Adapters.registry import discover_adapters, get_adapter

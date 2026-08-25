@@ -100,14 +100,14 @@ def test_every_mismatched_type_pair_is_rejected_with_a_teaching_reason():
                 assert expected in reason
 
 
-def test_legacy_intervals_output_does_not_satisfy_any_typed_input():
-    # 'intervals' is legacy-only output vocabulary (Adapters.base) — it has
-    # no interchange-type counterpart, so nothing declaring a typed
-    # input_kind can accept it.
+def test_an_unknown_output_kind_does_not_satisfy_any_typed_input():
+    # A kind with no interchange-type counterpart (the legacy-only
+    # `intervals` vocabulary is gone) can never satisfy a block declaring a
+    # typed input_kind.
     block = _block("catalogue.needs_spanset", input_kind="spanset")
-    ok, reason = check_step_compatibility("intervals", block)
+    ok, reason = check_step_compatibility("bogus", block)
     assert ok is False
-    assert "intervals" in reason
+    assert "bogus" in reason
     assert "spanset" in reason
 
 

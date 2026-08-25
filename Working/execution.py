@@ -367,14 +367,6 @@ def _execute_recipe_with_conn(conn, recipe, force, on_progress, should_cancel, r
 
             if result.output_kind == "signal":
                 x, t = result.x, result.t
-            elif result.output_kind == "intervals":
-                for interval in result.intervals:
-                    start_idx, end_idx = interval[0], interval[1]
-                    score = interval[2] if len(interval) > 2 else None
-                    insert_detection(conn, run_id, int(start_idx), int(end_idx),
-                                      score=score, commit=False)
-                    detections_written += 1
-                conn.commit()
             elif result.output_kind == "spanset":
                 span_set = result.value
                 span_scores = span_set.scores or (None,) * len(span_set.starts)

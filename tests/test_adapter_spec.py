@@ -1,17 +1,15 @@
 """
 test_adapter_spec.py
 ======================
-Ticket 05 — adapter spec expansion (expand phase). `AdapterSpec` gains a
-declared `input_kind`, typed `side_inputs`, and an optional runtime
-`estimate`; `output_kind` accepts the seven interchange type names (see
-`Working.types` / ticket 01) alongside the legacy `signal`/`intervals`/
-`encoding` vocabulary, so the nineteen adapters that only know the legacy
-vocabulary keep working unmodified. `AdapterResult` gains a `value` field
-for a typed object.
+Ticket 05/contract — adapter spec. `AdapterSpec` declares an `input_kind`,
+typed `side_inputs`, and an optional runtime `estimate`; `output_kind`
+is one of the seven interchange type names (see `Working.types` /
+ticket 01). `AdapterResult` carries a `value` field for a typed object.
 
-This is the "expand" half of an expand/contract migration: nothing here
-removes the legacy vocabulary or requires an existing adapter to change.
-That happens in later tickets, once `base.py`/`registry.py` unfreeze.
+The legacy `signal`/`intervals`/`encoding` output vocabulary is gone: the
+expand phase accepted it side-by-side with the typed vocabulary, and the
+contract phase (ticket 48) removed it. `OUTPUT_KINDS` is exactly the seven
+interchange type names.
 
 Pure-dataclass contract tests, no database/UI — runnable standalone:
     python tests/test_adapter_spec.py
@@ -40,10 +38,6 @@ from Adapters.base import (
     SideInputSpec,
 )
 
-# The output vocabulary the nineteen shipped adapters were written against,
-# named here because the point of the expand phase is that they keep using it.
-LEGACY_OUTPUT_KINDS = ("signal", "intervals", "encoding")
-
 # What the PRD ("Chain shape") says a side input may be bound to. Exercised
 # through `SideInputSpec` below rather than compared against the constant that
 # implements it.
@@ -70,11 +64,14 @@ def _spec(**overrides):
     return AdapterSpec(**kwargs)
 
 
-# ── output_kind: legacy vocabulary preserved ────────────────────────────────
+# ── output_kind: the legacy vocabulary is gone ──────────────────────────────
 
-def test_output_kind_still_accepts_the_legacy_vocabulary():
-    for kind in LEGACY_OUTPUT_KINDS:
-        assert _spec(output_kind=kind).output_kind == kind
+def test_legacy_output_vocabulary_is_gone():
+    # The contract phase removed the legacy `intervals` output kind.
+    # `signal` and `encoding` survive only because they are interchange type
+    # names; `intervals` has no typed counterpart and is no longer valid.
+    assert "intervals" not in OUTPUT_KINDS
+    assert set(OUTPUT_KINDS) == set(_interchange_type_names())
 
 
 # ── output_kind: interchange types accepted too ─────────────────────────────
@@ -112,8 +109,8 @@ def test_input_kind_accepts_the_name_of_every_type_working_types_owns():
 
 
 def test_input_kind_rejects_a_legacy_only_value():
-    # 'intervals' is legacy output vocabulary, not one of the seven types,
-    # so it must not be a valid input_kind.
+    # 'intervals' is not one of the seven types, so it must not be a valid
+    # input_kind.
     try:
         _spec(input_kind="intervals")
         assert False, "expected ValueError"
@@ -309,33 +306,11 @@ def test_every_shipped_adapter_registers_without_modification():
     # typed (input_kind='signal', output_kind='signal') adapter. Ticket 09
     # removes detection_entropy entirely: its whole-span scalar fits none of
     # the seven interchange types, so it is out of scope rather than an
-    # eighth type. The remaining adapters are untouched by those tickets and
-    # still use the legacy vocabulary this test was written to guard.
-    remapped_by_ticket_06 = {
-        "preprocessing_bandpass", "preprocessing_detrend",
-        "preprocessing_highpass", "preprocessing_lowpass",
-        "detection_rupture", "detection_spike_v1", "detection_dehshibi_spikes",
-    }
-    remapped_by_ticket_08 = {"detection_matrix_profile", "preprocessing_window_matrix",
-                              "detection_threshold"}
-    remapped_by_ticket_07 = {
-        "catalogue_gramian_fusion", "catalogue_gramian_gadf",
-        "catalogue_gramian_gasf", "catalogue_gramian_recurrence",
-        "detection_freq_stft", "detection_sax_csax", "detection_sax_dsax",
-        "detection_sax_psax", "detection_wavelet_scattering",
-    }
-    added_by_ticket_43 = {"preprocessing_surrogate"}
-    remapped = (
-        remapped_by_ticket_06 | remapped_by_ticket_08 | remapped_by_ticket_07
-        | added_by_ticket_43
-    )
+    # eighth type. Every shipped adapter therefore declares a typed
+    # output_kind and input_kind.
     for module_name, spec in specs.items():
-        if module_name in remapped:
-            continue
-        assert spec.output_kind in LEGACY_OUTPUT_KINDS, module_name
-        assert spec.input_kind is None, module_name
-        assert spec.side_inputs == [], module_name
-        assert spec.estimate is None, module_name
+        assert spec.output_kind in OUTPUT_KINDS, module_name
+        assert spec.input_kind is None or spec.input_kind in OUTPUT_KINDS, module_name
 
 
 def test_every_shipped_adapters_declared_params_still_validate():

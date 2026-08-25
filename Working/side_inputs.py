@@ -34,11 +34,10 @@ def typed_step_value(result, fs):
     possible `earlier_step` binding target.
 
     Prefers `result.value` (a real `Working.types` object, ticket 05/13).
-    Falls back to wrapping a legacy `output_kind="signal"` result into a
-    `Signal` — `signal` is deliberately the one legacy output vocabulary
-    word that coincides with a `Working.types` name (see
-    `Working.chain_validation`'s docstring). Anything else (an untyped
-    `intervals`/`encoding` result) can't be resolved to a typed value:
+    Falls back to wrapping a `signal` output into a `Signal` — `signal` is
+    both the root interchange type and the chain's root kind (see
+    `Working.chain_validation`'s docstring). Anything else (an encoding or
+    other result with no typed `value`) can't be resolved to a typed value:
     returns None.
     """
     if result.value is not None:
