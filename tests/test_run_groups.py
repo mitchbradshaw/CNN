@@ -183,8 +183,7 @@ def test_band_fan_out_reuses_existing_band_definitions():
     # The fan-out must not define a parallel band vocabulary to
     # Working/database/bands.py — the labels that name a fan-out's targets
     # come from the existing definitions.
-    from Working.database import bands as b
-    labels = [label for _, label in b.SPIKE_TRAIN_BANDS]
+    labels = [label for _, label in db_bands.SPIKE_TRAIN_BANDS]
     assert len(labels) >= 2
 
     db_path, tmpdir = _fresh_db_with_channels(1)

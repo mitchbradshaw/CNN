@@ -12,7 +12,11 @@ A channel fan-out and a band fan-out are deliberately the same mechanism
 carries an optional `fan_out` scope:
 
     {"kind": "channels", "targets": [recording_id, ...]}
-    {"kind": "bands",    "targets": [{"label", "low_hz", "high_hz"}, ...]}
+    {"kind": "bands",    "targets": [{"label": ..., "low_hz": ..., "high_hz": ...}, ...]}
+
+Band labels are caller-supplied and are NOT redefined here — a caller may
+reuse the existing `Working.database.bands` vocabulary to name its fan-out
+targets, rather than this module growing a parallel band list.
 
 `materialize_target` turns one target index into a plain per-target recipe
 (a channel target becomes the recipe's `recording_id`; a band target gets a
