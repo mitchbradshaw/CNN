@@ -325,6 +325,24 @@ def test_filmstrip_plan_reports_cached_step_current_and_uncached_stale():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def test_filmstrip_plan_reports_stale_when_artifact_path_is_missing_on_disk():
+    chain = ChainState(recording_id=1, span=(0, 100))
+    chain.add_step("preprocessing", "lowpass")
+    conn, tmpdir = _fresh_db()
+    try:
+        recipe = chain.to_recipe()
+        step0_hash = _prefix_hash(recipe, 0)
+        # A row whose on-disk directory no longer exists is not a usable
+        # cached artifact — the executor would fall back to recomputation.
+        insert_step_artifact(conn, step0_hash, 0, os.path.join(tmpdir, "cache", "missing"))
+
+        plan = chain.filmstrip_plan(conn)
+        assert plan[0]["cache_state"] == "stale"
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 # ── runner ───────────────────────────────────────────────────────────────────
 
 def _run_all():
