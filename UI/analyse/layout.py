@@ -59,6 +59,7 @@ class LayoutMixin:
                 pn.Row(self.save_plot_button, self.save_plot_status),
                 self.encoding_section,  # Part 6, 4f: hidden entirely unless the last run was an encoding
                 pn.pane.Markdown("### Detections (this run)"),
+                self.detections_caption,
                 self.detections_placeholder,
                 self.detections_table,
                 pn.layout.Divider(),

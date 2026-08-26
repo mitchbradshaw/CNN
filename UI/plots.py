@@ -1120,7 +1120,66 @@ def build_motif_occurrence_overlay(group, m, fs, y_extent, unit_scale=1.0):
     return hv.Overlay([rectangles, scatter])
 
 
-def build_motif_waveform_overlay(group, x, m, fs, *, normalize=True, show_envelope=True):
+#: How `build_motif_waveform_overlay` chooses its y-range.
+#:
+#: "fit"   -- every sample of every overlaid curve is inside the frame.
+#: "fence" -- a Tukey IQR fence (q25-q75, k=3) computed from the stacked
+#:            curves, so one deep transient cannot squash the others flat.
+MOTIF_Y_RANGE_MODES = ("fit", "fence")
+
+#: The IQR fence's multiplier, in "fence" mode.
+_MOTIF_Y_FENCE_K = 3.0
+
+
+def _motif_overlay_y_bounds(all_values, mode):
+    """`(lo, hi)` for the motif waveform overlay, unpadded.
+
+    The two modes answer two different questions and both are legitimate,
+    which is why this is a mode rather than a constant.
+
+    "fence" bounds the range using only the MIDDLE 50% of the stacked
+    values, so it is insensitive to how extreme or how numerous the tail
+    points are -- it finds "the flat/wiggly baseline" as the bulk shape
+    and fences the transient out. That was the original behaviour, added
+    because a single deep drop rendered every other curve as a flat line.
+    A percentile cutoff will not do the same job: on real
+    electrophysiology-shaped data a sharp transient is several samples
+    wide, so even a 1st/99th-percentile bound still includes it
+    (measured: p1 at -5.9 against a true min of -6.0, on a 600-sample
+    window whose baseline sits in roughly [0.1, 0.25]) -- a percentile is
+    a bound on RANK, and >1% of a window can legitimately belong to one
+    transient.
+
+    But a Curve outside `ylim` simply clips at the frame edge (normal
+    Bokeh behaviour, not a bug), so in "fence" mode the transient -- the
+    part of a drop motif that carries its amplitude -- draws cut off.
+    Reported as "the overlaid motifs plot is cut short on the y range".
+    "fit" is therefore the default: it shows the whole motif, transient
+    included, and is the correct default for a library of drop shapes
+    whose depth is the evidence.
+    """
+    if mode not in MOTIF_Y_RANGE_MODES:
+        raise ValueError(
+            f"y_range_mode must be one of {MOTIF_Y_RANGE_MODES}, got {mode!r}"
+        )
+
+    data_lo, data_hi = float(all_values.min()), float(all_values.max())
+    if mode == "fit":
+        return data_lo, data_hi
+
+    q1, q3 = np.percentile(all_values, [25, 75])
+    iqr = q3 - q1
+    if iqr <= 0:
+        return data_lo, data_hi
+    lo = max(q1 - _MOTIF_Y_FENCE_K * iqr, data_lo)
+    hi = min(q3 + _MOTIF_Y_FENCE_K * iqr, data_hi)
+    if hi <= lo:
+        return data_lo, data_hi
+    return float(lo), float(hi)
+
+
+def build_motif_waveform_overlay(group, x, m, fs, *, normalize=True, show_envelope=True,
+                                 y_range_mode="fit"):
     """Bottom pane: one `hv.Curve` per occurrence (seed first, then
     neighbours), z-normalised, in a shared Overlay, plus an optional
     mean +/- 1 std envelope over the neighbours (excluding the seed).
@@ -1136,6 +1195,10 @@ def build_motif_waveform_overlay(group, x, m, fs, *, normalize=True, show_envelo
     `x` is the FULL channel array the group's indices were computed
     against (typically a `load_mp`+`load_channel_mmap` pairing at the
     same scale) -- occurrence snippets are sliced out of it here.
+
+    `y_range_mode` is `"fit"` (default -- every sample inside the frame)
+    or `"fence"` (a Tukey IQR fence, so one deep transient cannot squash
+    the rest flat). See `_motif_overlay_y_bounds` for why both exist.
 
     Always returns an `hv.Overlay` (never a bare `Curve`), even with
     `group=None` or zero valid occurrences.
@@ -1175,32 +1238,11 @@ def build_motif_waveform_overlay(group, x, m, fs, *, normalize=True, show_envelo
     # that stale range it happened to overlap (reported: every motif
     # looked flat and hard to read).
     #
-    # Uses a Tukey IQR fence (q75-q25, x3) rather than a percentile cutoff
-    # or strict min/max. On real electrophysiology-shaped data, a single
-    # sharp transient is not a single sample -- it's several, wide enough
-    # that even a 1st/99th-percentile cutoff still includes it (confirmed
-    # against a real run: p1 landed at -5.9 with the true min at -6.0, on
-    # a 600-sample window where the flat baseline sits in roughly
-    # [0.1, 0.25] -- a percentile bound is a bound on RANK, and >1% of a
-    # window can legitimately belong to one transient). An IQR fence
-    # bounds the range using only the MIDDLE 50% of the data (q25-q75),
-    # which is insensitive to how extreme or how numerous the tail points
-    # are -- it reliably finds "the flat/wiggly baseline" as the bulk
-    # shape and fences the transient out, regardless of the transient's
-    # width. Transients still draw (a Curve simply clips at the frame
-    # edge outside `ylim` -- normal Bokeh behaviour, not a bug), so a
-    # sharper spike is still visible as touching the top/bottom edge.
+    # WHICH range is `y_range_mode`'s decision -- see
+    # `_motif_overlay_y_bounds`. This is only about making whichever
+    # range was chosen actually stick to the axis.
     all_values = np.concatenate([v for v, _, _, _ in series])
-    q1, q3 = np.percentile(all_values, [25, 75])
-    iqr = q3 - q1
-    if iqr <= 0:
-        lo, hi = float(all_values.min()), float(all_values.max())
-    else:
-        k = 3.0
-        lo = max(q1 - k * iqr, float(all_values.min()))
-        hi = min(q3 + k * iqr, float(all_values.max()))
-    if hi <= lo:
-        lo, hi = float(all_values.min()), float(all_values.max())
+    lo, hi = _motif_overlay_y_bounds(all_values, y_range_mode)
     pad = (hi - lo) * 0.12 or 1.0
     y0, y1 = float(lo - pad), float(hi + pad)
 

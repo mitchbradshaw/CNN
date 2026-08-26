@@ -29,6 +29,8 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import pytest
+
 import numpy as np
 import panel as pn
 pn.extension("tabulator")
@@ -443,3 +445,72 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Y-range mode on the waveform overlay (2026-08 usability pass)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# The overlay fenced its y-range with a Tukey IQR fence (k=3) computed from
+# the middle 50% of the stacked curves. That fence was added so one sharp
+# transient could not squash every other curve flat -- but its consequence
+# is that the transient itself draws CLIPPED at the frame edge, which reads
+# as "the plot is cut short". Reported directly: "I just want to make sure I
+# can see the whole range of the motifs."
+#
+# So the fence becomes a mode rather than the only behaviour, and the
+# default flips to "fit": every sample of every curve is inside the frame.
+
+
+def _fenced_group_and_signal():
+    """A group whose seed carries a transient far outside the bulk range --
+    the exact shape the IQR fence clips."""
+    m = 64
+    x = np.zeros(4 * m, dtype=np.float64)
+    rng = np.random.default_rng(7)
+    for k in range(4):
+        base = rng.normal(0.0, 0.05, m)
+        base[m // 2] = -8.0          # the transient the fence fences out
+        x[k * m:(k + 1) * m] = base
+    group = {"seed_idx": 0, "neighbours": [(m, 0.1), (2 * m, 0.2), (3 * m, 0.3)]}
+    return group, x, m
+
+
+def _overlay_ylim(overlay):
+    """The y-range every leaf of the overlay was given."""
+    limits = [el.opts.get("plot").kwargs.get("ylim") for el in overlay]
+    assert len({l for l in limits if l is not None}) == 1, \
+        f"leaves disagree about ylim: {limits}"
+    return next(l for l in limits if l is not None)
+
+
+def test_waveform_overlay_fit_mode_contains_every_sample():
+    """The default y-range holds the whole curve, transient included."""
+    group, x, m = _fenced_group_and_signal()
+    overlay = build_motif_waveform_overlay(group, x, m, fs=1.0)
+    y0, y1 = _overlay_ylim(overlay)
+
+    drawn = np.concatenate([np.asarray(el.dimension_values(1))
+                            for el in overlay if len(el)])
+    assert y0 <= drawn.min() and drawn.max() <= y1, (
+        f"y-range ({y0:.3f}, {y1:.3f}) clips data spanning "
+        f"({drawn.min():.3f}, {drawn.max():.3f}) -- the transient is cut off"
+    )
+
+
+def test_waveform_overlay_fence_mode_still_available():
+    """The IQR fence is kept, as an explicit mode -- it is the right view
+    when one transient would otherwise flatten every other curve."""
+    group, x, m = _fenced_group_and_signal()
+    fit = _overlay_ylim(build_motif_waveform_overlay(group, x, m, fs=1.0,
+                                                     y_range_mode="fit"))
+    fenced = _overlay_ylim(build_motif_waveform_overlay(group, x, m, fs=1.0,
+                                                        y_range_mode="fence"))
+    assert (fenced[1] - fenced[0]) < (fit[1] - fit[0]), \
+        "the fenced range should be tighter than the fit-to-data range"
+
+
+def test_waveform_overlay_rejects_an_unknown_y_range_mode():
+    group, x, m = _fenced_group_and_signal()
+    with pytest.raises(ValueError, match="y_range_mode"):
+        build_motif_waveform_overlay(group, x, m, fs=1.0, y_range_mode="iqr")

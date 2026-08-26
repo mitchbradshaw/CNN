@@ -37,6 +37,7 @@ from Working.Detection.matrix_profiling import motif_groups as mg
 from Working.Detection.matrix_profiling.segments import segment_profile, slice_channel_profile
 from UI.plots import (
     build_channel_dmap, build_motif_occurrence_overlay, build_motif_waveform_overlay,
+    MOTIF_Y_RANGE_MODES,
     load_channel_mmap, style_main_plot_frame, PLOT_FONTSIZE,
 )
 from UI.workspaces.library.grid import LibraryGrid
@@ -69,6 +70,9 @@ class MotifBrowser:
         self.n_neighbors = pn.widgets.IntInput(name="n_neighbors", value=MOTIF_DEFAULT_N_NEIGHBORS, start=1, end=50)
         self.max_motifs = pn.widgets.IntInput(name="max_motifs", value=MOTIF_DEFAULT_MAX_MOTIFS, start=1, end=1000)
         self.max_distance = pn.widgets.TextInput(name="max_distance (blank = no cap)", value="")
+        self.y_range_mode = pn.widgets.RadioButtonGroup(
+            name="Y-axis", options=list(MOTIF_Y_RANGE_MODES), value="fit",
+        )
         self.recompute_notice = pn.pane.Markdown("", visible=False)
         self.recompute_button = pn.widgets.Button(name="Recompute group set", button_type="warning", visible=False)
 
@@ -121,6 +125,7 @@ class MotifBrowser:
         self.compute_button.on_click(self._on_compute_scale)
         for w in (self.n_neighbors, self.max_motifs, self.max_distance):
             w.param.watch(self._on_group_params_changed, "value")
+        self.y_range_mode.param.watch(self._on_y_range_mode_changed, "value")
         self.recompute_button.on_click(self._on_recompute_groups)
         self.prev_button.on_click(self._on_prev)
         self.next_button.on_click(self._on_next)
@@ -264,6 +269,7 @@ class MotifBrowser:
         waveform_dmap = hv.DynamicMap(
             lambda tick: build_motif_waveform_overlay(
                 self._current_group_for_render, self._x, self._m, self._fs_at_scale,
+                y_range_mode=self.y_range_mode.value,
             ),
             streams=[self._refresh_trigger],
         ).opts(height=MOTIF_BOTTOM_HEIGHT, responsive=True, toolbar=None, fontsize=PLOT_FONTSIZE)
@@ -310,6 +316,14 @@ class MotifBrowser:
         reuse_note = " (reused an existing group set)" if reused else " (computed a new group set)"
         self.scale_status.object = self._scale_status_base + reuse_note
         self._refresh_group_view()
+
+    def _on_y_range_mode_changed(self, _event):
+        """A redraw, never a regroup: the y-range mode changes how the same
+        occurrences are framed, not which occurrences they are. So it fires
+        the refresh trigger directly rather than joining the group-parameter
+        watchers, which put up a "Recompute group set" prompt."""
+        if self._refresh_trigger is not None:
+            self._refresh_trigger.event(tick=self._refresh_trigger.tick + 1)
 
     def _on_recompute_groups(self, _event=None):
         self._rebuild_groups(force=True)
@@ -459,6 +473,11 @@ class MotifBrowser:
             pn.pane.Markdown("**Group set**"),
             self.n_neighbors, self.max_motifs, self.max_distance,
             self.recompute_notice, self.recompute_button,
+            pn.pane.Markdown(
+                "**Overlay y-axis** — `fit` shows every sample; `fence` bounds the "
+                "range by the middle 50% so one deep drop cannot flatten the rest."
+            ),
+            self.y_range_mode,
             pn.layout.Divider(),
             pn.Row(self.prev_button, self.next_button),
             self.jump_input, self.group_label,

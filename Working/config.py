@@ -289,7 +289,7 @@ HPC_REMOTE_REPO_ROOT = "/home/Student/s4699158/CNN"
 # one (relative-time waveform overlay) — matches the Encoding view's
 # convention of giving the "main" panel more room than a supporting one.
 MOTIF_TOP_HEIGHT = 320
-MOTIF_BOTTOM_HEIGHT = 280
+MOTIF_BOTTOM_HEIGHT = 420
 # max_motifs default: NOT 1000 (the slide's original value) -- a 1000-motif
 # precompute is a long, visible-cost operation; 50 is enough to browse
 # comfortably and keeps "just opened the tab" fast (MATRIX_PROFILE_UI_PROMPT.md

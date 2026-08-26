@@ -46,6 +46,11 @@ class ResultsMixin:
         )
         self.save_plot_status = pn.pane.Markdown("")
         self.detections_placeholder = pn.pane.Markdown("*No run yet.*")
+        # What these rows actually ARE. `execute_recipe` writes a detections
+        # row for every span of ANY step whose output_kind is 'spanset', so
+        # the answer is per-run and cannot be a static label: it names the
+        # block, and the units start_idx/end_idx are counted in.
+        self.detections_caption = pn.pane.Markdown("")
         self.detections_table = pn.widgets.Tabulator(
             pd.DataFrame(columns=["id", "start_idx", "end_idx", "score"]),
             page_size=8, disabled=True, selectable=1,
@@ -234,7 +239,36 @@ class ResultsMixin:
 
     # ── 5d: save as motif ────────────────────────────────────────────────
 
+    def _spanset_step_name(self):
+        """`"<stage>.<algorithm>"` of the step in the last recipe whose
+        output is a SpanSet -- the one whose spans became these rows.
+
+        Returns None if the recipe is unavailable or no step claims a
+        spanset output, in which case the caption stays generic rather
+        than asserting a block that may be the wrong one.
+        """
+        recipe = getattr(self, "_last_recipe", None)
+        if not recipe:
+            return None
+        for step in reversed(recipe.get("steps", [])):
+            name = f"{step['stage']}.{step['algorithm']}"
+            try:
+                if get_adapter(name).output_kind == "spanset":
+                    return name
+            except KeyError:
+                continue
+        return None
+
     def _show_detections(self, detection_rows):
+        producer = self._spanset_step_name()
+        block = f"`{producer}`" if producer else "the chain's detection block"
+        self.detections_caption.object = (
+            f"*The {len(detection_rows)} span(s) {block} emitted, as sample indices "
+            "into the whole recording (not into the staged span). `score` is the "
+            "block's own confidence, and is blank for blocks that do not report "
+            "one. These are machine detections; a human verdict on them is "
+            "recorded in Review, never here.*"
+        )
         records = [{"id": d["id"], "start_idx": d["start_idx"], "end_idx": d["end_idx"],
                     "score": d["score"]} for d in detection_rows]
         self.detections_table.value = pd.DataFrame(

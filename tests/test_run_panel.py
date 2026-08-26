@@ -340,3 +340,52 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  The detections table says what it is detections OF (2026-08 usability)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# `Working.execution` writes a `detections` row for every span in ANY step
+# whose `output_kind` is 'spanset' -- so the table's contents depend on
+# which block in the chain produced them, and the table showed only
+# id/start_idx/end_idx/score with no mention of the block, the units, or
+# the recording. Reported as "it is unclear what the detections table is
+# actually recording detections of".
+
+
+def test_detections_caption_names_the_block_that_produced_them():
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        rp._last_recipe = {
+            "recording_id": rid,
+            "span": (0, 100),
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "spike_v1", "params": {}},
+            ],
+        }
+        rp._show_detections([{"id": 1, "start_idx": 0, "end_idx": 10, "score": 0.5}])
+
+        caption = rp.detections_caption.object
+        assert "detection.spike_v1" in caption, (
+            f"the caption must name the block whose spanset these are, got {caption!r}"
+        )
+        assert "sample" in caption.lower(), (
+            f"the caption must say what start_idx/end_idx are counted in, got {caption!r}"
+        )
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_detections_caption_is_blank_before_any_run():
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        assert app.run_panel.detections_caption.object == ""
+    finally:
+        _close_and_unlink(app, db_path)
