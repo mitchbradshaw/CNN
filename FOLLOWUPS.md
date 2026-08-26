@@ -561,3 +561,12 @@ deviations. The file list is now corrected in the ticket.
       Previously each adapter passed `t` through by hand, so a block that resampled would have
       silently misaligned every downstream plot against the channel. `execute_recipe` now refuses it
       with a message naming both lengths. No shipped block violates it.
+
+## T57 — 2026-08-27 08:53
+
+- [major] [standards] (rule 6.4) builder.py's _first_invalid_junction duplicates the chain-walk already in Working.chain_validation.validate_chain
+- [major] [standards] (rule 1.3) junction-location capability belongs in chain_validation.py (its stated purpose) but was added to the UI renderer
+- [minor] [standards] (no rule cited) baseline Data Clump: (index, producing_kind, block) tuple returned/unpacked positionally by _first_invalid_junction
+- [minor] [spec] (no rule cited) multi-step construction test never calls builder.layout() to assert non-None, only inspects steps_row/cards directly
+- [minor] [spec] (no rule cited) builder.py reimplements chain_validation.py's chain-walk rather than reusing it, risking future drift between the two traversals
+- [minor] [spec] (no rule cited) unregistered-adapter edge case falls back to an un-named generic invalid-chain message even if a later junction is the real type break
