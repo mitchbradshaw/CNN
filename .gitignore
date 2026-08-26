@@ -188,6 +188,17 @@ cython_debug/
 DATA/*
 !DATA/README.md
 
+# ── Library seed data: tracked on purpose ───────────────────────────────────
+# Inputs to the library importer, NOT derived output. `DATA/*` matches only
+# DATA's direct children, so re-including the directory is enough for git to
+# descend into it and track everything beneath.
+#
+# This is here because the bundle is IRREPLACEABLE: the generator that wrote
+# it (`Pipelines/drop_motifs/run_drop5_report.py` and its 5-series modules)
+# was deleted in 5b7f1fa and was never committed, so nothing can regenerate
+# these files. See DATA/library_seed/drop_motifs5/PROVENANCE.md.
+!DATA/library_seed/
+
 # ── Run outputs that deliberately stayed at the repo root ────────────────────
 # Results/ IS tracked; these three are not (large binaries / regenerable).
 MATRICES/

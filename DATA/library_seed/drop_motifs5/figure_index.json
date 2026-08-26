@@ -1,0 +1,1573 @@
+{
+  "1": {
+    "n": 17,
+    "n_pure": 17,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id001_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id001_dendrogram.png",
+    "dendrogram_info": {
+      "n": 17,
+      "excluded": 0,
+      "n_clusters": 3,
+      "cophenetic_r": 0.7727737895826773,
+      "labels": [
+        2,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2,
+        3,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2
+      ],
+      "composition": {
+        "2": {
+          "id001": 11
+        },
+        "1": {
+          "id001": 5
+        },
+        "3": {
+          "id001": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id001_rose.png",
+    "rose_info": {
+      "n": 17,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -34.521474411011944,
+      "resultant_length": 0.9969997985073937,
+      "circular_sd_deg": 4.441595376018233,
+      "uniformity_p": 5.710096063113173e-06,
+      "groups": {
+        "id001": {
+          "n": 17,
+          "mean_deg": -34.521474411011944,
+          "resultant_length": 0.9969997985073937,
+          "circular_sd_deg": 4.441595376018233,
+          "median_slope_mv_s": -0.7177778932775958
+        }
+      }
+    }
+  },
+  "3": {
+    "n": 16,
+    "n_pure": 16,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id003_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id003_dendrogram.png",
+    "dendrogram_info": {
+      "n": 16,
+      "excluded": 0,
+      "n_clusters": 3,
+      "cophenetic_r": 0.5365344566714347,
+      "labels": [
+        1,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        3,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id003": 7
+        },
+        "2": {
+          "id003": 8
+        },
+        "3": {
+          "id003": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id003_rose.png",
+    "rose_info": {
+      "n": 16,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -9.255090088242708,
+      "resultant_length": 0.9999408611757988,
+      "circular_sd_deg": 0.6231324875024353,
+      "uniformity_p": 2.7820736598105054e-15,
+      "groups": {
+        "id003": {
+          "n": 16,
+          "mean_deg": -9.255090088242708,
+          "resultant_length": 0.9999408611757988,
+          "circular_sd_deg": 0.6231324875024353,
+          "median_slope_mv_s": -0.163137576683972
+        }
+      }
+    }
+  },
+  "8": {
+    "n": 4,
+    "n_pure": 4,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id008_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id008_dendrogram.png",
+    "dendrogram_info": {
+      "n": 4,
+      "excluded": 0,
+      "n_clusters": 2,
+      "cophenetic_r": 0.9421208470144778,
+      "labels": [
+        1,
+        1,
+        1,
+        2
+      ],
+      "composition": {
+        "1": {
+          "id008": 3
+        },
+        "2": {
+          "id008": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id008_rose.png",
+    "rose_info": {
+      "n": 4,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -85.92772578518779,
+      "resultant_length": 0.9999986070901309,
+      "circular_sd_deg": 0.09563113037049811,
+      "uniformity_p": 9.412536023951739e-06,
+      "groups": {
+        "id008": {
+          "n": 4,
+          "mean_deg": -85.92772578518779,
+          "resultant_length": 0.9999986070901309,
+          "circular_sd_deg": 0.09563113037049811,
+          "median_slope_mv_s": -14.010865808090648
+        }
+      }
+    }
+  },
+  "10": {
+    "n": 84,
+    "n_pure": 82,
+    "excluded": 2,
+    "overlays": "Plots\\drop_motifs5\\id010_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id010_dendrogram.png",
+    "dendrogram_info": {
+      "n": 82,
+      "excluded": 2,
+      "n_clusters": 2,
+      "cophenetic_r": 0.7738719975215914,
+      "labels": [
+        1,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id010": 57
+        },
+        "2": {
+          "id010": 25
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id010_rose.png",
+    "rose_info": {
+      "n": 82,
+      "excluded": 2,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -29.585153294352555,
+      "resultant_length": 0.9912842605891712,
+      "circular_sd_deg": 7.581227036085993,
+      "uniformity_p": 4.805597756773598e-22,
+      "groups": {
+        "id010": {
+          "n": 82,
+          "mean_deg": -29.585153294352555,
+          "resultant_length": 0.9912842605891712,
+          "circular_sd_deg": 7.581227036085993,
+          "median_slope_mv_s": -0.5686135903053557
+        }
+      }
+    }
+  },
+  "20": {
+    "n": 4,
+    "n_pure": 4,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id020_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id020_dendrogram.png",
+    "dendrogram_info": {
+      "n": 4,
+      "excluded": 0,
+      "n_clusters": 2,
+      "cophenetic_r": 0.9567972049968263,
+      "labels": [
+        1,
+        2,
+        1,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id020": 3
+        },
+        "2": {
+          "id020": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id020_rose.png",
+    "rose_info": {
+      "n": 4,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -33.43464234609518,
+      "resultant_length": 0.9999664721181708,
+      "circular_sd_deg": 0.4691852268451022,
+      "uniformity_p": 0.05083052075094321,
+      "groups": {
+        "id020": {
+          "n": 4,
+          "mean_deg": -33.43464234609518,
+          "resultant_length": 0.9999664721181708,
+          "circular_sd_deg": 0.4691852268451022,
+          "median_slope_mv_s": -0.6611528096014536
+        }
+      }
+    }
+  },
+  "21": {
+    "n": 14,
+    "n_pure": 14,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id021_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id021_dendrogram.png",
+    "dendrogram_info": {
+      "n": 14,
+      "excluded": 0,
+      "n_clusters": 2,
+      "cophenetic_r": 0.6367902832146983,
+      "labels": [
+        1,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id021": 10
+        },
+        "2": {
+          "id021": 4
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id021_rose.png",
+    "rose_info": {
+      "n": 14,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -9.253901549315174,
+      "resultant_length": 0.9999320632970641,
+      "circular_sd_deg": 0.6678781563504519,
+      "uniformity_p": 1.9533031100143677e-13,
+      "groups": {
+        "id021": {
+          "n": 14,
+          "mean_deg": -9.253901549315174,
+          "resultant_length": 0.9999320632970641,
+          "circular_sd_deg": 0.6678781563504519,
+          "median_slope_mv_s": -0.1627428051267642
+        }
+      }
+    }
+  },
+  "22": {
+    "n": 24,
+    "n_pure": 19,
+    "excluded": 5,
+    "overlays": "Plots\\drop_motifs5\\id022_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id022_dendrogram.png",
+    "dendrogram_info": {
+      "n": 19,
+      "excluded": 5,
+      "n_clusters": 2,
+      "cophenetic_r": 0.9183575633088017,
+      "labels": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id022": 18
+        },
+        "2": {
+          "id022": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id022_rose.png",
+    "rose_info": {
+      "n": 19,
+      "excluded": 5,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -53.47548409199438,
+      "resultant_length": 0.9958973464896189,
+      "circular_sd_deg": 5.195367264697915,
+      "uniformity_p": 0.0001444062293481084,
+      "groups": {
+        "id022": {
+          "n": 19,
+          "mean_deg": -53.47548409199438,
+          "resultant_length": 0.9958973464896189,
+          "circular_sd_deg": 5.195367264697915,
+          "median_slope_mv_s": -1.3053603421888944
+        }
+      }
+    }
+  },
+  "24": {
+    "n": 40,
+    "n_pure": 28,
+    "excluded": 12,
+    "overlays": "Plots\\drop_motifs5\\id024_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id024_dendrogram.png",
+    "dendrogram_info": {
+      "n": 28,
+      "excluded": 12,
+      "n_clusters": 2,
+      "cophenetic_r": 0.5015321781872784,
+      "labels": [
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id024": 17
+        },
+        "2": {
+          "id024": 11
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id024_rose.png",
+    "rose_info": {
+      "n": 28,
+      "excluded": 12,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -73.31231269672423,
+      "resultant_length": 0.9596250397121591,
+      "circular_sd_deg": 16.449508426262334,
+      "uniformity_p": 1.4033425569490725e-07,
+      "groups": {
+        "id024": {
+          "n": 28,
+          "mean_deg": -73.31231269672423,
+          "resultant_length": 0.9596250397121591,
+          "circular_sd_deg": 16.449508426262334,
+          "median_slope_mv_s": -6.994217507702848
+        }
+      }
+    }
+  },
+  "25": {
+    "n": 26,
+    "n_pure": 22,
+    "excluded": 4,
+    "overlays": "Plots\\drop_motifs5\\id025_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id025_dendrogram.png",
+    "dendrogram_info": {
+      "n": 22,
+      "excluded": 4,
+      "n_clusters": 2,
+      "cophenetic_r": 0.5750619181859938,
+      "labels": [
+        1,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2
+      ],
+      "composition": {
+        "1": {
+          "id025": 10
+        },
+        "2": {
+          "id025": 12
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id025_rose.png",
+    "rose_info": {
+      "n": 22,
+      "excluded": 4,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -71.20367837635163,
+      "resultant_length": 0.9564404798517309,
+      "circular_sd_deg": 17.100024803772516,
+      "uniformity_p": 9.341907898396453e-07,
+      "groups": {
+        "id025": {
+          "n": 22,
+          "mean_deg": -71.20367837635163,
+          "resultant_length": 0.9564404798517309,
+          "circular_sd_deg": 17.100024803772516,
+          "median_slope_mv_s": -3.121617394176962
+        }
+      }
+    }
+  },
+  "26": {
+    "n": 2,
+    "n_pure": 2,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id026_overlays.png",
+    "dendrogram": null,
+    "dendrogram_info": {
+      "reason": "only 2 pure motifs; a tree needs at least 3"
+    },
+    "rose": "Plots\\drop_motifs5\\id026_rose.png",
+    "rose_info": {
+      "n": 2,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -38.30395998059331,
+      "resultant_length": 0.9985512158806439,
+      "circular_sd_deg": 3.085296194207129,
+      "uniformity_p": NaN,
+      "groups": {
+        "id026": {
+          "n": 2,
+          "mean_deg": -38.30395998059331,
+          "resultant_length": 0.9985512158806439,
+          "circular_sd_deg": 3.085296194207129,
+          "median_slope_mv_s": -0.7935960598243752
+        }
+      }
+    }
+  },
+  "28": {
+    "n": 19,
+    "n_pure": 19,
+    "excluded": 0,
+    "overlays": "Plots\\drop_motifs5\\id028_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id028_dendrogram.png",
+    "dendrogram_info": {
+      "n": 19,
+      "excluded": 0,
+      "n_clusters": 2,
+      "cophenetic_r": 0.9635766992788365,
+      "labels": [
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "composition": {
+        "2": {
+          "id028": 1
+        },
+        "1": {
+          "id028": 18
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id028_rose.png",
+    "rose_info": {
+      "n": 19,
+      "excluded": 0,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -11.451172706207533,
+      "resultant_length": 0.9614003610187739,
+      "circular_sd_deg": 16.076413257141123,
+      "uniformity_p": 1.5844373127377872e-15,
+      "groups": {
+        "id028": {
+          "n": 19,
+          "mean_deg": -11.451172706207533,
+          "resultant_length": 0.9614003610187739,
+          "circular_sd_deg": 16.076413257141123,
+          "median_slope_mv_s": -0.14709594174933116
+        }
+      }
+    }
+  },
+  "29": {
+    "n": 48,
+    "n_pure": 38,
+    "excluded": 10,
+    "overlays": "Plots\\drop_motifs5\\id029_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id029_dendrogram.png",
+    "dendrogram_info": {
+      "n": 38,
+      "excluded": 10,
+      "n_clusters": 2,
+      "cophenetic_r": 0.8061008699563945,
+      "labels": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "composition": {
+        "1": {
+          "id029": 26
+        },
+        "2": {
+          "id029": 12
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id029_rose.png",
+    "rose_info": {
+      "n": 38,
+      "excluded": 10,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -55.720956093199995,
+      "resultant_length": 0.9980591107832925,
+      "circular_sd_deg": 3.5714856032193545,
+      "uniformity_p": 3.2686754722772395e-11,
+      "groups": {
+        "id029": {
+          "n": 38,
+          "mean_deg": -55.720956093199995,
+          "resultant_length": 0.9980591107832925,
+          "circular_sd_deg": 3.5714856032193545,
+          "median_slope_mv_s": -1.5059444543321363
+        }
+      }
+    }
+  },
+  "33": {
+    "n": 30,
+    "n_pure": 29,
+    "excluded": 1,
+    "overlays": "Plots\\drop_motifs5\\id033_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id033_dendrogram.png",
+    "dendrogram_info": {
+      "n": 29,
+      "excluded": 1,
+      "n_clusters": 2,
+      "cophenetic_r": 0.7228897246411392,
+      "labels": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        2,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        2
+      ],
+      "composition": {
+        "2": {
+          "id033": 20
+        },
+        "1": {
+          "id033": 9
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id033_rose.png",
+    "rose_info": {
+      "n": 29,
+      "excluded": 1,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -33.65644267318777,
+      "resultant_length": 0.9997119420166977,
+      "circular_sd_deg": 1.375336178749298,
+      "uniformity_p": 3.0140524878541083e-10,
+      "groups": {
+        "id033": {
+          "n": 29,
+          "mean_deg": -33.65644267318777,
+          "resultant_length": 0.9997119420166977,
+          "circular_sd_deg": 1.375336178749298,
+          "median_slope_mv_s": -0.6653643054821412
+        }
+      }
+    }
+  },
+  "34": {
+    "n": 40,
+    "n_pure": 30,
+    "excluded": 10,
+    "overlays": "Plots\\drop_motifs5\\id034_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id034_dendrogram.png",
+    "dendrogram_info": {
+      "n": 30,
+      "excluded": 10,
+      "n_clusters": 2,
+      "cophenetic_r": 0.5657046776230901,
+      "labels": [
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "composition": {
+        "2": {
+          "id034": 19
+        },
+        "1": {
+          "id034": 11
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id034_rose.png",
+    "rose_info": {
+      "n": 30,
+      "excluded": 10,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -35.44702285024302,
+      "resultant_length": 0.9933897693562626,
+      "circular_sd_deg": 6.598809911988958,
+      "uniformity_p": 1.8635930836521217e-07,
+      "groups": {
+        "id034": {
+          "n": 30,
+          "mean_deg": -35.44702285024302,
+          "resultant_length": 0.9933897693562626,
+          "circular_sd_deg": 6.598809911988958,
+          "median_slope_mv_s": -0.7469066844196792
+        }
+      }
+    }
+  },
+  "35": {
+    "n": 18,
+    "n_pure": 17,
+    "excluded": 1,
+    "overlays": "Plots\\drop_motifs5\\id035_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id035_dendrogram.png",
+    "dendrogram_info": {
+      "n": 17,
+      "excluded": 1,
+      "n_clusters": 2,
+      "cophenetic_r": 0.7923775465449955,
+      "labels": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "composition": {
+        "1": {
+          "id035": 16
+        },
+        "2": {
+          "id035": 1
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id035_rose.png",
+    "rose_info": {
+      "n": 17,
+      "excluded": 1,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -36.1737125311608,
+      "resultant_length": 0.9954627049086106,
+      "circular_sd_deg": 5.464239260133645,
+      "uniformity_p": 0.00021130449524814083,
+      "groups": {
+        "id035": {
+          "n": 17,
+          "mean_deg": -36.1737125311608,
+          "resultant_length": 0.9954627049086106,
+          "circular_sd_deg": 5.464239260133645,
+          "median_slope_mv_s": -0.7043766738932256
+        }
+      }
+    }
+  },
+  "385": {
+    "n": 24,
+    "n_pure": 21,
+    "excluded": 3,
+    "overlays": "Plots\\drop_motifs5\\id385_overlays.png",
+    "dendrogram": "Plots\\drop_motifs5\\id385_dendrogram.png",
+    "dendrogram_info": {
+      "n": 21,
+      "excluded": 3,
+      "n_clusters": 2,
+      "cophenetic_r": 0.7792545495444242,
+      "labels": [
+        2,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        1,
+        2,
+        2
+      ],
+      "composition": {
+        "2": {
+          "id385": 15
+        },
+        "1": {
+          "id385": 6
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\id385_rose.png",
+    "rose_info": {
+      "n": 21,
+      "excluded": 3,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -77.49673922175653,
+      "resultant_length": 0.9995940858624982,
+      "circular_sd_deg": 1.6326714484335956,
+      "uniformity_p": 1.1994188901226091e-16,
+      "groups": {
+        "id385": {
+          "n": 21,
+          "mean_deg": -77.49673922175653,
+          "resultant_length": 0.9995940858624982,
+          "circular_sd_deg": 1.6326714484335956,
+          "median_slope_mv_s": -4.206857065135628
+        }
+      }
+    }
+  },
+  "ALL": {
+    "n": 410,
+    "n_pure": 362,
+    "excluded": 48,
+    "dendrogram": "Plots\\drop_motifs5\\ALL_dendrogram.png",
+    "dendrogram_info": {
+      "n": 362,
+      "excluded": 48,
+      "n_clusters": 2,
+      "cophenetic_r": 0.7742750734993527,
+      "labels": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        2,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        2
+      ],
+      "composition": {
+        "2": {
+          "id001": 17,
+          "id003": 16,
+          "id008": 3,
+          "id020": 4,
+          "id021": 14,
+          "id022": 18,
+          "id024": 28,
+          "id025": 19,
+          "id028": 2,
+          "id029": 38,
+          "id033": 29,
+          "id034": 27,
+          "id035": 14,
+          "id385": 15
+        },
+        "1": {
+          "id008": 1,
+          "id010": 82,
+          "id022": 1,
+          "id025": 3,
+          "id026": 2,
+          "id028": 17,
+          "id034": 3,
+          "id035": 3,
+          "id385": 6
+        }
+      }
+    },
+    "rose": "Plots\\drop_motifs5\\ALL_rose.png",
+    "rose_info": {
+      "n": 362,
+      "excluded": 48,
+      "field": "max_slope_mv_s",
+      "scale": "raw",
+      "mean_deg": -41.43761522553639,
+      "resultant_length": 0.925206361562116,
+      "circular_sd_deg": 22.592049577314974,
+      "uniformity_p": 6.952863305421518e-10,
+      "groups": {
+        "id001": {
+          "n": 17,
+          "mean_deg": -34.521474411011944,
+          "resultant_length": 0.9969997985073937,
+          "circular_sd_deg": 4.441595376018233,
+          "median_slope_mv_s": -0.7177778932775958
+        },
+        "id003": {
+          "n": 16,
+          "mean_deg": -9.255090088242708,
+          "resultant_length": 0.9999408611757988,
+          "circular_sd_deg": 0.6231324875024353,
+          "median_slope_mv_s": -0.163137576683972
+        },
+        "id008": {
+          "n": 4,
+          "mean_deg": -85.92772578518779,
+          "resultant_length": 0.9999986070901309,
+          "circular_sd_deg": 0.09563113037049811,
+          "median_slope_mv_s": -14.010865808090648
+        },
+        "id010": {
+          "n": 82,
+          "mean_deg": -29.585153294352555,
+          "resultant_length": 0.9912842605891712,
+          "circular_sd_deg": 7.581227036085993,
+          "median_slope_mv_s": -0.5686135903053557
+        },
+        "id020": {
+          "n": 4,
+          "mean_deg": -33.43464234609518,
+          "resultant_length": 0.9999664721181708,
+          "circular_sd_deg": 0.4691852268451022,
+          "median_slope_mv_s": -0.6611528096014536
+        },
+        "id021": {
+          "n": 14,
+          "mean_deg": -9.253901549315174,
+          "resultant_length": 0.9999320632970641,
+          "circular_sd_deg": 0.6678781563504519,
+          "median_slope_mv_s": -0.1627428051267642
+        },
+        "id022": {
+          "n": 19,
+          "mean_deg": -53.47548409199438,
+          "resultant_length": 0.9958973464896189,
+          "circular_sd_deg": 5.195367264697915,
+          "median_slope_mv_s": -1.3053603421888944
+        },
+        "id024": {
+          "n": 28,
+          "mean_deg": -73.31231269672423,
+          "resultant_length": 0.9596250397121591,
+          "circular_sd_deg": 16.449508426262334,
+          "median_slope_mv_s": -6.994217507702848
+        },
+        "id025": {
+          "n": 22,
+          "mean_deg": -71.20367837635163,
+          "resultant_length": 0.9564404798517309,
+          "circular_sd_deg": 17.100024803772516,
+          "median_slope_mv_s": -3.121617394176962
+        },
+        "id026": {
+          "n": 2,
+          "mean_deg": -38.30395998059331,
+          "resultant_length": 0.9985512158806439,
+          "circular_sd_deg": 3.085296194207129,
+          "median_slope_mv_s": -0.7935960598243752
+        },
+        "id028": {
+          "n": 19,
+          "mean_deg": -11.451172706207533,
+          "resultant_length": 0.9614003610187739,
+          "circular_sd_deg": 16.076413257141123,
+          "median_slope_mv_s": -0.14709594174933116
+        },
+        "id029": {
+          "n": 38,
+          "mean_deg": -55.720956093199995,
+          "resultant_length": 0.9980591107832925,
+          "circular_sd_deg": 3.5714856032193545,
+          "median_slope_mv_s": -1.5059444543321363
+        },
+        "id033": {
+          "n": 29,
+          "mean_deg": -33.65644267318777,
+          "resultant_length": 0.9997119420166977,
+          "circular_sd_deg": 1.375336178749298,
+          "median_slope_mv_s": -0.6653643054821412
+        },
+        "id034": {
+          "n": 30,
+          "mean_deg": -35.44702285024302,
+          "resultant_length": 0.9933897693562626,
+          "circular_sd_deg": 6.598809911988958,
+          "median_slope_mv_s": -0.7469066844196792
+        },
+        "id035": {
+          "n": 17,
+          "mean_deg": -36.1737125311608,
+          "resultant_length": 0.9954627049086106,
+          "circular_sd_deg": 5.464239260133645,
+          "median_slope_mv_s": -0.7043766738932256
+        },
+        "id385": {
+          "n": 21,
+          "mean_deg": -77.49673922175653,
+          "resultant_length": 0.9995940858624982,
+          "circular_sd_deg": 1.6326714484335956,
+          "median_slope_mv_s": -4.206857065135628
+        }
+      }
+    }
+  }
+}
