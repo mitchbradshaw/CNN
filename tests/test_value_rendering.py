@@ -82,26 +82,30 @@ def test_all_seven_types_return_renderable_elements():
     """Every interchange type must return a renderable HoloViews object,
     never None — a pane that renders nothing does not raise, it is blank."""
     cases = [
-        ("signal", _signal_value(), {}),
-        ("scores", _scores_value(), {}),
-        ("encoding", *_encoding_value()),
-        ("spanset", _spanset_value(), {}),
-        ("windowset", _windowset_value(), {}),
-        ("grouping", _grouping_value(), {}),
-        ("model", _model_value(), {}),
+        ("signal", _signal_value(), {}, hv.Curve),
+        ("scores", _scores_value(), {}, hv.Curve),
+        ("encoding", *_encoding_value(), hv.DynamicMap),
+        ("spanset", _spanset_value(), {}, hv.Rectangles),
+        ("windowset", _windowset_value(), {}, hv.Spikes),
+        ("grouping", _grouping_value(), {}, hv.Bars),
+        ("model", _model_value(), {}, hv.Table),
     ]
-    for kind, value, meta in cases:
+    for kind, value, meta, expected in cases:
         result = render_value(kind, value, meta)
         assert result is not None, f"{kind} returned None"
-        assert isinstance(result, hv.Dimensioned), (
+        assert isinstance(result, hv.core.Dimensioned), (
             f"{kind} returned {type(result).__name__}, not a renderable "
             "HoloViews object"
+        )
+        assert isinstance(result, expected), (
+            f"{kind} returned {type(result).__name__}, expected a "
+            f"{expected.__name__}"
         )
         # A DynamicMap that raises inside its callback renders as a
         # silently blank pane — evaluating a frame catches that here.
         if isinstance(result, hv.DynamicMap):
             frame = result[()]
-            assert isinstance(frame, hv.Dimensioned), (
+            assert isinstance(frame, hv.core.Dimensioned), (
                 f"{kind} DynamicMap produced {type(frame).__name__}, not a "
                 "renderable frame"
             )
@@ -112,20 +116,24 @@ def test_degenerate_values_still_render():
     WindowSet, empty signal, ...) still returns something renderable
     rather than None."""
     cases = [
-        ("signal", Signal(x=np.array([]), fs=1.0), {}),
-        ("scores", Scores(values=np.array([]), fs=1.0), {}),
-        ("encoding", Encoding(values=np.array([], dtype=int), kind="symbolic"), {}),
-        ("spanset", SpanSet(starts=(), ends=()), {}),
-        ("windowset", WindowSet(starts=np.array([0]), length=10, fs=1.0), {}),
-        ("grouping", Grouping(labels=np.array([], dtype=int)), {}),
-        ("model", Model(path=""), {}),
+        ("signal", Signal(x=np.array([]), fs=1.0), {}, hv.Curve),
+        ("scores", Scores(values=np.array([]), fs=1.0), {}, hv.Curve),
+        ("encoding", Encoding(values=np.array([], dtype=int), kind="symbolic"), {}, hv.Table),
+        ("spanset", SpanSet(starts=(), ends=()), {}, hv.Rectangles),
+        ("windowset", WindowSet(starts=np.array([0]), length=10, fs=1.0), {}, hv.Spikes),
+        ("grouping", Grouping(labels=np.array([], dtype=int)), {}, hv.Bars),
+        ("model", Model(path=""), {}, hv.Table),
     ]
-    for kind, value, meta in cases:
+    for kind, value, meta, expected in cases:
         result = render_value(kind, value, meta)
         assert result is not None, f"degenerate {kind} returned None"
-        assert isinstance(result, hv.Dimensioned), (
+        assert isinstance(result, hv.core.Dimensioned), (
             f"degenerate {kind} returned {type(result).__name__}, not a "
             "renderable HoloViews object"
+        )
+        assert isinstance(result, expected), (
+            f"degenerate {kind} returned {type(result).__name__}, expected "
+            f"a {expected.__name__}"
         )
 
 
