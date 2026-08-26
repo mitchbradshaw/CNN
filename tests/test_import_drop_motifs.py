@@ -142,6 +142,26 @@ def test_edges_carry_distance_function_threshold_and_recipe_hash():
         conn.close()
 
 
+def test_import_with_threshold_only_clusters_by_that_height():
+    """A bare `threshold` is the clustering cut: re-clustering at a new
+    threshold regroups without re-ingesting (PRD Part 2, Library import)."""
+    conn = init_db(":memory:")
+    try:
+        r12 = import_drop_motifs(conn, BUNDLE_DIR, n_clusters=12)
+        threshold = r12["threshold"]
+    finally:
+        conn.close()
+
+    conn = init_db(":memory:")
+    try:
+        r = import_drop_motifs(conn, BUNDLE_DIR, threshold=threshold)
+        assert r["n_entries"] == 12
+        assert r["n_members"] == SEED_N_MOTIFS
+        assert r["threshold"] == threshold
+    finally:
+        conn.close()
+
+
 # ── criterion 3: provenance survives onto a member row ──────────────────────
 
 def test_every_member_resolves_to_a_seed_event():
