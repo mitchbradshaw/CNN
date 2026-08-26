@@ -143,13 +143,13 @@ Adding a technique remains what the goals spec promised: one new adapter file de
 
 ### Chain shape
 
-A chain is a **linear spine with named side-inputs**. Each step draws its primary input from the previous step, and may declare additional typed inputs bound at composition time to the chain's root signal, an earlier step's output, or a library exemplar. There is no fan-out within a chain, no merges, and no node canvas. Comparing two chains is a Compare action over two completed runs — the same mechanism surrogate comparison requires, so one implementation serves two research questions.
+A chain is a **linear spine with named side-inputs**. Each step draws its primary input from the previous step, and may declare additional typed inputs bound at composition time to the chain's root signal, an earlier step's output, or a library exemplar. There is no fan-out within a chain and no merges. **[SUPERSEDED by Part 2 — "Chain shape, revised".** The chain is still a linear spine; Part 2 replaces only how that spine is *presented*, from a vertical staged list to a horizontal block canvas. The prohibition on fan-out and merges stands.**]** Comparing two chains is a Compare action over two completed runs — the same mechanism surrogate comparison requires, so one implementation serves two research questions.
 
 Side-input bindings serialise into the step and are **hashed by content, not by database identifier**: a binding records the entry id as a convenience pointer alongside the source file, channel and sample range that constitute its actual identity. This keeps a recipe hash stable when local identifiers change and lets an exported template resolve on another machine.
 
 ### Type checking
 
-A single chain-validation function answers "can this output type feed this block, and if not, why not." It is consumed at two layers. At composition, the add-step control lists every block with incompatible ones disabled and the reason stated inline. At execution, recipe construction and the runner both hard-fail before any computation, so a hand-edited or cluster-generated recipe cannot get partway through a long run before failing. Two layers, one function, no possibility of drift.
+A single chain-validation function answers "can this output type feed this block, and if not, why not." It is consumed at two layers. At composition, the add-step control lists every block with incompatible ones disabled and the reason stated inline. **[SUPERSEDED by Part 2 — the reasons now surface in a picker opened from a `+` on the canvas, not in a permanent vertical list. The rule that incompatible blocks are *disabled with a reason* rather than hidden is unchanged, and is the part that matters.]** At execution, recipe construction and the runner both hard-fail before any computation, so a hand-edited or cluster-generated recipe cannot get partway through a long run before failing. Two layers, one function, no possibility of drift.
 
 ### Storage
 
@@ -192,6 +192,7 @@ Four workspaces plus an admin group replace today's seven tabs. Nine tabs would 
 
 - **Explore** — the existing viewer, essentially unchanged: rasterized zoom driven by the visible range, vectorised annotation overlays, coverage and density ribbons, drag modes, filters, keyboard shortcuts, cross-channel peek, session persistence. It gains `seed` as a fifth verdict.
 - **Analyse** — absorbs the run panel, run history and window-matrix panel. Holds the chain builder (a staged list with type-filtered block addition), the block inspector (generated parameter controls, recommended defaults, live derived readouts, side-input pickers, and that step's cached result), the scope selector (recordings, channels, span, bands), the run surface (estimate, routing, progress, per-stage results, surrogate toggle), a history sidebar that can reload a past chain, and the two-run Compare view.
+  **[SUPERSEDED by Part 2 — "The Analyse workspace, revised".** The chain builder becomes a horizontal block canvas; the block inspector is absorbed into the block card and ceases to exist as a separate surface; the run panel becomes a filmstrip of every step's plot; the history sidebar becomes collapsible. The surfaces named here are the *right set of jobs* — Part 2 changes which surface does which, and adds none.**]**
 - **Review** — the candidate queue. Filterable by run, run group, method, score range, channel and adjudication status. One candidate at a time in context with configurable padding, its analytical score, and the z-normalised overlay pattern the motif browser already uses. Verdicts on single keys with auto-advance and undo.
 - **Library** — absorbs the motif browser. A thumbnail grid of exemplars with a group-by selector and scope summary; an entry detail showing the exemplar, its members, the all-members overlay on a shared relative-time axis, and the edge list. Actions to search at other scales, classify cross-channel, and export.
 - **Admin** — vocabulary administration, recording import, and cluster-job import.
@@ -333,3 +334,274 @@ Each milestone above decomposes into work packages that are independently workab
 | Four workspaces mirroring the research loop | Nine tabs is a filing cabinet |
 | Review built before Analyse | Adjudication throughput is the rate limiter for two research questions |
 | Held-out recording enforced in code | Makes the methods claim true by construction |
+
+---
+---
+
+# Pipeline GUI, Part 2 — The Usability Wave
+
+**Project:** Underground Brains — mycelium bio-electric signal analysis
+**Status:** Design settled via grilling, 27 August 2026. Ready for ticket breakdown (T50+).
+**Relationship to Part 1:** Part 1 above remains the authority on everything it describes except where a passage carries a **[SUPERSEDED by Part 2]** marker. Part 2 changes *presentation and one schema pair*; it changes no type, no adapter contract, no execution semantics, and no separation between machine detections and human annotations. Where the two disagree, the marker names it and Part 2 wins.
+
+**What changed since Part 1 was written:** T01–T48 are merged. The tool is built and it works. What Part 1 could not know is how it *reads* once assembled, and the freeze is now the point at which the project turns from building the instrument to extracting results with it. Every decision below was taken against that: does this change how much evidence the researcher can get out of the tool in the five weeks after freeze.
+
+---
+
+## Problem Statement
+
+The pipeline is complete and the researcher cannot use it comfortably. Four specific failures, each observed on the assembled application:
+
+**The chain builder does not show a chain.** It renders as a vertical list of step labels above a taller vertical list of twenty "Add …" buttons, seventeen of them enabled and three greyed out with a paragraph of explanation beside them. Nothing about that layout says "these steps happen in order and data flows through them". The composition surface for a pipeline tool does not look like a pipeline, so chains do not get composed — the researcher falls back to running single algorithms, which is the workflow the whole build was meant to replace.
+
+**The analysis is not visible.** The Run algorithm surface shows one plot: the staged span before the run, replaced by the result after. A six-step chain therefore produces one picture. There is no way to see what the detrend did before the SAX ran, or what the SAX produced before the matrix profile consumed it. For a tool whose purpose is understanding what a technique does to a signal, the intermediate states — the part where the understanding actually lives — are not rendered at all.
+
+**Results cannot be told apart.** Runs are identified by autoincrementing integer. The Compare view offers "#12 — recording 49" against "#31 — recording 385" and no way to record that one of them was the tuned lowpass and the other the raw comparison. Its output is a list of interval pairs, which answers "do these two detection sets overlap" but never "what was different about the two chains" — and most comparisons on this project are one-parameter sweeps where that is the only question.
+
+**The library is empty.** `motif_entry`, `motif_member` and `motif_edge` hold zero rows against 34 runs, 703 detections and 11,267 annotations. Three tickets built the grid, the detail view and the grouping selectors; nothing ever populated them. Meanwhile 410 extracted drop motifs across 16 spike trains and 7 channels sit in a derived-data bundle whose generator has been deleted. The library is the stated deliverable of Part 1 and it currently contains nothing.
+
+Two smaller frictions compound these: the run-history sidebar is narrower than its own table, truncating the recipe and parameter columns that make history worth having; and the detections table shows four unlabelled integer columns with no statement of which block produced them or what they are indices into.
+
+## Solution
+
+Make the Analyse workspace show the pipeline, and put the motifs in the library.
+
+**A chain is drawn as a chain.** The builder becomes a horizontal canvas of block cards, left to right, each card carrying the algorithm's name, its input and output types on the edges it connects through, its live parameter controls and derived readouts, and a control that opens that block's plots. A `+` sits between every pair of cards and at the end, so a step can be inserted mid-chain rather than only appended. The picker opened by a `+` lists every block, incompatible ones disabled with the reason — the Part 1 rule, in a place that does not occupy the surface permanently.
+
+**Every stage of the analysis is plotted.** The Run algorithm surface becomes a filmstrip: the chain's input at the top, then one plot per step in order, so the whole transformation reads as a single scroll. Any block can be focused for detail — for the SAX blocks that means the existing signal/PAA/quantised/cutline panels; for the rest it means that step's input and output at full size. Editing a parameter re-runs the suffix from that step onward and nothing before it, automatically when the estimate is cheap and on request when it is not.
+
+**Runs get names, and chains get compared as chains.** A run carries an editable name alongside its id, inherited by its surrogate. The Compare view stacks the two chains as block canvases and highlights what differs between them — a step added, removed, or a parameter changed — above the existing detection-set overlap.
+
+**The library gets populated, and grouped two ways.** The 410 drop motifs are imported from their bundle. Each becomes a library member; shape families are computed across all of them regardless of which spike train they came from; and the spike trains themselves become library entries at a coarser scale, so a train is a thing that can be linked to another train rather than a string on a row. The grid presents both axes — group by provenance to ask "what came out of this recording", group by shape to ask "what recurs across recordings".
+
+**The property that makes the last one worth doing** is already measurable on the seed data. Clustering the pooled 410 motifs yields twelve shape families, eleven of which draw members from more than one spike train — up to eight — and two of which mix morphologies that the per-span labels call distinct. That is cross-recording shape recurrence, which is the thesis claim, sitting in data already on disk and currently invisible because nothing has imported it.
+
+## User Stories
+
+**Composing a chain**
+
+1. As a researcher, I want to see my chain drawn left to right as connected blocks, so that I can read the order data flows in without reconstructing it from a list.
+2. As a researcher, I want each block to show its input type on the left and output type on the right, so that I can see why two blocks connect before I try to connect them.
+3. As a researcher, I want a `+` between every pair of blocks, so that I can insert a preprocessing step in the middle of a chain without deleting and rebuilding everything after it.
+4. As a researcher, I want the block picker to list every registered algorithm with incompatible ones disabled and the reason shown, so that I learn the type system by being told why rather than by noticing something is missing.
+5. As a researcher, I want a block's parameters editable on its own card, so that I do not have to move to a separate surface and re-select the step I am already looking at.
+6. As a researcher, I want the derived readouts (symbols produced, window count) live on the card as I type, so that I can picture the effect of a parameter I cannot otherwise picture.
+7. As a researcher, I want to reorder and delete blocks on the canvas, so that editing a chain is direct manipulation rather than form-filling.
+8. As a researcher, I want a chain I reopened from history to appear on the canvas exactly as it ran, so that "re-run or tweak it" starts from a picture rather than a description.
+9. As a researcher, I want an invalid chain to say which junction is wrong, so that I fix the connection rather than guessing which step to remove.
+
+**Seeing the analysis**
+
+10. As a researcher, I want every step of my chain plotted in order on one surface, so that I can see what each technique did to the signal rather than only what came out of the last one.
+11. As a researcher, I want the chain's input plotted at the top of that filmstrip, so that every transformation is read against the thing it transformed.
+12. As a researcher, I want each plot labelled with the block that produced it and the type it is, so that a strip of six plots is navigable rather than a wall of curves.
+13. As a researcher, I want to focus a single block and see it larger, so that I can inspect a step closely without losing the chain around it.
+14. As a researcher, I want a focused SAX block to show its signal, PAA, quantised and cutline panels, so that I can see the encoding decision itself rather than only its output symbols.
+15. As a researcher, I want a block whose output is not a signal — a grouping, a model, a score series — to still render as something, so that half my chain is not blank panes.
+16. As a researcher, I want editing a parameter to re-run only that step and the ones after it, so that retuning the last step of a chain containing a matrix profile does not cost hours.
+17. As a researcher, I want an expensive re-run to ask before it starts and tell me the estimate, so that I do not lose an afternoon to a keystroke.
+18. As a researcher, I want a cheap re-run to just happen, so that tuning a filter feels immediate.
+19. As a researcher, I want stale plots marked as stale while a re-run is in flight, so that I never read an old picture as a new result.
+20. As a researcher, I want to run a single algorithm as easily as before, so that the new composition surface does not tax the simplest case.
+
+**Telling runs apart**
+
+21. As a researcher, I want to give a run a name I choose, so that I can find it again without memorising integers.
+22. As a researcher, I want a run's name shown everywhere its id is shown — history, compare, exports, block headers — so that the name is the identifier in practice and not decoration.
+23. As a researcher, I want a surrogate run to inherit its parent's name, so that a paired run does not appear as an anonymous stranger beside a named one.
+24. As a researcher, I want to rename a run after the fact, so that I can label it once I know what it showed.
+25. As a researcher, I want the Compare view to draw both chains as block canvases, so that I compare methods rather than integers.
+26. As a researcher, I want the differing steps and parameters highlighted between those two chains, so that a one-parameter sweep is legible at a glance.
+27. As a researcher, I want a one-line summary of the difference, so that I can paste it into notes without transcribing a diagram.
+28. As a researcher, I want the existing detection-set overlap kept below the chain comparison, so that I get both "what was different" and "what did it change".
+
+**Working the history sidebar**
+
+29. As a researcher, I want to collapse the run-history sidebar to a ribbon, so that the chain canvas gets the full width when I am composing.
+30. As a researcher, I want to expand it to a width that fits its table, so that the recipe and parameter columns are readable when I am searching history.
+31. As a researcher, I want the sidebar collapsed by default while I am on the chain builder, so that the two surfaces do not fight over the same pixels.
+32. As a researcher, I want the status filter wide enough to show its selections, so that I can tell what I have filtered to.
+
+**Understanding the detections table**
+
+33. As a researcher, I want the detections table to name the block whose spans it is showing, so that I know which step of a six-step chain produced them.
+34. As a researcher, I want it stated that the indices are samples into the whole recording, so that I do not misread them as offsets into the staged span.
+35. As a researcher, I want it stated that these are machine detections and that verdicts go in Review, so that the separation is visible at the point of confusion rather than only in the schema.
+
+**Populating the library**
+
+36. As a researcher, I want my 410 extracted drop motifs imported into the library, so that the library page shows my actual work instead of an empty grid.
+37. As a researcher, I want each motif to keep its provenance — the spike train, recording, channel and sample range it came from — so that a card can always be traced back to the signal.
+38. As a researcher, I want motifs grouped into shape families computed across every spike train, so that I can find shapes that recur in places I did not look for them.
+39. As a researcher, I want a spike train to be a library entry in its own right, so that I can later ask which trains resemble each other rather than only which spikes do.
+40. As a researcher, I want to re-run the clustering at a different threshold without re-importing, so that I can tune the number of families after seeing the first attempt.
+41. As a researcher, I want re-clustering to preserve any tag or exemplar I set by hand, so that exploring thresholds does not destroy my judgements.
+42. As a researcher, I want to see which clustering a view is showing, so that two different threshold choices are never confused for one result.
+43. As a researcher, I want the import to be safe to run twice, so that a mistake costs nothing.
+
+**Reading the library**
+
+44. As a researcher, I want the grid grouped by shape family or by spike train at my choice, so that I can ask both "what recurs" and "what did this recording produce".
+45. As a researcher, I want a family that spans several recordings marked as such, so that the cross-recording result is visible rather than something I have to compute.
+46. As a researcher, I want thumbnails drawn in millivolts without amplitude normalisation, so that the scaling evidence survives the surface I look at most.
+47. As a researcher, I want a shared y-scale within a family, so that relative depth between members is real rather than an artifact of per-card autoscaling.
+48. As a researcher, I want to filter by morphology, purity, spike train, recording and channel, so that I can narrow 410 cards to the ones in question.
+49. As a researcher, I want to filter by depth and duration range, so that I can isolate an amplitude regime.
+50. As a researcher, I want to sort a family by distance from its exemplar, so that I can see the cleanest and the most marginal members immediately.
+51. As a researcher, I want to distinguish single-spike entries from spike-train entries, so that the two scales do not intermix in one undifferentiated grid.
+
+**Seeing the whole motif**
+
+52. As a researcher, I want the overlaid-motifs plot to show every sample of every curve by default, so that the depth of a drop — the thing that carries the evidence — is not clipped off the top of the frame.
+53. As a researcher, I want the old bounded view available as an option, so that one deep transient flattening the others is still a view I can reach.
+
+## Implementation Decisions
+
+### Chain shape, revised
+
+The chain remains a **linear spine with named side-inputs** exactly as Part 1 specifies. No fan-out, no merges, no general node graph. What changes is the presentation: a horizontal canvas of fixed-width cards rather than a vertical list of labels. The canvas scrolls horizontally rather than wrapping, because wrapping destroys the left-to-right reading that is the entire reason for the change.
+
+`ChainState` is **not modified**. It already carries steps, ordering, parameters, side-input bindings and its available-blocks query, and its add-step operation already accepts an insertion index — mid-chain insertion is a presentation capability that the model has always had and no surface has ever offered. The canvas is a renderer of the existing model. A ticket that finds itself changing the chain model in order to draw a canvas has misread the seam.
+
+Type compatibility continues to come from the single chain-validation function, consumed at composition and at execution. The `+` picker shows every block with incompatible ones disabled and the reason inline; the reason text is the same text, relocated.
+
+### The Analyse workspace, revised
+
+The workspace holds the same jobs; which surface does which changes.
+
+- **Chain builder** becomes the primary surface and gains the block canvas.
+- **Block inspector ceases to exist.** Its whole content — generated parameter controls, recommended defaults, live derived readouts, side-input pickers, cached-result display — moves onto the block card. It was a third surface editing the same model as two others, which is why none of the three read as authoritative. Its parameter-widget and derived-readout code is already shared with the run panel, so this is relocation, not reimplementation.
+- **Run algorithm** becomes the filmstrip plus focus mode. Its stage and algorithm selectors move onto the card; running one algorithm becomes composing a one-block chain. The staged-span basket and span selector stay, because they are chain-wide rather than per-block.
+- **Compare** gains the two stacked chain canvases and the diff above its existing overlap output.
+- **Run history** stays a sidebar and becomes collapsible.
+
+### Rendering by interchange type
+
+One new function is the single entry point for turning a value into a plot: given an interchange type, a value and the adapter's metadata, return a renderable element. Seven types, seven renderers. `Signal` is a curve; `Encoding` a symbol strip; `Scores` a series against time; `SpanSet` an interval overlay; `WindowSet` a window index; `Grouping` a cluster-size summary; `Model` a text card, because a trained model has no natural plot and pretending otherwise produces a decorative lie.
+
+Every plot-centric surface — filmstrip, focus mode, block card preview — goes through this one function. Nothing renders a value by switching on its type locally. This is the decision that keeps "plot-centric" from degrading into "blank for half the blocks", which is the silently-blank-pane failure mode this codebase has hit twice.
+
+A **second, optional layer** handles per-adapter richness: the adapter spec gains an optional detail-view hook, used by focus mode when present and falling back to the type renderer when absent. This is the established extension pattern on that spec, which already carries optional hooks for plotting, estimation, recommendation, derived readouts and persistence. Only the SAX blocks will declare one initially; every other block shows the type renderer in focus mode, and that is the expected end state for this wave, not a shortfall.
+
+### Filmstrip content and recomputation
+
+What the filmstrip shows is decided **headlessly**, not inside Panel callbacks: a function on the chain model returns the ordered list of what to render — per step, its label, its input and output types, and whether its cached result is current. The surface renders that list. This is what makes the plot-centric feature testable without a browser.
+
+Recomputation is **suffix-only**. The step cache is keyed on a recipe-prefix hash, so editing step N invalidates N and everything after it while leaving everything before it cached. A function derives that suffix from the recipe and the changed index. The naive alternative — re-run the chain — is the difference between instant and hours on any chain containing a matrix profile, so the rule is stated here rather than left to an implementer's judgement.
+
+The suffix runs automatically when its summed estimate is below the interactive budget already defined for run routing, and asks first when it is above. This reuses the existing estimator and routing threshold; it does not introduce a second cost model.
+
+### Run naming
+
+The runs table gains a nullable name column, applied through the existing additive column migration. The name is editable in the history table and displayed anywhere the run id is displayed. A paired surrogate run inherits its parent's name with a surrogate suffix — Part 1 makes surrogate pairing default-on, so every launch produces two runs and naming only one of them would read as a defect.
+
+The name is a label, never an identifier. Nothing keys on it, nothing enforces uniqueness, and the recipe hash remains the identity of a run's content.
+
+### Chain comparison
+
+A function takes two recipes and returns their per-step difference — steps present in one and not the other, and parameters whose values differ. Pure, headless, and placed beside the existing run-set comparison so the Compare surface has one module to talk to rather than two.
+
+### Library entries at two scales
+
+The motif-entry table gains a **scale** column distinguishing an event-scale entry (one spike) from a train-scale entry (a spike train). This is the one schema addition that is not presentational, and it is what makes the stated end-goal reachable: linking trains to each other by symbolic or spectral similarity requires a train to be a row that an edge can attach to. The edge table already carries distance function, threshold and recipe hash, so train-to-train edges under a different distance coexist with event-to-event edges without further schema change.
+
+Grouping has **two independent axes** and they are not conflated:
+
+- **Provenance** is the spike train a motif came from. It is already exact in the seed data and requires no computation.
+- **Shape** is computed across all motifs regardless of origin, by the existing clustering module — Ward linkage on resampled, z-normalised vectors under the scale-invariant distance, with roughness kept as a separate quality filter rather than folded into the distance.
+
+They answer different questions, and the finding is only visible when both exist and can be seen to disagree.
+
+### Library import
+
+A headless importer reads the seed bundle and writes library rows. It reuses the existing drop-motif store reader and clustering module unchanged — verified against the real bundle: 410 events, 410 snippet triples, keys aligned, twelve shape families at a cophenetic correlation of 0.63, eleven of them spanning multiple spike trains.
+
+The importer is **idempotent and re-clusterable**. Members are keyed on their content — recording, start and end sample — and are never duplicated on a second run. Entries and edges for a given distance-function-and-threshold pair are replaced wholesale, so re-clustering at a new threshold regroups without re-ingesting and without destroying manual tags or hand-set exemplars added between runs. Which clustering is being viewed becomes a visible selector on the Library grid, because two threshold choices that look alike and are not is the failure this guards against.
+
+### Rendering rule for motif waveforms
+
+Clustering z-normalises so that "same shape" has a definition. **Figures do not.** Thumbnails and overlays draw detrended millivolts, unnormalised, with a shared y-scale within a family so relative depth is real. This is not a style preference: the project's own submission language is that normalisation of amplitude destroys the evidence of scaling laws for depolarisation events. It is stated here so that no later ticket "improves" the cards by normalising them.
+
+### Overlay y-range
+
+The motif waveform overlay takes a y-range mode: fit-to-data by default, with the previous inter-quartile fence available as an option. *(Already implemented ahead of this wave.)* The fence was correct for the problem it solved — one deep drop rendering every other curve flat — but its consequence is that the transient draws clipped at the frame edge, and for a drop motif the transient is the evidence. Both modes are kept because both are legitimate; only the default changes.
+
+### Seed data custody
+
+The seed bundle is tracked in version control rather than left in ignored derived-data output, because its generator was deleted and it cannot be regenerated. *(Already done ahead of this wave.)* Its two data files were renamed to the store reader's filename contract so the importer needs no filename parameterisation.
+
+## Testing Decisions
+
+**What makes a good test here.** A test asserts externally observable behaviour: what a function returns, what a row contains, what panes a surface constructs. It does not assert that a particular helper was called or that state has a particular internal shape. Panel surfaces are the special case this repository has learned the hard way — a broken dynamic map renders as a *silently blank pane*, not an error, so every surface ticket's acceptance includes a headless construction test asserting the expected panes exist with non-`None` objects. That has been the pattern since the run panel, the motif browser and the ribbon panes, and it is the reason those three exist as separate test modules.
+
+**Seams under test.** Four new headless functions carry the behavioural weight of this wave, and each is a pure function testable with no browser and no database:
+
+- **Value rendering by type** — called directly with a value of each of the seven interchange types; asserts an element of the expected kind comes back and is non-empty. Prior art: the encoding-panel and overlay-density tests.
+- **Filmstrip plan** — called on a chain model; asserts the ordered per-step render list, its types, and its cache states. Prior art: the chain-state tests.
+- **Suffix recomputation** — called with a recipe and a changed step index; asserts exactly the suffix is returned and the prefix is not. Prior art: the step-cache tests.
+- **Recipe diff** — called with two recipes; asserts added, removed and changed-parameter records. Prior art: the compare tests.
+
+**Existing seams reused rather than added to.** The chain model, the chain-validation function, the motif entry/member/edge writers, the additive column migration, the drop-motif store reader and the clustering module are all consumed unchanged. No new UI seam is introduced: every surface already exposes a layout method and is verified by headless construction.
+
+**Schema tests.** Both new columns are verified the way the existing additive migrations are — initialise a database twice and assert the column exists once, that a database created before the migration gains it, and that the migration is a no-op when already current.
+
+**Importer tests.** Run the importer against a small fixture bundle; assert member count, that provenance survives onto each row, that a second run creates no duplicates, and that re-clustering at a different threshold replaces edges while preserving a manually applied tag. Prior art: the manifest-import tests, which cover the same shape of problem — read an external bundle, reconstruct rows, do not duplicate.
+
+**What is not tested automatically.** Whether the canvas *reads* as a pipeline, whether the filmstrip is legible, and whether the collapsed sidebar is discoverable are human judgements. Every ticket touching those carries the human-verify flag, exactly as the Part 1 Panel-surface tickets did.
+
+## Out of Scope
+
+- **SAX grouping of individual spikes.** A hundred-sample spike has no obvious alphabet size or word length, and choosing them badly produces groups that look meaningful and are not. It gets its own ticket after the shape families have been looked at, informed by them.
+- **Linking spike trains to each other.** The scale column makes it possible; computing train-to-train edges by spectral or symbolic distance is later work.
+- **A general node canvas.** The chain is a linear spine. Part 1's reasoning stands: fan-out is a scope concern and chain comparison is the Compare view's job.
+- **Recovering the deleted motif generator.** The bundle is preserved and its provenance recorded; reconstructing the pipeline that made it is separate work with no bearing on this wave.
+- **Regenerating the seed figures.** The rendered plots remain where they are; nothing in this wave reads them.
+- **Any change to the type system, the adapter contract, execution semantics, the surrogate protocol, or the detection/annotation separation.** This wave is presentation plus two nullable columns.
+- **The held-out recording.** Still locked, still unlocked only by the freeze-day ticket.
+
+## Further Notes
+
+### Build order
+
+The library importer goes **first**, ahead of the chain-builder work, despite the chain builder being the higher-value change. It is small, it depends on nothing else in this wave, and until it runs the Library grid has no content — which means every downstream library ticket has nothing to be verified against. A grid ticket whose acceptance is checked against an empty grid has not been checked.
+
+After that: value rendering by type, then the canvas, then the filmstrip and focus mode, then naming and compare, then the library grid work, then the sidebar accordion.
+
+### Guidance for ticket breakdown
+
+**Prefer many small tickets to few large ones.** A ticket sized to one red-green-refactor cycle with a single testable acceptance criterion is implemented correctly far more often than one carrying four. The filmstrip work in particular should not be one ticket: the headless plan function, the filmstrip rendering, the focus-mode detail hook, and the removal of the block inspector are four separate cycles with four separate acceptance criteria.
+
+**Value rendering by type blocks everything plot-centric.** It is the prerequisite for the canvas cards, the filmstrip and focus mode. It should land before any of them and should not be merged into any of them.
+
+**Module ownership stays exclusive**, as in Part 1. The chain model, the plotting module and the database layer will each be wanted by more than one ticket in this wave; those pairs are mutexes.
+
+**Model routing.** The canvas, the filmstrip and the library grid are linked-view Panel work and need both a stronger model and human eyes, for the reason Part 1 gives. The importer, the two schema columns, the recipe diff and the suffix function are headless, pass or fail on a test, and are suitable for unattended runs.
+
+### Cut list
+
+Decided now rather than under pressure. In order: **drop the sidebar accordion** and leave the sidebar as it is; **drop focus mode** and ship the filmstrip alone; **drop the chain diff highlighting** and ship the two canvases unstyled with the summary line. Cutting should mean not starting a ticket, never unpicking one.
+
+**Never cut:** the library import, and value rendering by type. The first is the only thing standing between the stated deliverable and an empty table. The second is what stops the plot-centric surfaces being blank.
+
+### Decision log
+
+| Decision | Rationale |
+|---|---|
+| Horizontal block canvas, linear spine unchanged | The chain was always a spine; only its drawing was wrong. A canvas that draws a spine costs a renderer, not a model |
+| The chain model is untouched | It already supports insertion, reordering and compatibility; the missing capability was presentational |
+| Block inspector absorbed into the card and deleted | Three surfaces editing one model is why none of them read as authoritative |
+| Single-algorithm run becomes a one-block chain | Two ways to do one thing is the ambiguity being removed; keeping both would preserve it |
+| One render-by-type function, seven renderers | Local type switches are how half a filmstrip ends up blank |
+| Optional per-adapter detail hook rather than a richer type renderer | Encoding internals are per-adapter knowledge; the spec already carries five optional hooks |
+| Filmstrip content decided headlessly | A surface whose content is decided in Panel callbacks is only testable by eye, and blank panes do not raise |
+| Suffix-only recomputation | On a chain containing a matrix profile this is the difference between instant and hours |
+| Reuse the existing estimate and routing threshold | A second cost model would drift from the first |
+| Run name is a label, never an identifier | Nothing keys on it; recipe hash remains identity |
+| Surrogate inherits its parent's name | Pairing is default-on, so anonymous partners would look like a defect |
+| A scale column rather than inferring scale from duration | Linking trains needs a row for an edge to attach to; inference gives no such row |
+| Provenance and shape kept as separate grouping axes | They answer different questions, and the finding is that they disagree |
+| Importer idempotent, entries and edges replaced per threshold | Threshold tuning is expected; destroying manual tags on every attempt is not |
+| Figures unnormalised in millivolts | Amplitude normalisation destroys the scaling-law evidence the thesis claims |
+| Overlay y-range defaults to fit-to-data | The transient is the evidence; the fence clipped exactly it |
+| Seed bundle tracked in version control | Its generator was deleted and it cannot be regenerated |
+| Library import scheduled before the chain builder | An empty grid cannot verify a grid ticket |

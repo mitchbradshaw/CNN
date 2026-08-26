@@ -10,8 +10,8 @@ spans across 7 channels of two recordings. It is the seed data for the motif lib
 
 | File | What it holds |
 |---|---|
-| `motifs/motifs.csv` | One row per motif — 36 columns: identity, provenance, morphology, geometry, QC |
-| `motifs/motifs.npz` | Three arrays per motif, keyed `<event_id>__raw_mv`, `__detrended_mv`, `__t_s` |
+| `motifs/events.csv` | One row per motif — 36 columns: identity, provenance, morphology, geometry, QC |
+| `motifs/snippets.npz` | Three arrays per motif, keyed `<event_id>__raw_mv`, `__detrended_mv`, `__t_s` |
 | `motifs/manifest.json` | `kind: drop_motifs5`, counts, and the per-span breakdown |
 | `AUTODERIVE_REPORT.md` | How every detector parameter was derived from the signal, graded per span |
 | `autoderive_summary.json` | The machine-readable form of that report |
@@ -56,3 +56,10 @@ Cluster on z-normalised vectors; **draw in millivolts, unnormalised**. `cluster.
 reason and it is the project's own submission language: "normalisation of amplitude destroys the
 evidence of scaling laws for depolarisation events". The maths normalises so that "same shape" has
 a definition; the figure must not, so that the scaling stays visible.
+
+## Filenames
+
+`motifs.csv` / `motifs.npz` as generated were renamed to `events.csv` / `snippets.npz` on 2026-08-27
+so that `Working.Detection.drop_motifs.store.load_run` reads this bundle with no code change — its
+`EVENTS_FILENAME` / `SNIPPETS_FILENAME` contract. Nothing else was touched. Verified: 410 events,
+410 snippet triples, `event_id` keys align, and `cluster.cluster_events` clusters the pooled set.

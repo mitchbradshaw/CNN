@@ -12,6 +12,13 @@ underneath it. It is thesis instrumentation on a hard deadline: **feature freeze
 The work in progress is the Pipeline GUI, specified in `docs/PIPELINE_PRD.md` — the authority on what
 is being built and why. Read the section relevant to your ticket; do not read the whole thing.
 
+That file now holds **two parts**. Part 1 specifies the pipeline itself (tickets T01–T49, all merged
+bar T49). **Part 2 — The Usability Wave** specifies the Analyse/Library rework (T50+) and supersedes
+Part 1 wherever a Part 1 passage carries a `[SUPERSEDED by Part 2]` marker. If your ticket is T50 or
+above, read Part 2's section for your ticket **and** any Part 1 passage it points you at — and treat
+an unmarked Part 1 passage as still authoritative. The trap this is guarding against is real: Part 1
+describes the chain builder as a vertical staged list, which is exactly what Part 2 replaces.
+
 ## Layout
 
 | Path | What lives there |
@@ -23,6 +30,7 @@ is being built and why. Read the section relevant to your ticket; do not read th
 | `tests/` | pytest, headless. 486 tests, ~4 min wall-clock |
 | `docs/` | PRD, coding standards, ticket backlog |
 | `DATA/`, `MODELS/`, `MATRICES/`, `Plots/` | Gitignored. Provisioned into your worktree, not committed |
+| `DATA/library_seed/` | The **exception**: tracked on purpose. Irreplaceable inputs to the library importer — its generator was deleted. See its `PROVENANCE.md` |
 
 ## The rules that are not negotiable
 
