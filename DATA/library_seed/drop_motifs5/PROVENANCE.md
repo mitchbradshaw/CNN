@@ -19,13 +19,19 @@ spans across 7 channels of two recordings. It is the seed data for the motif lib
 
 ## Why it is tracked when the rest of `DATA/` is not
 
-The code that produced it is **gone**. `AUTODERIVE_REPORT.md` names its generator as
-`Pipelines/drop_motifs/run_drop5_report.py`; that file and its 5-series modules (`report5.py`,
-`clusterfigs5.py`, `spans5.py`, `overlays5.py`, `figures5.py`, `figuresets5.py`) were never
-committed to git. Commit `5b7f1fa` ("T48: remove bespoke importers and superseded motif path")
-deleted the directory, taking the uncommitted files with it. Only compiled bytecode survives, in
-`Pipelines/drop_motifs/__pycache__/*.pyc` — decompilable in principle, and the only remaining
-record of the derivation.
+The code that produced it is **not on `main`**. `AUTODERIVE_REPORT.md` names its generator as
+`Pipelines/drop_motifs/run_drop5_report.py`, and commit `5b7f1fa` ("T48: remove bespoke importers
+and superseded motif path") deleted the directory holding it and its 5-series modules
+(`report5.py`, `clusterfigs5.py`, `spans5.py`, `overlays5.py`, `figures5.py`, `figuresets5.py`).
+
+**They survive on the unmerged branch `feat/drop-motifs-five-stage`** (tip `10cfc96`, six commits
+ahead of the merge base `3716c3f`), which T48's cleanup never touched. Recover with:
+
+    git show feat/drop-motifs-five-stage:Pipelines/drop_motifs/run_drop5_report.py
+
+Do not assume that branch stays around. It is unmerged, unpushed and one `git branch -D` from
+being the second copy that also disappears — which is the reason this bundle is tracked on `main`
+rather than left where it was generated.
 
 The bundle previously lived at `Plots/drop_motifs5/motifs/`, under the blanket `Plots/*` ignore
 rule whose stated rationale is "large binaries / regenerable". Neither half of that applies here,

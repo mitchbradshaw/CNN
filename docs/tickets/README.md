@@ -1,7 +1,12 @@
 # Ticket backlog — index
 
-49 tickets. This file is generated from the ticket front-matter; the ticket files are the source of
-truth. See `docs/ORCHESTRATOR_SPEC.md` for how the scheduler consumes these fields.
+70 tickets in two waves. This file is generated from the ticket front-matter; the ticket files are
+the source of truth. See `docs/ORCHESTRATOR_SPEC.md` for how the scheduler consumes these fields.
+
+- **T01–T49 — the pipeline.** Specified by `docs/PIPELINE_PRD.md` Part 1. All merged and flagged
+  `done` except T49, which is a `human-gate`. The tables below describe this wave.
+- **T50–T70 — the usability wave.** Specified by Part 2. None started. See
+  [Part 2 — the usability wave](#part-2--the-usability-wave-t50t70) at the foot of this file.
 
 **Notation.** Model `[O]`pus / `[S]`onnet. Size `[S]`mall / `[M]`edium / `[L]`arge.
 
@@ -169,3 +174,78 @@ and the UI half of **41** (run cross-channel as a script; 41's core is deliberat
 | [47](T47-templates-save-apply-carry-and-rebind.md) | Templates: save, apply, carry and rebind | O | M | 6 | 0 | 14, 30 |  |
 | [48](T48-end-to-end-test-and-repository-cleanup.md) | End-to-end test and repository cleanup | S | M | 11 | 1 | 23, 27, 36, 44, 45 |  |
 | [49](T49-unlock-the-held-out-recording-and-run-the-pipeline-on-it.md) | Unlock the held-out recording and run the pipeline on it | O | S | 12 | 0 | 03, 48 | `human-gate` |
+
+---
+
+## Part 2 — the usability wave (T50–T70)
+
+Specified by `docs/PIPELINE_PRD.md` **Part 2**. Twenty-one tickets, none started.
+Deliberately small: a ticket sized to one red-green-refactor cycle with a single
+testable acceptance criterion is implemented correctly far more often than one
+carrying four.
+
+| Ticket | Title | M | Sz | Blocked by | Level |
+|---|---|:-:|:-:|---|:-:|
+| `T50` | Import the drop motifs as library members with shape families | S | M | — | 0 |
+| `T51` | Make the library import idempotent and re-clusterable | S | S | 50 | 1 |
+| `T52` | Spike trains as train-scale library entries | S | M | 50 | 1 |
+| `T53` | Library thumbnails in millivolts with a shared family y-scale | S | S | 50 | 1 |
+| `T54` | Group the library grid by provenance or by shape | O | M | 52, 53 | 2 |
+| `T55` | Filter and distance-sort the library grid | S | M | 54 | 3 |
+| `T56` | Render a value of any interchange type | S | M | — | 0 |
+| `T57` | Draw the chain as a horizontal block canvas | O | L | — | 0 |
+| `T58` | Insert a block mid-chain from a + picker | S | M | 57 | 1 |
+| `T59` | Edit a block's parameters on its card | S | L | 57 | 1 |
+| `T60` | Delete the Block inspector surface | S | S | 59 | 2 |
+| `T61` | Headless filmstrip plan for a chain | S | M | — | 0 |
+| `T62` | Plot every step of the chain as a filmstrip | O | L | 56, 61 | 1 |
+| `T63` | Headless suffix recomputation from a changed step | S | S | — | 0 |
+| `T64` | Re-run only the suffix when a parameter changes | S | M | 62, 63 | 2 |
+| `T65` | Focus one block, with a per-adapter detail view | O | M | 62 | 2 |
+| `T66` | Run a single algorithm as a one-block chain | O | M | 59, 62 | 2 |
+| `T67` | Name a run | S | M | — | 0 |
+| `T68` | Headless recipe diff | S | S | — | 0 |
+| `T69` | Compare two chains as canvases with the difference highlighted | O | M | 57, 67, 68 | 1 |
+| `T70` | Collapse the run-history sidebar to a ribbon | S | M | 57 | 1 |
+
+### Dependency levels
+
+Depth 4. Seven tickets can start immediately.
+
+| Level | Width | Tickets |
+|---|---|---|
+| 0 | 7 | 50, 56, 57, 61, 63, 67, 68 |
+| 1 | 8 | 51, 52, 53, 58, 59, 62, 69, 70 |
+| 2 | 5 | 54, 60, 64, 65, 66 |
+| 3 | 1 | 55 |
+
+### Mutexes
+
+Six live pairs — none is already ordered by a blocking edge, so all six must be
+enforced as mutual exclusions. Ordering is free; simultaneity is not.
+
+| Pair | Why |
+|---|---|
+| `51 ↔ 52` | both own the importer package |
+| `52 ↔ 67` | both add a column to `Working/database/schema.py` |
+| `58 ↔ 59` | both own `UI/workspaces/analyse/builder.py` |
+| `64 ↔ 65` | both build on the filmstrip surface |
+| `64 ↔ 66` | both build on the filmstrip surface |
+| `65 ↔ 66` | both build on the filmstrip surface |
+
+### Flags and routing
+
+- `human-verify` — 53, 54, 55, 57, 58, 59, 62, 64, 65, 66, 69, 70. Every Panel surface. A broken
+  dynamic map renders as a silently blank pane, not an error.
+- Top tier (`opus`) — 54, 57, 62, 65, 66, 69. Linked-view Panel work.
+  The rest are headless or pass/fail on a test and suit an unattended run.
+- No `human-gate` and no `solo` ticket in this wave.
+
+### Cut list
+
+Decided in advance rather than under pressure. In order: **T70** (sidebar accordion),
+**T65** (focus mode), **T69**'s diff highlighting, then **T66** (retiring the
+single-algorithm path). Cutting means not starting a ticket, never unpicking one.
+
+**Never cut:** **T50** (the library is empty without it) and **T56** (without it,
+half of every plot-centric surface is blank).

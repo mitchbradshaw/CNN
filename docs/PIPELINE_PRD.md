@@ -554,7 +554,7 @@ The seed bundle is tracked in version control rather than left in ignored derive
 - **SAX grouping of individual spikes.** A hundred-sample spike has no obvious alphabet size or word length, and choosing them badly produces groups that look meaningful and are not. It gets its own ticket after the shape families have been looked at, informed by them.
 - **Linking spike trains to each other.** The scale column makes it possible; computing train-to-train edges by spectral or symbolic distance is later work.
 - **A general node canvas.** The chain is a linear spine. Part 1's reasoning stands: fan-out is a scope concern and chain comparison is the Compare view's job.
-- **Recovering the deleted motif generator.** The bundle is preserved and its provenance recorded; reconstructing the pipeline that made it is separate work with no bearing on this wave.
+- **Recovering the drop-motif generator.** Its sources survive on the unmerged branch `feat/drop-motifs-five-stage`; merging or re-homing them is separate work with no bearing on this wave, which consumes the bundle rather than regenerating it.
 - **Regenerating the seed figures.** The rendered plots remain where they are; nothing in this wave reads them.
 - **Any change to the type system, the adapter contract, execution semantics, the surrogate protocol, or the detection/annotation separation.** This wave is presentation plus two nullable columns.
 - **The held-out recording.** Still locked, still unlocked only by the freeze-day ticket.
@@ -603,5 +603,5 @@ Decided now rather than under pressure. In order: **drop the sidebar accordion**
 | Importer idempotent, entries and edges replaced per threshold | Threshold tuning is expected; destroying manual tags on every attempt is not |
 | Figures unnormalised in millivolts | Amplitude normalisation destroys the scaling-law evidence the thesis claims |
 | Overlay y-range defaults to fit-to-data | The transient is the evidence; the fence clipped exactly it |
-| Seed bundle tracked in version control | Its generator was deleted and it cannot be regenerated |
+| Seed bundle tracked in version control | It was deleted from `main` and survives only on an unmerged branch; the wave should not depend on that branch outliving it |
 | Library import scheduled before the chain builder | An empty grid cannot verify a grid ticket |
