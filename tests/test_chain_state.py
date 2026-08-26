@@ -14,7 +14,9 @@ Run from the project root:
 
 import inspect
 import os
+import shutil
 import sys
+import tempfile
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
@@ -25,6 +27,9 @@ if PROJECT_ROOT not in sys.path:
 
 from Adapters.registry import discover_adapters
 from UI.analyse.chain_state import ChainState, ChainStateError
+from Working.database.runs import insert_step_artifact
+from Working.database.schema import init_db
+from Working.recipes import recipe_hash
 
 ROOT_SIGNAL_KIND = "signal"
 
@@ -244,6 +249,80 @@ def test_reorder_rebinds_earlier_step_index_references():
     assert [s["algorithm"] for s in chain.steps] == ["bandpass", "lowpass", "rupture"]
     binding = chain.steps[2]["side_inputs"]["exemplar"]
     assert binding["step_index"] == 0  # still points at bandpass
+
+
+# ── filmstrip plan (ticket 61) ───────────────────────────────────────────────
+
+def _prefix_hash(recipe, step_index):
+    """The step-cache key under test — the recipe prefix through `step_index`,
+    exactly as `Working.execution._recipe_prefix_hash` derives it."""
+    prefix = dict(recipe)
+    prefix["steps"] = recipe["steps"][:step_index + 1]
+    return recipe_hash(prefix)
+
+
+def _fresh_db():
+    """A throwaway sqlite database (fresh schema) plus its temp dir."""
+    tmpdir = tempfile.mkdtemp(prefix="t61_")
+    db_path = os.path.join(tmpdir, "test.sqlite")
+    conn = init_db(db_path)
+    return conn, tmpdir
+
+
+def test_filmstrip_plan_empty_chain_returns_empty_list():
+    chain = ChainState(recording_id=1)
+    conn, tmpdir = _fresh_db()
+    try:
+        assert chain.filmstrip_plan(conn) == []
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_filmstrip_plan_returns_ordered_entries_with_labels_and_types():
+    chain = ChainState(recording_id=1, span=(0, 100))
+    chain.add_step("preprocessing", "lowpass")
+    chain.add_step("detection", "rupture")
+    conn, tmpdir = _fresh_db()
+    try:
+        plan = chain.filmstrip_plan(conn)
+        # Execution order: lowpass then rupture.
+        assert [e["position"] for e in plan] == [0, 1]
+        assert [e["label"] for e in plan] == [
+            "Lowpass filter (Butterworth)",
+            "Change-point detection (ruptures / Pelt)",
+        ]
+        # First step is fed by the root signal; lowpass stays a signal.
+        assert plan[0]["input_type"] == "signal"
+        assert plan[0]["output_type"] == "signal"
+        # Second step is fed by lowpass's signal output and produces spans.
+        assert plan[1]["input_type"] == "signal"
+        assert plan[1]["output_type"] == "spanset"
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_filmstrip_plan_reports_cached_step_current_and_uncached_stale():
+    chain = ChainState(recording_id=1, span=(0, 100))
+    chain.add_step("preprocessing", "lowpass")
+    chain.add_step("detection", "rupture")
+    conn, tmpdir = _fresh_db()
+    try:
+        # Cache step 0's artifact under its recipe-prefix hash, as the
+        # executor would. Step 1 has no artifact.
+        recipe = chain.to_recipe()
+        step0_hash = _prefix_hash(recipe, 0)
+        cache_dir = os.path.join(tmpdir, "cache", step0_hash, "0")
+        os.makedirs(cache_dir)
+        insert_step_artifact(conn, step0_hash, 0, cache_dir)
+
+        plan = chain.filmstrip_plan(conn)
+        assert plan[0]["cache_state"] == "current"
+        assert plan[1]["cache_state"] == "stale"
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
