@@ -1,11 +1,13 @@
 """
 test_chain_builder.py
 =======================
-Ticket 29 — the chain builder surface (`UI.workspaces.analyse.builder.
+Ticket 29 / 57 — the chain builder surface (`UI.workspaces.analyse.builder.
 ChainBuilder`). It renders `UI.analyse.chain_state.ChainState` (ticket 28)
-as an ordered staged list: add a step, reorder, delete, each revalidating
-immediately through `Working.chain_validation` (ticket 13). It does not
-compute compatibility itself, and it does not invent a second chain model.
+as a horizontally scrolling block canvas in execution order: each card shows
+its algorithm and its input/output types, with controls to reorder and delete,
+and each edit revalidates immediately through `Working.chain_validation`
+(ticket 13). It does not compute compatibility itself, and it does not invent
+a second chain model.
 
 Most of the behaviour below is exercised against a lightweight fake app --
 `ChainBuilder` only ever reads `app._recording_id` off it, nothing else, so
@@ -114,6 +116,28 @@ def _add_row(builder, adapter_name):
     raise AssertionError(f"no add-row for {adapter_name!r}")
 
 
+def _texts(pane):
+    """Every Markdown string inside a pane, recursively."""
+    if isinstance(pane, pn.pane.Markdown):
+        return [str(pane.object)]
+    texts = []
+    for obj in getattr(pane, "objects", ()):
+        texts.extend(_texts(obj))
+    return texts
+
+
+def _card_text(card):
+    return " ".join(_texts(card))
+
+
+def _card_buttons(card):
+    """The (up, down, delete) button row rendered on a card."""
+    for obj in card.objects:
+        if isinstance(obj, pn.Row):
+            return obj.objects
+    raise AssertionError("card has no button row")
+
+
 # ── construction: a blank chain, every block listed ─────────────────────────
 
 def test_construction_builds_a_non_none_layout_listing_every_block():
@@ -122,13 +146,17 @@ def test_construction_builds_a_non_none_layout_listing_every_block():
     builder = ChainBuilder(_FakeApp())
     layout = builder.layout()
     assert layout is not None
-    assert builder.steps_column is not None
+    assert builder.steps_row is not None
     assert builder.add_column is not None
+    assert isinstance(builder.steps_row, pn.Row)
+    assert builder.steps_row.scroll is True, \
+        "the block canvas must scroll horizontally rather than wrap"
     assert len(builder.add_column.objects) == len(list_adapters()), (
         "every registered block must be listed, incompatible or not"
     )
     # An empty chain says so rather than rendering nothing.
-    assert len(builder.steps_column.objects) >= 1
+    assert len(builder.steps_row.objects) >= 1
+    assert builder.cards == []
 
 
 def test_a_fresh_chain_has_no_incompatible_blocks():
@@ -179,7 +207,10 @@ def test_add_step_appends_to_the_staged_list_and_stays_valid():
 
     assert [s["algorithm"] for s in builder.chain.steps] == ["lowpass"]
     assert builder.chain.is_valid is True
-    assert len(builder.steps_column.objects) == 1
+    assert len(builder.cards) == 1
+    assert len(builder.steps_row.objects) == 1
+    assert "lowpass" in _card_text(builder.cards[0])
+    assert "signal" in _card_text(builder.cards[0])
     assert "invalid" not in builder.status.object.lower()
 
 
@@ -191,8 +222,12 @@ def test_add_step_that_breaks_compatibility_is_reflected_in_status():
     builder._add_step(get_adapter("preprocessing.lowpass"))   # wants signal
 
     assert builder.chain.is_valid is False
-    assert "encoding" in builder.status.object
-    assert "signal" in builder.status.object
+    status = builder.status.object
+    assert "encoding" in status
+    assert "signal" in status
+    assert "step 1" in status
+    assert "step 2" in status
+    assert "between" in status
 
 
 # ── the add-step control: incompatible blocks disabled, reason inline ──────
@@ -238,7 +273,10 @@ def test_move_step_reorders_and_revalidates_immediately():
     assert [s["algorithm"] for s in builder.chain.steps] == ["rupture", "lowpass"]
     assert builder.chain.is_valid is False
     assert "spanset" in builder.status.object
-    assert len(builder.steps_column.objects) == 2
+    assert len(builder.cards) == 2
+    assert len(builder.connectors) == 1
+    assert "rupture" in _card_text(builder.cards[0])
+    assert "lowpass" in _card_text(builder.cards[1])
 
 
 def test_move_step_at_the_top_is_a_no_op():
@@ -266,7 +304,8 @@ def test_delete_step_removes_it_and_can_repair_an_invalid_chain():
 
     assert [s["algorithm"] for s in builder.chain.steps] == ["gramian_gasf"]
     assert builder.chain.is_valid is True
-    assert len(builder.steps_column.objects) == 1
+    assert len(builder.cards) == 1
+    assert "gramian_gasf" in _card_text(builder.cards[0])
     assert "invalid" not in builder.status.object.lower()
 
 
@@ -278,8 +317,60 @@ def test_delete_the_last_step_shows_the_empty_state_again():
     builder._delete_step(0)
 
     assert builder.chain.steps == []
+    assert builder.cards == []
     # Same "says so rather than rendering nothing" placeholder as construction.
-    assert len(builder.steps_column.objects) >= 1
+    assert len(builder.steps_row.objects) >= 1
+
+
+# ── the block canvas: horizontal, ordered, scrollable, non-wrapping ─────
+
+def test_canvas_is_a_horizontal_scrolling_row_with_connectors_between_cards():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+    builder._add_step(get_adapter("detection.rupture"))
+
+    assert isinstance(builder.steps_row, pn.Row)
+    assert builder.steps_row.scroll is True, \
+        "the row must scroll horizontally, not wrap to a second row"
+    assert builder.steps_row.sizing_mode == "stretch_width"
+
+    assert len(builder.cards) == 2
+    assert len(builder.connectors) == 1
+
+    # Execution order left to right: card, connector, card.
+    objects = builder.steps_row.objects
+    assert len(objects) == 3
+    assert objects[0] is builder.cards[0]
+    assert objects[1] is builder.connectors[0]
+    assert objects[2] is builder.cards[1]
+
+    first = _card_text(builder.cards[0])
+    second = _card_text(builder.cards[1])
+    assert "lowpass" in first
+    assert "signal" in first
+    assert "rupture" in second
+    assert "spanset" in second
+
+
+def test_card_controls_reorder_and_delete_the_model():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+    builder._add_step(get_adapter("detection.rupture"))
+
+    up = _card_buttons(builder.cards[1])[0]
+    assert up.disabled is False
+    up.clicks = up.clicks + 1
+    assert [s["algorithm"] for s in builder.chain.steps] == ["rupture", "lowpass"]
+    assert "rupture" in _card_text(builder.cards[0])
+
+    delete = _card_buttons(builder.cards[0])[2]
+    delete.clicks = delete.clicks + 1
+    assert [s["algorithm"] for s in builder.chain.steps] == ["lowpass"]
+    assert len(builder.cards) == 1
 
 
 # ── mounting: reaches the Analyse workspace, survives a registry reset ─────
