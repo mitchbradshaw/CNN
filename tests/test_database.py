@@ -292,6 +292,61 @@ def test_motif_member_accepts_different_recording_and_channel():
     assert row["end_idx"] == 150
 
 
+# ── T52: motif_entry scale column (event-scale vs train-scale) ───────────────
+
+def test_motif_entry_has_scale_column():
+    conn = _fresh_conn()
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+    assert "scale" in cols
+
+
+def test_motif_entry_scale_column_is_nullable():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx) VALUES (?, ?, ?)",
+        (rid, 0, 100),
+    )
+    conn.commit()
+    row = conn.execute("SELECT scale FROM motif_entry LIMIT 1").fetchone()
+    assert row["scale"] is None
+
+
+def test_motif_entry_scale_column_accepts_event_and_train():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx, scale) "
+        "VALUES (?, ?, ?, ?)",
+        (rid, 0, 100, sch.ENTRY_SCALE_EVENT),
+    )
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx, scale) "
+        "VALUES (?, ?, ?, ?)",
+        (rid, 200, 300, sch.ENTRY_SCALE_TRAIN),
+    )
+    conn.commit()
+    scales = {r["scale"] for r in conn.execute("SELECT scale FROM motif_entry")}
+    assert scales == {"event", "train"}
+    assert sch.ENTRY_SCALE_EVENT == "event"
+    assert sch.ENTRY_SCALE_TRAIN == "train"
+
+
+def test_init_db_adds_scale_column_once():
+    path = _temp_db_path()
+    try:
+        conn = init_db(path)
+        cols1 = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+        conn.close()
+        conn = init_db(path)
+        cols2 = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+        conn.close()
+        assert cols1 == cols2
+        assert "scale" in cols2
+    finally:
+        _cleanup(path)
+
+
 def test_init_db_idempotent_preserves_all_row_counts():
     # Unlike the presence check above, this hits a real on-disk db twice —
     # ":memory:" makes a fresh anonymous database per connection, which
@@ -367,6 +422,27 @@ _LEGACY_INDEXES = [
     "CREATE INDEX idx_annotations_recording ON annotations(recording_id)",
     "CREATE INDEX idx_annotations_verdict   ON annotations(verdict)",
 ]
+
+# The `motif_entry` table as it stands before ticket 52: the shape-first
+# library table with its legacy presentation columns but no `scale` column.
+# Reproduced so the additive migration can be verified against a database
+# that predates the change.
+_LEGACY_MOTIF_ENTRY_DDL = """
+CREATE TABLE motif_entry (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL,
+    detection_id  INTEGER REFERENCES detections(id),
+    label         TEXT,
+    rating        INTEGER,
+    notes         TEXT,
+    tags          TEXT,
+    sax_string    TEXT,
+    created_at    TEXT,
+    UNIQUE (recording_id, start_idx, end_idx)
+);
+"""
 
 
 def _make_legacy_db(path):
@@ -620,6 +696,41 @@ def test_verdict_rebuild_is_idempotent():
         # A second rebuild would be harmless but wrong: it would re-copy 11k
         # rows and drop a fresh backup on every startup forever.
         assert _backups_for(path) == backups_once
+    finally:
+        _cleanup(path)
+
+
+def test_legacy_motif_entry_gains_scale_column():
+    # A database created before T52 has a `motif_entry` without `scale`;
+    # `init_db()` must add the column when it next runs.
+    path = _temp_db_path()
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_LEGACY_MOTIF_ENTRY_DDL)
+        conn.executescript(sch._SCHEMA)
+        conn.commit()
+        conn.close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_before = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
+        assert "scale" not in cols_before
+
+        init_db(path).close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_after = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
+        assert "scale" in cols_after
     finally:
         _cleanup(path)
 

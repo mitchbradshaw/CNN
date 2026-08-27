@@ -12,8 +12,10 @@ exist and are imported, not reimplemented:
 
 This ticket adds the step that turns a clustering into library rows:
 
-    motif_entry   one row per shape family; the exemplar is the member
-                  closest to the family's mean waveform.
+    motif_entry   one event-scale row per shape family (the exemplar is the
+                  member closest to the family's mean waveform) and, since
+                  ticket 52, one train-scale row per spike train (`span_key`)
+                  in the bundle.
     motif_member  one row per imported motif, keyed on content
                   (recording, start, end) and never duplicated.
     motif_edge    the within-family distances, carrying the distance
@@ -117,7 +119,7 @@ def test_import_populates_library_from_seed_bundle():
         assert result["n_edges"] == result["n_members"] - result["n_entries"]
 
         entries = R.list_motif_entries(conn)
-        assert len(entries) == result["n_entries"]
+        assert len(entries) == result["n_entries"] + result["n_train_entries"]
         for entry in entries:
             assert R.list_motif_members(conn, entry["id"]), entry["id"]
     finally:
@@ -167,7 +169,7 @@ def test_import_with_threshold_only_clusters_by_that_height():
 def test_every_member_resolves_to_a_seed_event():
     conn = init_db(":memory:")
     try:
-        import_drop_motifs(conn, BUNDLE_DIR)
+        result = import_drop_motifs(conn, BUNDLE_DIR)
         seed = _seed_content_set()
         assert len(seed) == SEED_N_MOTIFS
 
@@ -176,7 +178,8 @@ def test_every_member_resolves_to_a_seed_event():
                FROM motif_member m
                JOIN recordings rec ON rec.id = m.recording_id"""
         ).fetchall()
-        assert len(members) == SEED_N_MOTIFS
+        # Event-scale members plus train-scale members; both resolve to seed.
+        assert len(members) == SEED_N_MOTIFS + result["n_train_members"]
         for m in members:
             key = (m["source_file"], m["channel"], m["start_idx"], m["end_idx"])
             assert key in seed, key
@@ -195,11 +198,18 @@ def test_import_is_idempotent():
         assert r2["n_members"] == r1["n_members"] == SEED_N_MOTIFS
         assert r2["n_entries"] == r1["n_entries"]
         assert r2["n_edges"] == r1["n_edges"]
+        assert r2["n_train_entries"] == r1["n_train_entries"]
+        assert r2["n_train_members"] == r1["n_train_members"]
 
         member_count = conn.execute(
             "SELECT COUNT(*) FROM motif_member"
         ).fetchone()[0]
-        assert member_count == SEED_N_MOTIFS
+        assert member_count == SEED_N_MOTIFS + r1["n_train_members"]
+
+        train_entry_count = conn.execute(
+            "SELECT COUNT(*) FROM motif_entry WHERE scale = 'train'"
+        ).fetchone()[0]
+        assert train_entry_count == r1["n_train_entries"]
 
         edge_count = conn.execute(
             "SELECT COUNT(*) FROM motif_edge"
@@ -225,9 +235,105 @@ def test_cli_runs_headlessly_against_seed_bundle_and_exits_zero():
             member_count = conn.execute(
                 "SELECT COUNT(*) FROM motif_member"
             ).fetchone()[0]
-            assert member_count == SEED_N_MOTIFS
+            # Event-scale members + train-scale members (every event belongs
+            # to exactly one train).
+            assert member_count == SEED_N_MOTIFS * 2
         finally:
             conn.close()
+
+
+# ── T52: train-scale entries, one per spike train ──────────────────────────
+
+def test_importer_writes_one_train_scale_entry_per_spike_train():
+    conn = init_db(":memory:")
+    try:
+        result = import_drop_motifs(conn, BUNDLE_DIR)
+        n_trains = len({e["span_key"] for e in store.load_events(BUNDLE_DIR)})
+        assert n_trains == 16
+        assert result["n_train_entries"] == n_trains
+
+        rows = conn.execute(
+            "SELECT * FROM motif_entry WHERE scale = 'train'"
+        ).fetchall()
+        assert len(rows) == n_trains
+    finally:
+        conn.close()
+
+
+def test_train_scale_entry_members_are_that_trains_motifs():
+    conn = init_db(":memory:")
+    try:
+        result = import_drop_motifs(conn, BUNDLE_DIR)
+        events = store.load_events(BUNDLE_DIR)
+
+        # expected[span_key] = {(source_file, channel, start, end)}
+        expected = {}
+        for e in events:
+            key = e["span_key"]
+            expected.setdefault(key, set()).add(
+                (e["source_file"], int(e["channel"]),
+                 int(e["snippet_start_idx"]), int(e["snippet_end_idx"])))
+
+        recs = conn.execute(
+            "SELECT id, source_file, channel FROM recordings").fetchall()
+        rec_id = {(r["source_file"], r["channel"]): r["id"] for r in recs}
+        rec_src = {r["id"]: (r["source_file"], r["channel"]) for r in recs}
+
+        # Map each train entry's bounding box back to its span_key.
+        box_to_key = {}
+        for key, spans in expected.items():
+            src, ch = next(iter(spans))[0], next(iter(spans))[1]
+            starts = [s[2] for s in spans]
+            ends = [s[3] for s in spans]
+            box_to_key[(rec_id[(src, ch)], min(starts), max(ends))] = key
+
+        train_entries = conn.execute(
+            "SELECT * FROM motif_entry WHERE scale = 'train'"
+        ).fetchall()
+        assert len(train_entries) == result["n_train_entries"]
+
+        for entry in train_entries:
+            box = (entry["recording_id"], entry["start_idx"], entry["end_idx"])
+            assert box in box_to_key, box
+            key = box_to_key[box]
+            members = R.list_motif_members(conn, entry["id"])
+            member_spans = {
+                (rec_src[m["recording_id"]][0], rec_src[m["recording_id"]][1],
+                 m["start_idx"], m["end_idx"])
+                for m in members
+            }
+            assert member_spans == expected[key], key
+    finally:
+        conn.close()
+
+
+def test_event_scale_entries_have_scale_event():
+    conn = init_db(":memory:")
+    try:
+        result = import_drop_motifs(conn, BUNDLE_DIR)
+        rows = conn.execute(
+            "SELECT * FROM motif_entry WHERE scale = 'event'"
+        ).fetchall()
+        assert len(rows) == result["n_entries"]
+        for row in rows:
+            assert R.list_motif_members(conn, row["id"])
+    finally:
+        conn.close()
+
+
+def test_all_imported_entries_have_an_explicit_scale():
+    conn = init_db(":memory:")
+    try:
+        result = import_drop_motifs(conn, BUNDLE_DIR)
+        nulls = conn.execute(
+            "SELECT COUNT(*) FROM motif_entry WHERE scale IS NULL"
+        ).fetchone()[0]
+        assert nulls == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM motif_entry"
+        ).fetchone()[0] == result["n_entries"] + result["n_train_entries"]
+    finally:
+        conn.close()
 
 
 # ── criterion 6: the Library grid renders imported entries ──────────────────
@@ -245,7 +351,7 @@ def test_library_grid_renders_imported_entries():
             grid = LibraryGrid(_FakeLibraryApp(conn))
             layout = grid.layout()
             assert layout is not None
-            assert len(grid.cards) == result["n_entries"]
+            assert len(grid.cards) == result["n_entries"] + result["n_train_entries"]
             assert all(card is not None for card in grid.cards)
         finally:
             conn.close()

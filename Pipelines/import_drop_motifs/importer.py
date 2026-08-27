@@ -13,7 +13,8 @@ The first two steps already exist and are imported, never reimplemented:
         the feature matrix, the linkage, the cophenetic r, and per-cluster
         composition.
 
-This module is only the write step: one `motif_entry` per shape family, one
+This module is only the write step: one event-scale `motif_entry` per shape
+family, one train-scale `motif_entry` per spike train in the bundle, one
 `motif_member` per imported motif, and the within-family distances as
 `motif_edge` rows carrying the distance function, threshold and recipe hash.
 
@@ -40,7 +41,7 @@ import numpy as np
 from Working.Detection.drop_motifs import cluster, store
 from Working.database import queries as q
 from Working.database import runs as R
-from Working.database.schema import init_db
+from Working.database.schema import ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN, init_db
 from Working.distances import DISTANCE_REGISTRY, DISTANCE_SCALE_INVARIANT
 
 _REPO_ROOT = os.path.dirname(
@@ -107,6 +108,53 @@ def _ensure_recordings(conn, events):
     return mapping
 
 
+def _write_train_entries(conn, events, recording_map):
+    """Create one train-scale entry per spike train (span_key) in the bundle.
+
+    A train-scale entry's span is the bounding box of its events' snippets —
+    the smallest range that covers every motif that came out of that train.
+    Its members are those very motifs, so a train becomes a row an edge can
+    attach to rather than a string repeated on member rows. Scale is stored
+    from the bundle's provenance (the `span_key` column), never inferred from
+    a span's duration.
+
+    Idempotent: train entries are keyed on content like event entries, and
+    `get_or_create_motif_member` never duplicates a member.
+
+    Returns
+    -------
+    (n_entries, n_members) : (int, int)
+    """
+    trains = {}
+    for e in events:
+        trains.setdefault(e["span_key"], []).append(e)
+
+    n_entries = 0
+    n_members = 0
+    for span_key in sorted(trains):
+        evs = trains[span_key]
+        rec_id = recording_map[(evs[0]["source_file"], int(evs[0]["channel"]))]
+        start = min(int(e["snippet_start_idx"]) for e in evs)
+        end = max(int(e["snippet_end_idx"]) for e in evs)
+        entry_id = R.insert_motif_entry(
+            conn, rec_id, start, end, label=f"spike train {span_key}",
+        )
+        conn.execute(
+            "UPDATE motif_entry SET scale = ? WHERE id = ?",
+            (ENTRY_SCALE_TRAIN, entry_id),
+        )
+        conn.commit()
+        n_entries += 1
+        for e in evs:
+            member_rec = recording_map[(e["source_file"], int(e["channel"]))]
+            R.get_or_create_motif_member(
+                conn, entry_id, member_rec,
+                int(e["snippet_start_idx"]), int(e["snippet_end_idx"]),
+            )
+            n_members += 1
+    return n_entries, n_members
+
+
 def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
                        distance_function=DISTANCE_SCALE_INVARIANT,
                        threshold=None,
@@ -116,8 +164,10 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
     Reads the bundle with the existing store reader, clusters with the
     existing cluster module, and writes:
 
-      - one `motif_entry` per shape family — the exemplar is the member
-        closest to the family's mean waveform;
+      - one event-scale `motif_entry` per shape family — the exemplar is the
+        member closest to the family's mean waveform;
+      - one train-scale `motif_entry` per spike train (`span_key`) in the
+        bundle, whose members are the motifs that came out of that train;
       - one `motif_member` per imported motif, keyed on (entry, recording,
         start, end) and never duplicated;
       - one `motif_edge` per within-family exemplar->member pair, recording
@@ -147,8 +197,9 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
     Returns
     -------
     dict
-        {"n_entries", "n_members", "n_edges", "n_clusters", "cophenetic_r",
-         "threshold", "recipe_hash", "distance_function"}.
+        {"n_entries", "n_members", "n_edges", "n_train_entries",
+         "n_train_members", "n_clusters", "cophenetic_r", "threshold",
+         "recipe_hash", "distance_function"}.
     """
     if n_clusters is not None and height is not None:
         raise ValueError("pass exactly one of n_clusters or height")
@@ -213,6 +264,11 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
         entry_id = R.insert_motif_entry(
             conn, rec_id, start, end, label=f"drop family {int(cluster_id)}",
         )
+        conn.execute(
+            "UPDATE motif_entry SET scale = ? WHERE id = ?",
+            (ENTRY_SCALE_EVENT, entry_id),
+        )
+        conn.commit()
         n_entries += 1
 
         exemplar_member_id = R.get_or_create_motif_member(
@@ -246,10 +302,15 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
             )
             n_edges += 1
 
+    n_train_entries, n_train_members = _write_train_entries(
+        conn, events, recording_map)
+
     return {
         "n_entries": n_entries,
         "n_members": n_members,
         "n_edges": n_edges,
+        "n_train_entries": n_train_entries,
+        "n_train_members": n_train_members,
         "n_clusters": n_families,
         "cophenetic_r": cl["cophenetic_r"],
         "threshold": threshold,
