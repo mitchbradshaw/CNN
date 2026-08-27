@@ -587,3 +587,10 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [standards] (no rule cited) importer.py bypasses the single-writer convention (raw UPDATE on motif_entry.scale after insert_motif_entry) instead of extending the writer, duplicating the 3-line SQL pattern twice in one file
 - [minor] [standards] (no rule cited) _write_train_entries re-derives (source_file, channel) keys into recording_map already computed by the caller (mild feature envy)
 - [minor] [spec] (no rule cited) insert_motif_entry's INSERT-OR-IGNORE-and-return-existing-id means a train bounding box that coincides with an existing event-scale entry's span silently relabels and re-parents that entry to scale='train', violating "Event-scale entries from T50 are unaffected and still resolve" for cluster cuts other than the one exercised by current tests
+
+## T62 — 2026-08-27 11:05
+
+- [minor] [standards] (rule 6.2) `_render_filmstrip_input`'s `recording`-only fallback branch is unexercised by any caller — speculative generality
+- [minor] [standards] (no rule cited) Duplicated Code smell: `result_pane.visible`/`filmstrip_pane.visible` toggle pair repeated verbatim in `_refresh_preview`, `_show_before_after`, `_show_filmstrip`
+- [minor] [spec] (no rule cited) Filmstrip is never called from `execution.py:_on_run_finished` — a real Run never shows the filmstrip, only the old single-plot/Before-After pane; core acceptance criterion unmet in the live app
+- [minor] [spec] (no rule cited) The untested `recording`-fallback path in `_render_filmstrip_input` is unverified and, given the wiring gap, currently unreachable in production
