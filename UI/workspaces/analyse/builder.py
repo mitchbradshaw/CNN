@@ -63,6 +63,15 @@ class _BlockCard(DeriveMixin):
         self.algorithm_select = pn.widgets.Select(value=spec.name)
         self.preprocess_window = pn.widgets.FloatInput(value=0.0)
         self.auto_preview_checkbox = pn.widgets.Checkbox(value=False)
+        # The card's OWN opt-in for T64's suffix re-run, deliberately not
+        # `auto_preview_checkbox` above: `DeriveMixin` reassigns that one from
+        # the span length every time recommendations are applied, so a
+        # researcher who turned it off would find it back on after changing
+        # span. An opt-in that reverts by itself is not an opt-in. Off by
+        # default, so a stray keystroke in a parameter box never starts work.
+        self.auto_run_checkbox = pn.widgets.Checkbox(
+            name="Auto-run on change", value=False,
+        )
         self.span_changed_note = pn.pane.Markdown("")
         self.derived_pane = pn.pane.HTML("", sizing_mode="stretch_width")
         self.reset_recommended_button = pn.widgets.Button(
@@ -206,9 +215,27 @@ class _BlockCard(DeriveMixin):
         self._refresh_derived()
 
     def _schedule_auto_preview(self):
-        # Cards do not auto-preview runs; this is the only `DeriveMixin`
-        # hook that assumes the run panel's preview machinery.
-        return None
+        """`DeriveMixin` calls this after every user parameter edit (T64's
+        trigger).
+
+        Opted out — the default — this does nothing at all, which is the
+        pre-T64 behaviour. Opted in, it asks the run panel to redraw the
+        filmstrip by re-running this step and its successors; the run panel
+        decides whether that is cheap enough to just do, because the estimate
+        and the budget threshold live there next to the routing that already
+        uses them.
+
+        Deliberately does not itself decide anything about cost, and
+        deliberately swallows the absence of a run panel: a card can be
+        constructed in a test or a headless context with no run surface
+        attached, and a parameter edit must not raise there.
+        """
+        if not self.auto_run_checkbox.value:
+            return None
+        run_panel = getattr(self.app, "run_panel", None)
+        if run_panel is None:
+            return None
+        return run_panel.request_suffix_recompute(self.chain, self.index)
 
     # ── side inputs: one picker per declared entry ───────────────────────
     # Adapted from the block inspector (the PRD relocates this content onto
@@ -393,6 +420,7 @@ class _BlockCard(DeriveMixin):
         if self.spec.side_inputs:
             parts.append(pn.pane.Markdown("**Side inputs**"))
             parts.append(self.side_inputs_column)
+        parts.append(self.auto_run_checkbox)
         return parts
 
 
@@ -490,6 +518,10 @@ class ChainBuilder:
     def _render_steps(self):
         self.cards = []
         self.connectors = []
+        # The `_BlockCard` editors, parallel to `cards`. Kept because the card
+        # column only holds their panes: without this nothing can reach a
+        # card's opt-in or its parameter widgets after render.
+        self.editors = []
         if not self.chain.steps:
             self.steps_row.objects = [
                 pn.pane.Markdown(_EMPTY_STEPS_NOTICE),
@@ -532,6 +564,7 @@ class ChainBuilder:
         )
 
         editor = _BlockCard(self.app, self.chain, index, adapter)
+        self.editors.append(editor)
 
         up = pn.widgets.Button(name="\u2191", width=32, disabled=(index == 0))
         down = pn.widgets.Button(

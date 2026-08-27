@@ -37,7 +37,7 @@ class LayoutMixin:
                 self.span_changed_note,
                 pn.Row(self.auto_preview_checkbox),
                 pn.Row(self.reset_recommended_button),
-                pn.FlexBox(self.run_button, self.cancel_button),
+                pn.FlexBox(self.run_button, self.cancel_button, self.confirm_rerun_button),
                 self.status, self.duration_pane,
                 width=480,  # Part 7, Part 3 item 6 (was 440) — shortened
                 # labels mean this is no longer needed for THAT, but the

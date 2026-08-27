@@ -14,7 +14,9 @@ from Adapters.registry import get_adapter
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.artifacts import save_plot
-from Working.config import RUN_PREVIEW_HEIGHT
+from Working.config import MP_INTERACTIVE_BUDGET_S, RUN_PREVIEW_HEIGHT
+from Working.execution import invalidated_step_indices
+from Working.hpc.job_export import estimate_recipe_seconds
 from Working.types import Signal
 
 from UI.plots import (
@@ -224,7 +226,71 @@ class ResultsMixin:
 
     # ── Filmstrip (T62): chain input + one plot per step ──────────────────
 
-    def _build_filmstrip(self, recipe, step_results, input_value=None, recording=None):
+    # ── T64: suffix-only recomputation ───────────────────────────────────
+
+    def _suffix_recompute_plan(self, recipe, changed_index):
+        """What a parameter change on step `changed_index` costs to redraw.
+
+        Returns ``{"indices", "estimate_s", "requires_confirmation"}``:
+
+        - ``indices`` — the steps to recompute. This is the SUFFIX and only
+          the suffix, straight from `Working.execution.invalidated_step_indices`
+          (T63). It is not recomputed here: the step cache is keyed on a
+          recipe-*prefix* hash, so exactly one function gets to say what a
+          prefix hash invalidates, and this is not it.
+        - ``estimate_s`` — the summed runtime estimate for just those steps,
+          via the same `estimate_recipe_seconds` the cluster routing uses.
+          Blocks with no estimator, and estimators uncalibrated on this
+          machine, contribute zero: "counts as free" is that function's
+          documented contract, and second-guessing it here would be a second
+          cost model.
+        - ``requires_confirmation`` — whether the caller must ask first,
+          decided against `MP_INTERACTIVE_BUDGET_S`, the SAME constant the
+          run surface routes on. A separate threshold would drift from it,
+          and the drift would surface as two surfaces disagreeing about
+          whether one chain is expensive.
+
+        The estimate is taken over a recipe holding only the suffix steps,
+        not the whole chain: the prefix is cached and is not going to run,
+        so charging the researcher for it would turn every edit near the end
+        of an expensive chain into a confirmation prompt for work that never
+        happens.
+        """
+        indices = invalidated_step_indices(recipe, changed_index)
+
+        suffix_recipe = dict(recipe)
+        suffix_recipe["steps"] = [
+            step for i, step in enumerate(recipe["steps"]) if i in indices
+        ]
+        n_samples, fs = self._recipe_span_extent(recipe)
+        estimate_s = estimate_recipe_seconds(suffix_recipe, n_samples, fs)
+
+        return {
+            "indices": indices,
+            "estimate_s": estimate_s,
+            "requires_confirmation": estimate_s > MP_INTERACTIVE_BUDGET_S,
+        }
+
+    def _recipe_span_extent(self, recipe):
+        """`(n_samples, fs)` for the span a recipe runs over.
+
+        A recipe with no span runs the whole channel, so the sample count
+        comes off the recording rather than defaulting to zero — a zero would
+        make every estimator report "free" and silently disable the
+        confirmation prompt on exactly the whole-channel runs that most need
+        it.
+        """
+        recording = q.get_recording_by_id(self.conn, recipe["recording_id"])
+        fs = float(recording["fs"]) if recording is not None else 1.0
+        span = recipe.get("span")
+        if span:
+            return int(span[1]) - int(span[0]), fs
+        if recording is not None:
+            return int(recording["n_samples"]), fs
+        return 0, fs
+
+    def _build_filmstrip(self, recipe, step_results, input_value=None, recording=None,
+                         stale_indices=()):
         """Render the whole transformation as a single stacked scroll.
 
         The decision of *what* to show is `ChainState.filmstrip_plan`
@@ -234,7 +300,14 @@ class ResultsMixin:
         through that one render function. Returns a HoloViews `Layout` whose
         first element is the chain input and whose remaining elements are
         the steps in execution order.
+
+        `stale_indices` (T64) are the step positions currently being
+        recomputed. Their plots stay on screen — a filmstrip that blanked
+        while a suffix re-ran would read as the silently-blank-pane failure
+        this codebase has hit twice — but their titles say so, because an
+        old picture read as a new result is worse than no picture.
         """
+        stale = set(stale_indices or ())
         plan = ChainState.from_recipe(recipe).filmstrip_plan(self.conn)
         elements = [self._render_filmstrip_input(recipe, input_value, recording)]
         for entry in plan:
@@ -245,9 +318,10 @@ class ResultsMixin:
                     f"({entry['label']})"
                 )
             element = render_value(entry["output_type"], result.value, result.meta)
-            element = element.opts(
-                title=f"{entry['label']} — {entry['output_type']}",
-            )
+            title = f"{entry['label']} — {entry['output_type']}"
+            if entry["position"] in stale:
+                title = f"{title}  ·  stale, recomputing…"
+            element = element.opts(title=title)
             elements.append(element)
         return hv.Layout(elements).cols(1).opts(shared_axes=False)
 

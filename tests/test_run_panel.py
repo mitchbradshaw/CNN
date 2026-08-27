@@ -459,3 +459,258 @@ def test_filmstrip_renders_input_and_each_step_with_non_none_panes():
         assert len(list(rp.filmstrip_pane.object.values())) == 3
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T64: re-run only the suffix when a parameter changes ─────────────────────
+
+def test_suffix_recompute_plan_reruns_middle_step_and_successors():
+    """T64: a parameter change on a middle step recomputes that step and
+    every step after it — never an earlier step. The recomputed set is the
+    suffix derived from T63's `invalidated_step_indices`; this test pins the
+    RunPanel's use of that rule for a middle step of a multi-step chain."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.10}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.15}},
+            ],
+        }
+        plan = rp._suffix_recompute_plan(recipe, 1)
+        assert plan["indices"] == {1, 2}, (
+            f"a change on the middle step must recompute that step and its "
+            f"successor, never the earlier step; got {plan['indices']}"
+        )
+        assert 0 not in plan["indices"]
+        # No calibrated estimator on these blocks → the suffix is free, so it
+        # runs automatically (below the interactive budget).
+        assert plan["estimate_s"] == 0
+        assert plan["requires_confirmation"] is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_suffix_recompute_plan_expensive_suffix_requires_confirmation():
+    """T64: a suffix whose summed estimate is above the interactive budget
+    must ask first, reporting the estimate — the existing estimator and the
+    existing interactive-budget constant, not a second cost model."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            recipe = {
+                "recording_id": rid,
+                "span": [0, 10_000_000],
+                "steps": [
+                    {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                    {"stage": "detection", "algorithm": "matrix_profile",
+                     "params": {"window_min": 10.0, "backend": "stump"}},
+                ],
+            }
+            plan = rp._suffix_recompute_plan(recipe, 1)
+            assert plan["indices"] == {1}
+            assert plan["estimate_s"] is not None and plan["estimate_s"] > 0
+            assert plan["requires_confirmation"] is True
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_filmstrip_marks_stale_steps_while_rerun_in_flight():
+    """T64: plots for steps being recomputed are visibly marked stale — the
+    suffix steps are flagged in the filmstrip while a re-run is in flight,
+    and the unaffected prefix is not."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal, SpanSet
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "rupture", "params": {}},
+            ],
+        }
+        step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("spanset", SpanSet(starts=(10, 20), ends=(30, 40)), {}),
+        }
+        input_value = Signal(x=np.arange(600) / 1.0, fs=1.0)
+
+        layout = rp._build_filmstrip(
+            recipe, step_results, input_value=input_value, stale_indices={1},
+        )
+        # The layout is [chain input, step 0, step 1], so a `stale_indices`
+        # of {1} marks the LAST element. The prefix step 0 — the one whose
+        # cached result is still valid — must stay unmarked; that, not the
+        # chain input, is the negative case worth asserting.
+        titles = [str(p.opts.get("plot").kwargs.get("title", "")) for p in layout.values()]
+        assert "stale" in titles[2].lower(), titles
+        assert "stale" not in titles[1].lower(), titles
+        assert "stale" not in titles[0].lower(), titles
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T64: editing a parameter launches the suffix, when opted in ──────────────
+#
+# Wiring the plan to an actual trigger. The opt-in is the card's OWN checkbox,
+# not `DeriveMixin.auto_preview_checkbox`: the mixin reassigns that one from the
+# span length every time recommendations are applied, so a researcher who turned
+# it off would find it back on after changing span. An opt-in that reverts by
+# itself is not an opt-in.
+
+
+def _chain_card(app, recording_id, steps):
+    """A builder card over a chain of `steps`, plus that card's chain.
+
+    `recording_id` is set explicitly: a fresh `ViewerApp` has none selected,
+    and a chain without one cannot serialise to a recipe at all.
+    """
+    builder = app.chain_builder
+    builder.chain.recording_id = recording_id
+    builder.chain.steps = []
+    for stage, algorithm, params in steps:
+        builder.chain.add_step(stage, algorithm, params=params)
+    builder._refresh()
+    return builder
+
+
+def _capture_launches(rp):
+    """Record `_launch_recipe` calls instead of starting a run."""
+    calls = []
+    rp._launch_recipe = lambda recipe, stale_indices=(): calls.append(
+        {"recipe": recipe, "stale_indices": set(stale_indices)}
+    )
+    return calls
+
+
+def test_param_edit_does_not_launch_a_run_when_auto_run_is_off():
+    """Off by default: a stray keystroke in a parameter box must never start
+    work. This is the whole reason the trigger is opt-in."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        assert card.auto_run_checkbox.value is False, "auto-run must default to off"
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+        assert calls == [], "a parameter edit launched a run with auto-run off"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_cheap_suffix_launches_and_marks_only_the_suffix_stale():
+    """Opted in and cheap: it just runs, and only the suffix is marked stale."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        card.auto_run_checkbox.value = True
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        assert calls[0]["stale_indices"] == {1, 2}, calls[0]["stale_indices"]
+        assert rp.confirm_rerun_button.visible is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_expensive_suffix_asks_before_launching():
+    """Opted in but expensive: nothing runs, the estimate is stated, and the
+    confirm control appears. Losing an afternoon to a keystroke is the thing
+    being prevented."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+
+            pname = next(iter(card._param_widgets))
+            card._on_param_changed(pname)
+
+            assert calls == [], "an expensive suffix launched without asking"
+            assert rp.confirm_rerun_button.visible is True
+            assert "estimate" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_confirming_launches_the_suffix_that_was_held():
+    """The held suffix is exactly what runs when the researcher confirms."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+            card._on_param_changed(next(iter(card._param_widgets)))
+            assert calls == []
+
+            rp._on_confirm_rerun(None)
+            assert len(calls) == 1, "confirming did not launch the held suffix"
+            assert calls[0]["stale_indices"] == {1}
+            assert rp.confirm_rerun_button.visible is False, "control stayed visible"
+    finally:
+        _close_and_unlink(app, db_path)
