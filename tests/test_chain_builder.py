@@ -138,6 +138,24 @@ def _card_buttons(card):
     raise AssertionError("card has no button row")
 
 
+def _plus_buttons(builder):
+    """Every `+` insert button on the canvas, as `(insert_index, button)`.
+
+    The insertion index is the position the `+` would insert at — the number
+    of cards already drawn to its left. A `+` between card 0 and card 1
+    inserts at index 1; the trailing `+` after card N-1 inserts at index N.
+    The empty chain offers a single `+` at index 0.
+    """
+    out = []
+    cards_seen = 0
+    for obj in builder.steps_row.objects:
+        if obj in builder.cards:
+            cards_seen += 1
+        elif isinstance(obj, pn.widgets.Button) and obj.name == "+":
+            out.append((cards_seen, obj))
+    return out
+
+
 # ── construction: a blank chain, every block listed ─────────────────────────
 
 def test_construction_builds_a_non_none_layout_listing_every_block():
@@ -613,6 +631,116 @@ def test_card_reuses_shared_param_widgets_and_derive_mixin():
         "the card must reuse the shared derive mixin, not fork it"
     assert b._widget_for_param is _widget_for_param, \
         "the card must reuse the shared param-widget generator, not fork it"
+
+
+# ── T58: a + between every pair and at the end opens a mid-chain picker ──────
+
+def test_plus_buttons_appear_between_every_pair_and_after_the_last():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+    builder._add_step(get_adapter("detection.rupture"))
+
+    plus = _plus_buttons(builder)
+    assert [pos for pos, _ in plus] == [1, 2], \
+        "a + must sit between the two cards and after the last one"
+
+    # The empty chain offers a single + at the only position there is.
+    empty = ChainBuilder(_FakeApp())
+    assert [pos for pos, _ in _plus_buttons(empty)] == [0]
+
+
+def test_clicking_a_plus_opens_the_picker_for_that_position():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+    builder._add_step(get_adapter("detection.rupture"))
+
+    # No + has been clicked yet, so no picker is open.
+    assert builder.add_column.objects == []
+
+    middle = _plus_buttons(builder)[0][1]
+    middle.clicks = middle.clicks + 1
+
+    assert builder._active_insert_index == 1
+    assert len(builder.add_column.objects) == len(list_adapters()), \
+        "the picker must list every registered block, incompatible or not"
+
+
+def test_choosing_a_block_from_a_plus_inserts_at_that_position_not_the_end():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+    builder._add_step(get_adapter("detection.rupture"))
+    assert [s["algorithm"] for s in builder.chain.steps] == ["lowpass", "rupture"]
+
+    # The middle + (insert at index 1) chooses detrend.
+    builder._open_picker(1)
+    detrend_row = _add_row(builder, "preprocessing.detrend")
+    detrend_row[0].clicks = detrend_row[0].clicks + 1
+
+    assert [s["algorithm"] for s in builder.chain.steps] == \
+        ["lowpass", "detrend", "rupture"]
+
+
+def test_picker_lists_every_block_with_incompatible_ones_disabled_and_reason():
+    from UI.workspaces.analyse.builder import ChainBuilder
+    from Working.chain_validation import check_step_compatibility
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))          # signal -> signal
+    builder._add_step(get_adapter("catalogue.gramian_gasf"))         # signal -> encoding
+
+    # The + between the two cards: anything inserted is fed by signal and
+    # must itself feed gramian_gasf (which wants signal).
+    builder._open_picker(1)
+    assert len(builder.add_column.objects) == len(list_adapters())
+
+    producing_kind = get_adapter("preprocessing.lowpass").output_kind
+    next_block = get_adapter("catalogue.gramian_gasf")
+    for block, row in zip(list_adapters(), builder.add_column.objects):
+        button, reason = row[0], row[1]
+        ok, expected_reason = check_step_compatibility(producing_kind, block)
+        if ok and next_block is not None:
+            ok_down, reason_down = check_step_compatibility(block.output_kind, next_block)
+            if not ok_down:
+                ok, expected_reason = False, reason_down
+        assert button.disabled is not ok, block.name
+        assert reason.object == expected_reason, block.name
+
+    # Both directions must actually be exercised, or the loop above would
+    # pass against a picker that never disabled anything.
+    from Adapters.registry import get_adapter as _ga
+    rupture = _add_row(builder, "detection.rupture")
+    assert rupture[0].disabled is True, "rupture's spanset cannot feed gramian_gasf"
+
+
+def test_inserting_mid_chain_preserves_steps_after_and_rebinds_side_inputs():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))        # 0 signal->signal
+    builder._add_step(get_adapter("preprocessing.window_matrix"))  # 1 signal->windowset
+    builder._add_step(get_adapter("catalogue.cluster"))            # 2 windowset->grouping
+    builder._add_step(get_adapter("catalogue.classifier"))         # 3 grouping->model
+
+    # Bind classifier's 'windows' side-input to window_matrix (index 1).
+    builder.chain.steps[3]["side_inputs"]["windows"] = {
+        "source_kind": "earlier_step", "step_index": 1,
+    }
+
+    # Insert detrend between lowpass and window_matrix (index 1).
+    builder._insert_step(get_adapter("preprocessing.detrend"), 1)
+
+    assert [s["algorithm"] for s in builder.chain.steps] == [
+        "lowpass", "detrend", "window_matrix", "cluster", "classifier",
+    ]
+    # window_matrix moved from index 1 to 2; the classifier's binding follows.
+    binding = builder.chain.steps[4]["side_inputs"]["windows"]
+    assert binding == {"source_kind": "earlier_step", "step_index": 2}
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
