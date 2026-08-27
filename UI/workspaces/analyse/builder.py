@@ -34,7 +34,7 @@ from UI.analyse.chain_state import ChainState, ChainStateError
 from UI.analyse.derive import DeriveMixin
 from UI.analyse.param_widgets import _widget_for_param
 
-_EMPTY_STEPS_NOTICE = "*No steps staged yet — add one below.*"
+_EMPTY_STEPS_NOTICE = "*No steps staged yet — use the + to add one.*"
 _CARD_WIDTH = 320
 _ARROW = "\u2192"
 
