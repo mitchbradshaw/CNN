@@ -459,3 +459,105 @@ def test_filmstrip_renders_input_and_each_step_with_non_none_panes():
         assert len(list(rp.filmstrip_pane.object.values())) == 3
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T64: re-run only the suffix when a parameter changes ─────────────────────
+
+def test_suffix_recompute_plan_reruns_middle_step_and_successors():
+    """T64: a parameter change on a middle step recomputes that step and
+    every step after it — never an earlier step. The recomputed set is the
+    suffix derived from T63's `invalidated_step_indices`; this test pins the
+    RunPanel's use of that rule for a middle step of a multi-step chain."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.10}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.15}},
+            ],
+        }
+        plan = rp._suffix_recompute_plan(recipe, 1)
+        assert plan["indices"] == {1, 2}, (
+            f"a change on the middle step must recompute that step and its "
+            f"successor, never the earlier step; got {plan['indices']}"
+        )
+        assert 0 not in plan["indices"]
+        # No calibrated estimator on these blocks → the suffix is free, so it
+        # runs automatically (below the interactive budget).
+        assert plan["estimate_s"] == 0
+        assert plan["requires_confirmation"] is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_suffix_recompute_plan_expensive_suffix_requires_confirmation():
+    """T64: a suffix whose summed estimate is above the interactive budget
+    must ask first, reporting the estimate — the existing estimator and the
+    existing interactive-budget constant, not a second cost model."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            recipe = {
+                "recording_id": rid,
+                "span": [0, 10_000_000],
+                "steps": [
+                    {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                    {"stage": "detection", "algorithm": "matrix_profile",
+                     "params": {"window_min": 10.0, "backend": "stump"}},
+                ],
+            }
+            plan = rp._suffix_recompute_plan(recipe, 1)
+            assert plan["indices"] == {1}
+            assert plan["estimate_s"] is not None and plan["estimate_s"] > 0
+            assert plan["requires_confirmation"] is True
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_filmstrip_marks_stale_steps_while_rerun_in_flight():
+    """T64: plots for steps being recomputed are visibly marked stale — the
+    suffix steps are flagged in the filmstrip while a re-run is in flight,
+    and the unaffected prefix is not."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal, SpanSet
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "rupture", "params": {}},
+            ],
+        }
+        step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("spanset", SpanSet(starts=(10, 20), ends=(30, 40)), {}),
+        }
+        input_value = Signal(x=np.arange(600) / 1.0, fs=1.0)
+
+        layout = rp._build_filmstrip(
+            recipe, step_results, input_value=input_value, stale_indices={1},
+        )
+        titles = [str(p.opts.get("plot").kwargs.get("title", "")) for p in layout.values()]
+        assert "stale" in titles[1].lower(), titles
+        assert "stale" not in titles[0].lower(), titles
+    finally:
+        _close_and_unlink(app, db_path)
