@@ -74,6 +74,32 @@ def _write_recording(conn, npy_dir, source_file, channel, data, fs=1.0):
     return q.insert_recording(conn, source_file, channel, fs, len(data), 0, npy_path)
 
 
+def _element_ylim(element):
+    """The ylim stored on a HoloViews element or Overlay, or None."""
+    if isinstance(element, hv.Overlay):
+        limits = [_element_ylim(el) for el in element]
+        limits = [l for l in limits if l is not None]
+        if not limits:
+            return None
+        assert len({tuple(l) for l in limits}) == 1, \
+            f"overlay leaves disagree about ylim: {limits}"
+        return tuple(limits[0])
+    if hasattr(element, "opts"):
+        ylim = element.opts.get("plot").kwargs.get("ylim")
+        return tuple(ylim) if ylim is not None else None
+    return None
+
+
+def _card_ylim(card):
+    """The ylim of a LibraryGrid card's HoloViews thumbnail."""
+    for obj in card:
+        if isinstance(obj, pn.pane.HoloViews):
+            ylim = _element_ylim(obj.object)
+            if ylim is not None:
+                return ylim
+    raise AssertionError(f"no HoloViews thumbnail with a ylim in card: {card}")
+
+
 class _FakeLibraryApp:
     """The only app surface `LibraryGrid` is allowed to read."""
 
@@ -88,12 +114,21 @@ def _make_three_entry_library(npy_dir):
     - e1 carries two element tags (sharkfin, ridge); e2 carries one
       (sharkfin); e3 is untagged.
 
+    The recording holds a *detrended* signal in millivolts: three sine
+    bursts of different amplitudes, all centred on zero (baseline removed —
+    the trace detection ran on). e1 (10 mV), e2 (5 mV) and e3 (2 mV) sit on
+    those bursts, so their thumbnail y-ranges can be asserted against real
+    millivolt amplitudes.
+
     Returns (conn, (e1, e2, e3)).
     """
     conn = init_db(":memory:")
     v.seed_vocabulary(conn)
-    sine = np.sin(2 * np.pi * np.arange(200) / 200)
-    rec = _write_recording(conn, npy_dir, "A.mat", 0, sine)
+    sig = np.zeros(200)
+    sig[10:50] = 10.0 * np.sin(2 * np.pi * np.arange(40) / 40)
+    sig[60:100] = 5.0 * np.sin(2 * np.pi * np.arange(40) / 40)
+    sig[110:150] = 2.0 * np.sin(2 * np.pi * np.arange(40) / 40)
+    rec = _write_recording(conn, npy_dir, "A.mat", 0, sig)
     e1 = R.insert_motif_entry(
         conn, rec, 10, 50, label="sine-a", sax_string="aaa",
         created_at="2026-01-03T00:00:00+00:00",
@@ -210,6 +245,50 @@ def test_all_grouping_bases_show_the_same_entries():
                     for eid in entry_ids
                 }
                 assert grouped_ids == all_ids, basis
+        finally:
+            conn.close()
+
+
+# ── criterion 6 (T53): thumbnails in millivolts, shared family y-range ──────
+
+def test_thumbnails_share_y_range_within_shape_family_in_millivolts():
+    """Two cards in the same shape family share one y-range; a card in a
+    different family does not. The shared range reflects the real millivolt
+    amplitudes of the (detrended) signal, not a z-score."""
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.group_by.value = "shape"
+            ranges = {
+                eid: _card_ylim(grid._card_by_entry[eid])
+                for eid in (e1, e2, e3)
+            }
+            # Same family -> identical y-range.
+            assert ranges[e1] == ranges[e2], (ranges[e1], ranges[e2])
+            # Different family -> different y-range.
+            assert ranges[e1] != ranges[e3], ranges[e1]
+            # The shared range reflects real millivolt values (a 10 mV sine),
+            # not a z-normalised curve (~[-2, 2]).
+            y0, y1 = ranges[e1]
+            assert y0 <= -9.0 and y1 >= 9.0, (y0, y1)
+        finally:
+            conn.close()
+
+
+def test_thumbnail_grid_constructs_headlessly_with_non_none_panes():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_e1, _e2, _e3) = _make_three_entry_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            layout = grid.layout()
+            assert layout is not None
+            assert len(grid.cards) == 3
+            assert all(card is not None for card in grid.cards)
+            for card in grid.cards:
+                thumbs = [o for o in card if isinstance(o, pn.pane.HoloViews)]
+                assert len(thumbs) == 1, card
+                assert thumbs[0].object is not None
         finally:
             conn.close()
 
