@@ -610,3 +610,7 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [spec] (no rule cited) commit f054a47's sax-string-less fallback family key (imported entries) ships with no test; both new tests only cover entries with real sax_string values
 - [minor] [spec] (no rule cited) "thumbnails render the detrended trace" is assumed via the unchanged recording["npy_path"] load path, not established or verified by this diff
 - [major] [spec] (rule 7.1) _Y_PAD_FRACTION, xlabel/ylabel, and responsive=True are additions not traceable to any acceptance criterion or PRD line
+
+## T63 — 2026-08-27 12:44
+
+- [minor] [standards] (no rule cited) invalidated_step_indices(recipe, step_index) mirrors _recipe_prefix_hash's (recipe, up_to_index) parameter shape — consistent with existing module convention, flagged as a Data Clumps judgement call only
