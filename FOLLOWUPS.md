@@ -602,3 +602,11 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [standards] (no rule cited) Data Clumps: the source/target/exemplar widget triple and the side-input binding dict travel together across methods in both builder.py and inspector.py and arguably want a named type
 - [minor] [spec] (no rule cited) Side-input pickers are reimplemented on the card rather than imported from a shared module, contra the PRD's "relocation, not reimplementation" framing for the inspector's whole content
 - [minor] [spec] (no rule cited) Cached-result display, part of the inspector's "whole content" the PRD says moves onto the card, is not relocated to _BlockCard (outside this ticket's stated acceptance criteria, so arguable)
+
+## T53 — 2026-08-27 12:30
+
+- [major] [standards] (rule 6.4) grid.py hand-rolls an hv.Curve shape closely mirroring _decimated_curve's documented "ONE renderer" pattern instead of reusing/generalising it
+- [minor] [standards] (no rule cited) _build_card and _family_data_bounds each re-fetch the same recording row per entry, and _load_span re-slices the same span twice (range calc + thumbnail)
+- [minor] [spec] (no rule cited) commit f054a47's sax-string-less fallback family key (imported entries) ships with no test; both new tests only cover entries with real sax_string values
+- [minor] [spec] (no rule cited) "thumbnails render the detrended trace" is assumed via the unchanged recording["npy_path"] load path, not established or verified by this diff
+- [major] [spec] (rule 7.1) _Y_PAD_FRACTION, xlabel/ylabel, and responsive=True are additions not traceable to any acceptance criterion or PRD line
