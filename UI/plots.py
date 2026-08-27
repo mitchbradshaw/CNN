@@ -1951,3 +1951,172 @@ def build_encoding_panels(x, t, symbols, details, initial_x_range=None,
     )
 
     return dmap_signal, dmap_paa, dmap_quant, dmap_strip, range_stream
+
+
+# ── Render a value of any interchange type ─────────────────────────────────
+# T56: the single entry point for turning a pipeline value into a renderable
+# element. Every plot-centric surface — filmstrip, focus mode, block-card
+# preview — goes through this one function, and NOTHING downstream may switch
+# on a value's type locally. That rule is what keeps "plot-centric" from
+# degrading into "blank for half the blocks": a pane that renders nothing does
+# not raise, it is blank, and it looks exactly like a feature that was never
+# built. This module imports no Panel and reads no database — that stays true.
+
+_VALUE_HEIGHT = 150
+
+
+def _value_curve(x, fs, color):
+    """The shared `_decimated_curve` call behind Signal and Scores — the two
+    interchange types that render as a curve against time. Reuses the exact
+    decimate-then-build path every other trace in this module uses, so a
+    value can never visually disagree with the main Viewer curve."""
+    x = np.asarray(x, dtype=np.float64)
+    t = np.arange(len(x)) / float(fs) if len(x) else np.array([])
+    return _decimated_curve(x, t, MAX_RENDER_POINTS, color, _VALUE_HEIGHT, xlabel="time (s)")
+
+
+def _render_signal_value(value):
+    return _value_curve(value.x, value.fs, CURVE_COLOR)
+
+
+def _render_scores_value(value):
+    return _value_curve(value.values, value.fs, CURVE_COLOR)
+
+
+def _encoding_summary(value):
+    """Renderable text-card fallback for an `Encoding` that cannot use the
+    symbol-strip builder — an image encoding, an empty symbolic encoding, or
+    a symbolic encoding whose metadata lacks the encoded arrays/details the
+    strip needs. A text readout is never a decorative lie: it states what the
+    encoding is, which is all a degenerate value has to offer."""
+    values = value.values
+    if getattr(value, "kind", None) == "symbolic":
+        rows = [("kind", "symbolic"), ("symbols", str(int(np.size(values))))]
+    else:
+        arr = np.asarray(values)
+        shape = " x ".join(str(int(d)) for d in arr.shape) if arr.ndim else "scalar"
+        rows = [("kind", getattr(value, "kind", None) or "image"), ("shape", shape)]
+    return hv.Table(rows, "field", "value").opts(
+        height=_VALUE_HEIGHT, fontsize=PLOT_FONTSIZE,
+    )
+
+
+def _render_encoding_value(value, meta):
+    """Symbolic encodings reuse the existing symbol-strip builder
+    (`build_encoding_panels`'s fourth panel) rather than writing a second
+    strip renderer; anything the strip builder cannot handle falls back to a
+    text summary rather than returning None or raising (a raise becomes a
+    silently blank pane)."""
+    if getattr(value, "kind", None) == "symbolic":
+        symbols = np.asarray(value.values)
+        x = meta.get("encoded_x")
+        t = meta.get("encoded_t")
+        details = meta.get("details")
+        if (symbols.size and x is not None and t is not None and details is not None
+                and np.asarray(x).size and np.asarray(t).size):
+            try:
+                _, _, _, dmap_strip, _ = build_encoding_panels(x, t, symbols, details)
+                return dmap_strip
+            except Exception:
+                # Never let a strip the builder cannot draw produce a blank
+                # pane — say what the encoding is instead.
+                pass
+    return _encoding_summary(value)
+
+
+def _render_spanset_value(value, meta):
+    """An interval overlay: one `Rectangles` per span, in time units. The
+    SpanSet stores sample indices, so `fs` is taken from the adapter metadata
+    when present and defaults to 1.0 (sample space) otherwise. An empty
+    SpanSet returns a zero-area, fully transparent rectangle — the smallest
+    thing that still renders as an interval overlay."""
+    fs = float(meta.get("fs", 1.0))
+    starts = np.asarray(value.starts, dtype=np.float64) / fs
+    ends = np.asarray(value.ends, dtype=np.float64) / fs
+    if starts.size == 0:
+        # A bare `hv.Rectangles([])` is NOT renderable standalone — the
+        # Bokeh backend raises `KeyError: 'x0'` because nothing establishes
+        # a range (confirmed headlessly). A single zero-area, fully
+        # transparent rectangle renders and is the closest thing to "an
+        # empty interval overlay that still draws".
+        return hv.Rectangles([(0.0, 0.0, 0.0, 0.0)]).opts(
+            color=CURVE_COLOR, alpha=0, line_width=0,
+            height=_VALUE_HEIGHT, responsive=True, fontsize=PLOT_FONTSIZE,
+        )
+    rects = hv.Rectangles([(s, 0.0, e, 1.0) for s, e in zip(starts, ends)])
+    return rects.opts(
+        color=CURVE_COLOR, alpha=0.5, line_color="black", line_width=1,
+        height=_VALUE_HEIGHT, responsive=True, fontsize=PLOT_FONTSIZE,
+    )
+
+
+def _render_windowset_value(value):
+    """A window index: a spike at each window's start time. A one-window
+    WindowSet renders as a single spike; a zero-window one as an empty spike
+    plot — both renderable, neither a blank pane."""
+    t = np.asarray(value.starts, dtype=np.float64) / float(value.fs)
+    return hv.Spikes(t).opts(
+        color=CURVE_COLOR, height=_VALUE_HEIGHT, responsive=True,
+        fontsize=PLOT_FONTSIZE,
+    )
+
+
+def _render_grouping_value(value):
+    """A cluster-size summary: one bar per cluster label, counting the
+    windows in it. An empty grouping renders as an empty bar chart."""
+    labels = np.asarray(value.labels, dtype=int)
+    counts = np.bincount(labels) if labels.size else np.array([], dtype=int)
+    data = [(str(i), int(c)) for i, c in enumerate(counts)]
+    return hv.Bars(data, "cluster", "count").opts(
+        height=_VALUE_HEIGHT, responsive=True, fontsize=PLOT_FONTSIZE,
+    )
+
+
+def _render_model_value(value, meta):
+    """A text card. A trained model has no natural plot, and inventing one
+    produces a decorative lie — a picture that looks like evidence and is
+    not. State what the model is (its path and the adapter's key metadata);
+    do not chart it."""
+    rows = [("model path", str(value.path))]
+    for key in ("n_windows", "n_classes", "holdout_accuracy", "n_features_kept"):
+        if key in meta:
+            rows.append((key, str(meta[key])))
+    return hv.Table(rows, "field", "value").opts(
+        height=_VALUE_HEIGHT, fontsize=PLOT_FONTSIZE,
+    )
+
+
+def render_value(type_kind, value, meta=None):
+    """Turn a value the pipeline produces into a renderable element, given
+    its interchange type and the adapter's metadata.
+
+    This is the single entry point for value rendering. Nothing downstream
+    may switch on a value's type locally. All seven interchange types return
+    a non-`None`, renderable HoloViews object, including for a degenerate
+    value (an empty SpanSet, a one-window WindowSet); returning `None` is
+    never correct. An unknown type name raises with a message naming it.
+
+    `type_kind` is one of the seven lowercase interchange types (`signal`,
+    `encoding`, `scores`, `spanset`, `windowset`, `grouping`, `model`).
+    `value` is the typed object from `Working.types` named by `type_kind`.
+    `meta` is the adapter's metadata dict (`AdapterResult.meta`), consulted
+    where a type needs something its value object does not carry (e.g. the
+    encoded arrays/details behind an `Encoding`, or `fs` for a `SpanSet`).
+    """
+    meta = dict(meta or {})
+    kind = (type_kind or "").lower()
+    if kind == "signal":
+        return _render_signal_value(value)
+    if kind == "scores":
+        return _render_scores_value(value)
+    if kind == "encoding":
+        return _render_encoding_value(value, meta)
+    if kind == "spanset":
+        return _render_spanset_value(value, meta)
+    if kind == "windowset":
+        return _render_windowset_value(value)
+    if kind == "grouping":
+        return _render_grouping_value(value)
+    if kind == "model":
+        return _render_model_value(value, meta)
+    raise ValueError(f"render_value: unknown interchange type {type_kind!r}")
