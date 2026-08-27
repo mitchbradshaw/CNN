@@ -23,7 +23,7 @@ from Working.database import queries as q
 from Working.database import runs as R
 from Working.recipes import recipe_summary
 
-TABLE_COLUMNS = ["id", "source_file", "channel", "recipe", "params",
+TABLE_COLUMNS = ["id", "name", "source_file", "channel", "recipe", "params",
                   "span_start", "span_end", "duration_s", "status",
                   "detections", "artifacts", "started_at"]
 
@@ -43,8 +43,10 @@ class RunHistoryBrowser:
         self.artifacts_pane = pn.pane.Markdown("*Select a run to see its artifacts.*")
 
         self.table = pn.widgets.Tabulator(
-            pd.DataFrame(columns=TABLE_COLUMNS), page_size=15, disabled=True,
+            pd.DataFrame(columns=TABLE_COLUMNS), page_size=15, disabled=False,
             selectable=1, show_index=False, sizing_mode="stretch_width",
+            editors={col: ("input" if col == "name" else None)
+                     for col in TABLE_COLUMNS},
         )
 
         self.filter_recording.param.watch(lambda _e: self._refresh(), "value")
@@ -52,6 +54,7 @@ class RunHistoryBrowser:
         self.refresh_button.on_click(lambda _e: self._refresh())
         self.reopen_button.on_click(self._on_reopen)
         self.table.param.watch(self._on_row_selected, "selection")
+        self.table.on_edit(self._on_name_edited)
 
         self._refresh_recording_options()
         self._refresh()
@@ -81,6 +84,7 @@ class RunHistoryBrowser:
             all_params = {s["algorithm"]: s["params"] for s in recipe.get("steps", [])}
             records.append({
                 "id": run["id"],
+                "name": run["name"],
                 "source_file": recording["source_file"] if recording else "?",
                 "channel": recording["channel"] if recording else "?",
                 "recipe": recipe_summary(recipe) if recipe.get("steps") else "?",
@@ -113,6 +117,24 @@ class RunHistoryBrowser:
         lines = [f"- `{a['kind']}` → `{a['path']}`  ({a['created_at']})" for a in artifacts]
         self.artifacts_pane.object = "**Artifacts:**\n" + "\n".join(lines)
 
+    def _on_name_edited(self, event):
+        """T67: inline rename from the history table. The name is a label,
+        never an identifier — an empty edit clears it back to NULL, and no
+        uniqueness is enforced (two runs may share a name)."""
+        df = self.table.value
+        run_id = int(df.iloc[event.row]["id"])
+        value = event.value
+        if value in (None, ""):
+            value = None
+        try:
+            R.update_run(self.conn, run_id, name=value)
+        except ValueError as e:
+            self.table.patch({event.column: [(event.row, event.old)]})
+            self.status.object = f"**Edit failed:** {e}"
+            return
+        self.status.object = f"Renamed run #{run_id}."
+        self._refresh()
+
     def _on_reopen(self, _event=None):
         self.status.object = ""
         run_id = self._selected_run_id()
@@ -135,8 +157,10 @@ class RunHistoryBrowser:
 
         if self.app.tabs is not None:
             self.app.activate_workspace("Analyse", "Chain builder")
+        name = run["name"]
+        label = f"#{run_id}" if not name else f"{name} (#{run_id})"
         self.status.object = (
-            f"Reopened run_id={run_id}'s chain ({recipe_summary(recipe)}) in the builder."
+            f"Reopened {label}'s chain ({recipe_summary(recipe)}) in the builder."
         )
 
     def layout(self):
