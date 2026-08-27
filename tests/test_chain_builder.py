@@ -502,6 +502,34 @@ def test_editing_a_card_param_writes_back_to_the_chain_model():
     assert builder.chain.steps[0]["params"]["order"] == 8
 
 
+def test_render_preserves_existing_card_param_edits():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    app, db_path, npy_path = _synthetic_app(n_samples=200)
+    try:
+        builder = ChainBuilder(app)
+        builder._add_step(get_adapter("detection.sax_csax"))
+
+        seconds = next(
+            w for w in _widgets(builder.cards[0])
+            if isinstance(w, pn.widgets.FloatInput)
+            and w.name.startswith("Seconds per symbol")
+        )
+        seconds.value = 24.0
+
+        # Re-rendering (as a reorder/add does) must NOT overwrite the edit
+        # with a fresh recommendation.
+        builder._add_step(get_adapter("preprocessing.lowpass"))
+        rebuilt = next(
+            w for w in _widgets(builder.cards[0])
+            if isinstance(w, pn.widgets.FloatInput)
+            and w.name.startswith("Seconds per symbol")
+        )
+        assert rebuilt.value == 24.0
+    finally:
+        _close_synthetic(app, db_path, npy_path)
+
+
 def test_card_applies_recommended_defaults_and_marks_modified():
     from UI.workspaces.analyse.builder import ChainBuilder
 
