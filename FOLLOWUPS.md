@@ -581,3 +581,9 @@ deviations. The file list is now corrected in the ticket.
 ## T56 — 2026-08-27 10:12
 
 - [minor] [spec] (no rule cited) Unknown-type error names type_kind, not the literal value object — a faithful but debatable reading of "naming the value it was given"
+
+## T52 — 2026-08-27 10:57
+
+- [minor] [standards] (no rule cited) importer.py bypasses the single-writer convention (raw UPDATE on motif_entry.scale after insert_motif_entry) instead of extending the writer, duplicating the 3-line SQL pattern twice in one file
+- [minor] [standards] (no rule cited) _write_train_entries re-derives (source_file, channel) keys into recording_map already computed by the caller (mild feature envy)
+- [minor] [spec] (no rule cited) insert_motif_entry's INSERT-OR-IGNORE-and-return-existing-id means a train bounding box that coincides with an existing event-scale entry's span silently relabels and re-parents that entry to scale='train', violating "Event-scale entries from T50 are unaffected and still resolve" for cluster cuts other than the one exercised by current tests
