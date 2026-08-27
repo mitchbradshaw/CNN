@@ -20,6 +20,7 @@ from Working.execution import RecipeCancelled, RecipeExecutionError, execute_rec
 from Working.recipes import make_recipe, recipe_summary
 
 from UI.plots import symbol_letters, symbols_to_string
+from UI.analyse.formatting import _format_duration_human
 from UI.analyse.ui_thread import _run_on_ui_thread
 
 
@@ -31,6 +32,13 @@ class ExecutionMixin:
         self.cancel_button = pn.widgets.Button(name="Cancel", button_type="danger", disabled=True)
         self.status = pn.pane.Markdown("")
         self.duration_pane = pn.pane.Markdown("")
+        # T64: a suffix re-run held back because its estimate is above the
+        # interactive budget. Hidden until there is something to confirm.
+        self.confirm_rerun_button = pn.widgets.Button(
+            name="Run it anyway", button_type="warning", visible=False,
+        )
+        self.confirm_rerun_button.on_click(self._on_confirm_rerun)
+        self._pending_rerun = None
 
     # ── Run / cancel ─────────────────────────────────────────────────────
 
@@ -69,6 +77,86 @@ class ExecutionMixin:
             return
 
         recipe = make_recipe(self.app._recording_id, self._build_steps(), span=span)
+        self._launch_recipe(recipe)
+
+    # ── T64: a parameter edit asks for its suffix to be redrawn ──────────
+
+    def request_suffix_recompute(self, chain, changed_index):
+        """A card's parameter changed; redraw the filmstrip from that step on.
+
+        Cheap suffixes just run — tuning a filter should feel immediate.
+        Expensive ones are held: the estimate is stated and the confirm
+        control appears, because the alternative is a keystroke starting an
+        hours-long matrix profile. Which of the two applies is
+        `_suffix_recompute_plan`'s decision, against the same interactive
+        budget the cluster routing uses.
+
+        Returns the plan, so a caller (and a test) can see what was decided
+        without inspecting the surface.
+        """
+        if self._thread is not None and self._thread.is_alive():
+            self.status.object = "**A run is already in progress.**"
+            return None
+
+        try:
+            recipe = chain.to_recipe()
+        except (ValueError, TypeError) as e:
+            # An incomplete or invalid chain is a normal state mid-edit, not
+            # an error to shout about — the builder already says what is
+            # wrong with it. TypeError is in here on purpose: with no
+            # recording selected yet, `make_recipe` fails on `int(None)`
+            # rather than raising ValueError, and an exception escaping a
+            # parameter watcher would break the widget rather than the run.
+            self.status.object = f"*Not re-running: {e}*"
+            return None
+
+        plan = self._suffix_recompute_plan(recipe, changed_index)
+
+        if plan["requires_confirmation"]:
+            self._pending_rerun = (recipe, plan)
+            self.confirm_rerun_button.visible = True
+            self.status.object = (
+                f"**Re-running from step {changed_index + 1} would recompute "
+                f"{len(plan['indices'])} step(s) — estimate "
+                f"{_format_duration_human(plan['estimate_s'])}.** "
+                "Confirm to run it."
+            )
+            return plan
+
+        self._clear_pending_rerun()
+        self._launch_recipe(recipe, stale_indices=plan["indices"])
+        return plan
+
+    def _on_confirm_rerun(self, _event=None):
+        """Run the suffix that was held back for being expensive."""
+        pending = self._pending_rerun
+        self._clear_pending_rerun()
+        if pending is None:
+            return
+        recipe, plan = pending
+        self._launch_recipe(recipe, stale_indices=plan["indices"])
+
+    def _clear_pending_rerun(self):
+        self._pending_rerun = None
+        self.confirm_rerun_button.visible = False
+
+    # ── T64: launching an arbitrary recipe ───────────────────────────────
+
+    def _launch_recipe(self, recipe, stale_indices=()):
+        """Run `recipe` on the background thread and render it as it lands.
+
+        Extracted from `_on_run` so the suffix re-run reuses the identical
+        worker rather than growing a second copy that would drift from it.
+        `stale_indices` are the steps being recomputed; they are marked in the
+        filmstrip while the run is in flight (see `_build_filmstrip`), and the
+        prefix keeps its cached plots.
+
+        The suffix is not executed selectively here, and does not need to be:
+        `execute_recipe` already reuses every cached prefix step, so running
+        the whole recipe recomputes exactly the invalidated suffix. The plan
+        is what lets the surface say so in advance.
+        """
+        self._rerun_stale_indices = set(stale_indices or ())
         self._last_recipe = recipe
         self._last_recording = self.app._recording_id
 

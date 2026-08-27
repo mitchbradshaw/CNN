@@ -566,3 +566,151 @@ def test_filmstrip_marks_stale_steps_while_rerun_in_flight():
         assert "stale" not in titles[0].lower(), titles
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T64: editing a parameter launches the suffix, when opted in ──────────────
+#
+# Wiring the plan to an actual trigger. The opt-in is the card's OWN checkbox,
+# not `DeriveMixin.auto_preview_checkbox`: the mixin reassigns that one from the
+# span length every time recommendations are applied, so a researcher who turned
+# it off would find it back on after changing span. An opt-in that reverts by
+# itself is not an opt-in.
+
+
+def _chain_card(app, recording_id, steps):
+    """A builder card over a chain of `steps`, plus that card's chain.
+
+    `recording_id` is set explicitly: a fresh `ViewerApp` has none selected,
+    and a chain without one cannot serialise to a recipe at all.
+    """
+    builder = app.chain_builder
+    builder.chain.recording_id = recording_id
+    builder.chain.steps = []
+    for stage, algorithm, params in steps:
+        builder.chain.add_step(stage, algorithm, params=params)
+    builder._refresh()
+    return builder
+
+
+def _capture_launches(rp):
+    """Record `_launch_recipe` calls instead of starting a run."""
+    calls = []
+    rp._launch_recipe = lambda recipe, stale_indices=(): calls.append(
+        {"recipe": recipe, "stale_indices": set(stale_indices)}
+    )
+    return calls
+
+
+def test_param_edit_does_not_launch_a_run_when_auto_run_is_off():
+    """Off by default: a stray keystroke in a parameter box must never start
+    work. This is the whole reason the trigger is opt-in."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        assert card.auto_run_checkbox.value is False, "auto-run must default to off"
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+        assert calls == [], "a parameter edit launched a run with auto-run off"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_cheap_suffix_launches_and_marks_only_the_suffix_stale():
+    """Opted in and cheap: it just runs, and only the suffix is marked stale."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        card.auto_run_checkbox.value = True
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        assert calls[0]["stale_indices"] == {1, 2}, calls[0]["stale_indices"]
+        assert rp.confirm_rerun_button.visible is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_expensive_suffix_asks_before_launching():
+    """Opted in but expensive: nothing runs, the estimate is stated, and the
+    confirm control appears. Losing an afternoon to a keystroke is the thing
+    being prevented."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+
+            pname = next(iter(card._param_widgets))
+            card._on_param_changed(pname)
+
+            assert calls == [], "an expensive suffix launched without asking"
+            assert rp.confirm_rerun_button.visible is True
+            assert "estimate" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_confirming_launches_the_suffix_that_was_held():
+    """The held suffix is exactly what runs when the researcher confirms."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+            card._on_param_changed(next(iter(card._param_widgets)))
+            assert calls == []
+
+            rp._on_confirm_rerun(None)
+            assert len(calls) == 1, "confirming did not launch the held suffix"
+            assert calls[0]["stale_indices"] == {1}
+            assert rp.confirm_rerun_button.visible is False, "control stayed visible"
+    finally:
+        _close_and_unlink(app, db_path)
