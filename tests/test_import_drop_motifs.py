@@ -242,6 +242,10 @@ def test_rerun_at_same_threshold_replaces_edges_not_duplicates():
         assert edge_count == r1["n_edges"], (
             f"expected {r1['n_edges']} edges after re-run at same threshold, "
             f"got {edge_count}")
+        # Entries are content-keyed too: the same exemplars are reused, so
+        # the entry count does not grow either.
+        entry_count = conn.execute("SELECT COUNT(*) FROM motif_entry").fetchone()[0]
+        assert entry_count == r1["n_entries"] + r1["n_train_entries"]
         # Members are content-keyed and never duplicated (criterion 1).
         member_count = conn.execute("SELECT COUNT(*) FROM motif_member").fetchone()[0]
         assert member_count == SEED_N_MOTIFS + r1["n_train_members"]
