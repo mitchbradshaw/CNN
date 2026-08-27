@@ -614,3 +614,12 @@ deviations. The file list is now corrected in the ticket.
 ## T63 — 2026-08-27 12:44
 
 - [minor] [standards] (no rule cited) invalidated_step_indices(recipe, step_index) mirrors _recipe_prefix_hash's (recipe, up_to_index) parameter shape — consistent with existing module convention, flagged as a Data Clumps judgement call only
+
+## T69 — 2026-08-27 16:05
+
+- [minor] [standards] (no rule cited) Compare reaches into builder.py's private (_-prefixed) card-rendering surface instead of a purposely-exposed method
+- [major] [standards] (rule 6.1) _ReadOnlyCardApp implies read-only but rendered cards keep live move/delete/param-edit controls wired to a throwaway chain
+- [minor] [standards] (no rule cited) _builder_for_recipe builds a full ChainBuilder (running __init__'s _refresh()) only to discard it and reach one method
+- [minor] [standards] (no rule cited) test's _is_highlighted hardcodes the highlight hex colour, duplicating a cosmetic literal between prod and test
+- [minor] [spec] (no rule cited) Reusing the builder's card wholesale leaves live edit affordances (↑/↓/Delete, param widgets) on what the spec frames as a read-only comparison canvas
+- [minor] [spec] (no rule cited) Diff highlighting marks the step card but not the connecting arrow/placeholder distinctly for added/removed steps
