@@ -412,6 +412,25 @@ def test_block_inspector_mounts_into_the_analyse_workspace_as_a_real_pane():
         _close_and_unlink(app, db_path)
 
 
+# ── deletion (ticket 60) ────────────────────────────────────────────────────
+
+def test_block_inspector_is_removed_from_the_analyse_workspace():
+    from UI import workspaces
+
+    workspaces.reset()
+    try:
+        analyse = [label for label, _ in workspaces.sections("Analyse")]
+        assert "Block inspector" not in analyse, \
+            "Block inspector must no longer be registered as an Analyse section"
+    finally:
+        workspaces.reset()
+
+
+def test_block_inspector_module_no_longer_exists():
+    import importlib.util
+    assert importlib.util.find_spec("UI.workspaces.analyse.inspector") is None
+
+
 # ── runner ──────────────────────────────────────────────────────────────────
 
 def _run_all():
