@@ -117,6 +117,28 @@ def _recipe_prefix_hash(recipe, up_to_index):
     return recipe_hash(prefix)
 
 
+def invalidated_step_indices(recipe, step_index):
+    """The step indices a change at `step_index` invalidates: that step and
+    every step after it — the suffix, and only the suffix.
+
+    The step cache is keyed on a recipe-*prefix* hash (`_recipe_prefix_hash`),
+    so editing step N cannot alter the prefix hash of any step before N;
+    those cached artifacts stay valid. Step N's own hash and every later
+    step's hash change, so they must all be recomputed. Re-running the whole
+    chain would be correct but, on any chain containing a matrix profile, the
+    difference between instant and hours.
+
+    Pure: reads only `recipe["steps"]`; no database, execution or UI.
+    """
+    n_steps = len(recipe["steps"])
+    if not 0 <= step_index < n_steps:
+        raise IndexError(
+            f"Step index {step_index} is outside the recipe's {n_steps} steps "
+            f"(valid: 0..{n_steps - 1})."
+        )
+    return set(range(step_index, n_steps))
+
+
 def _load_cached_result(spec, cached_path):
     """Load a cached typed step output into an `AdapterResult`.
 
