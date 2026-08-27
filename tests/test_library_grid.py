@@ -43,7 +43,7 @@ pn.extension("tabulator")
 import holoviews as hv
 hv.extension("bokeh")
 
-from Working.database.schema import init_db
+from Working.database.schema import ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN, init_db
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.database import vocabulary as v
@@ -146,6 +146,69 @@ def _make_three_entry_library(npy_dir):
     return conn, (e1, e2, e3)
 
 
+def _set_entry_scale(conn, entry_id, scale):
+    """Stamp an entry with one of the two T52 scales."""
+    conn.execute(
+        "UPDATE motif_entry SET scale = ? WHERE id = ?", (scale, entry_id),
+    )
+    conn.commit()
+
+
+def _make_two_axis_library(npy_dir):
+    """A scratch library with the two T54 axes represented in the data.
+
+    Two spike trains (train-scale entries) live on two different recordings.
+    Two event-scale family entries live one on each recording. The first
+    family spans both recordings through a second `motif_member`, so its card
+    is cross-recording. Each event entry's own span is also a member of its
+    spike-train entry, which is how provenance is resolved.
+
+    Returns (conn, (train_a, train_b, family_a, family_b)).
+    """
+    conn = init_db(":memory:")
+    v.seed_vocabulary(conn)
+    sig = np.zeros(200)
+    rec_a = _write_recording(conn, npy_dir, "A.mat", 0, sig)
+    rec_b = _write_recording(conn, npy_dir, "B.mat", 1, sig)
+
+    train_a = R.insert_motif_entry(
+        conn, rec_a, 0, 200, label="spike train id001",
+    )
+    _set_entry_scale(conn, train_a, ENTRY_SCALE_TRAIN)
+    train_b = R.insert_motif_entry(
+        conn, rec_b, 0, 200, label="spike train id002",
+    )
+    _set_entry_scale(conn, train_b, ENTRY_SCALE_TRAIN)
+
+    family_a = R.insert_motif_entry(
+        conn, rec_a, 10, 50, label="drop family 0",
+    )
+    _set_entry_scale(conn, family_a, ENTRY_SCALE_EVENT)
+    family_b = R.insert_motif_entry(
+        conn, rec_b, 110, 150, label="drop family 1",
+    )
+    _set_entry_scale(conn, family_b, ENTRY_SCALE_EVENT)
+
+    # Every event's span belongs to exactly one train.
+    R.get_or_create_motif_member(conn, train_a, rec_a, 10, 50)
+    R.get_or_create_motif_member(conn, train_b, rec_b, 110, 150)
+
+    # Family A spans both recordings; family B stays on its own recording.
+    R.get_or_create_motif_member(conn, family_a, rec_a, 10, 50)
+    R.get_or_create_motif_member(conn, family_a, rec_b, 10, 50)
+    R.get_or_create_motif_member(conn, family_b, rec_b, 110, 150)
+    return conn, (train_a, train_b, family_a, family_b)
+
+
+def _card_markdown_texts(card):
+    """Every markdown string rendered inside one card, for text assertions."""
+    texts = []
+    for obj in card:
+        if isinstance(obj, pn.pane.Markdown):
+            texts.append(obj.object or "")
+    return texts
+
+
 # ── criterion 1: the selector exists and offers the three bases ─────────────
 
 def test_library_grid_has_grouping_selector():
@@ -154,37 +217,25 @@ def test_library_grid_has_grouping_selector():
         grid = LibraryGrid(_FakeLibraryApp(conn))
         assert grid.group_by is not None
         bases = set(grid.group_by.options.values())
-        assert {"shape", "cluster", "tag"} <= bases, bases
+        assert {"provenance", "family", "tag"} <= bases, bases
     finally:
         conn.close()
 
 
-# ── criterion 2: shape grouping groups by sax_string ────────────────────────
+# ── criterion 2: shape-family grouping sections one entry per family ────────
 
-def test_group_by_shape_groups_entries_by_sax_string():
+def test_group_by_family_lists_each_entry_as_its_own_family():
     with tempfile.TemporaryDirectory() as npy_dir:
         conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "shape"
-            groups = dict(grid.groups)
-            assert set(groups["aaa"]) == {e1, e2}
-            assert set(groups["bbb"]) == {e3}
-        finally:
-            conn.close()
-
-
-# ── criterion 3: cluster membership lists each entry as its own cluster ─────
-
-def test_group_by_cluster_lists_each_entry_as_its_own_cluster():
-    with tempfile.TemporaryDirectory() as npy_dir:
-        conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
-        try:
-            grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "cluster"
+            grid.group_by.value = "family"
             assert len(grid.groups) == 3
             for title, entry_ids in grid.groups:
                 assert len(entry_ids) == 1, (title, entry_ids)
+            assert {title for title, _ids in grid.groups} == {
+                "sine-a", "sine-b", "sine-c",
+            }
         finally:
             conn.close()
 
@@ -214,17 +265,19 @@ def test_group_by_selector_rerenders_the_layout_when_changed():
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
             layout = grid.layout()
-            assert set(_group_titles_from_layout(layout)) == {"aaa", "bbb"}
+
+            grid.group_by.value = "family"
+            assert set(_group_titles_from_layout(layout)) == {
+                "sine-a", "sine-b", "sine-c",
+            }
 
             grid.group_by.value = "tag"
             assert set(_group_titles_from_layout(layout)) == {
                 "sharkfin", "ridge", "untagged",
             }
 
-            grid.group_by.value = "cluster"
-            assert set(_group_titles_from_layout(layout)) == {
-                "sine-a", "sine-b", "sine-c",
-            }
+            grid.group_by.value = "provenance"
+            assert set(_group_titles_from_layout(layout)) == {"A.mat CH00"}
         finally:
             conn.close()
 
@@ -237,7 +290,7 @@ def test_all_grouping_bases_show_the_same_entries():
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
             all_ids = {e1, e2, e3}
-            for basis in ("shape", "cluster", "tag"):
+            for basis in ("provenance", "family", "tag"):
                 grid.group_by.value = basis
                 grouped_ids = {
                     eid
@@ -259,7 +312,7 @@ def test_thumbnails_share_y_range_within_shape_family_in_millivolts():
         conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "shape"
+            grid.group_by.value = "family"
             ranges = {
                 eid: _card_ylim(grid._card_by_entry[eid])
                 for eid in (e1, e2, e3)
@@ -289,6 +342,107 @@ def test_thumbnail_grid_constructs_headlessly_with_non_none_panes():
                 thumbs = [o for o in card if isinstance(o, pn.pane.HoloViews)]
                 assert len(thumbs) == 1, card
                 assert thumbs[0].object is not None
+        finally:
+            conn.close()
+
+
+# ── T54: provenance vs shape-family axes ─────────────────────────────────────
+
+def test_library_grid_has_provenance_and_shape_family_axes():
+    conn = init_db(":memory:")
+    try:
+        grid = LibraryGrid(_FakeLibraryApp(conn))
+        bases = set(grid.group_by.options.values())
+        assert {"provenance", "family"} <= bases, bases
+    finally:
+        conn.close()
+
+
+def test_group_by_provenance_groups_entries_by_spike_train():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, train_b, family_a, family_b) = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.group_by.value = "provenance"
+            groups = {title: set(ids) for title, ids in grid.groups}
+            assert groups["spike train id001"] == {train_a, family_a}
+            assert groups["spike train id002"] == {train_b, family_b}
+        finally:
+            conn.close()
+
+
+def test_group_by_shape_family_groups_each_computed_family():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, train_b, family_a, family_b) = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.group_by.value = "family"
+            groups = {title: set(ids) for title, ids in grid.groups}
+            assert groups["drop family 0"] == {family_a}
+            assert groups["drop family 1"] == {family_b}
+            assert groups["spike train id001"] == {train_a}
+            assert groups["spike train id002"] == {train_b}
+        finally:
+            conn.close()
+
+
+def test_provenance_and_shape_axes_show_the_same_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, ids = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            all_ids = set(ids)
+            for basis in ("provenance", "family"):
+                grid.group_by.value = basis
+                grouped_ids = {
+                    eid
+                    for _title, entry_ids in grid.groups
+                    for eid in entry_ids
+                }
+                assert grouped_ids == all_ids, basis
+        finally:
+            conn.close()
+
+
+def test_cross_recording_family_is_marked_on_its_card():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, family_a, family_b) = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            family_a_text = " ".join(_card_markdown_texts(grid._card_by_entry[family_a])).lower()
+            family_b_text = " ".join(_card_markdown_texts(grid._card_by_entry[family_b])).lower()
+            assert "cross-recording" in family_a_text, family_a_text
+            assert "cross-recording" not in family_b_text, family_b_text
+        finally:
+            conn.close()
+
+
+def test_train_and_event_cards_are_visually_distinguishable():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, _train_b, family_a, _family_b) = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            train_text = " ".join(_card_markdown_texts(grid._card_by_entry[train_a])).lower()
+            family_text = " ".join(_card_markdown_texts(grid._card_by_entry[family_a])).lower()
+            assert "train-scale" in train_text, train_text
+            assert "event-scale" in family_text, family_text
+        finally:
+            conn.close()
+
+
+def test_grid_constructs_headlessly_with_non_none_panes_under_each_axis():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, _ids = _make_two_axis_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            layout = grid.layout()
+            for basis in ("provenance", "family"):
+                grid.group_by.value = basis
+                assert layout is not None
+                assert grid._sections is not None
+                assert len(grid._sections.objects) > 0
+                assert all(obj is not None for obj in grid._sections.objects)
+                assert all(card is not None for card in grid.cards)
         finally:
             conn.close()
 

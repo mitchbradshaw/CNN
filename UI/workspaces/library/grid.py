@@ -34,6 +34,7 @@ import panel as pn
 
 from Working.database import queries as q
 from Working.database import runs as R
+from Working.database.schema import ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN
 from Working.database.vocabulary import get_motif_entry_tags
 from UI.plots import SEED_MOTIF_COLOR, load_channel_mmap
 
@@ -44,12 +45,11 @@ _Y_PAD_FRACTION = 0.12
 
 # The grouping bases the selector offers, label -> value.
 GROUPING_OPTIONS = {
-    "Shape": "shape",
-    "Cluster membership": "cluster",
+    "Provenance": "provenance",
+    "Shape family": "family",
     "Manual tag": "tag",
 }
 
-_UNCLASSIFIED = "unclassified"
 _UNTAGGED = "untagged"
 
 
@@ -67,7 +67,7 @@ class LibraryGrid:
         self.scope_panes = []
         self._card_by_entry = {}
         self.group_by = pn.widgets.Select(
-            name="Group by", options=GROUPING_OPTIONS, value="shape",
+            name="Group by", options=GROUPING_OPTIONS, value="provenance",
         )
         self.group_by.param.watch(self._on_group_by, "value")
         self._build()
@@ -111,29 +111,90 @@ class LibraryGrid:
 
     def _group_entries(self):
         basis = self.group_by.value
-        if basis == "shape":
-            return self._group_by_shape()
-        if basis == "cluster":
-            return self._group_by_cluster()
+        if basis == "provenance":
+            return self._group_by_provenance()
+        if basis == "family":
+            return self._group_by_family()
         if basis == "tag":
             return self._group_by_tag()
         raise ValueError(f"Unknown grouping basis {basis!r}")
 
-    def _group_by_shape(self):
-        """Group entries by their symbolic shape (`sax_string`)."""
-        order = {}
-        for entry in self.entries:
-            key = entry["sax_string"] or _UNCLASSIFIED
-            order.setdefault(key, []).append(entry["id"])
-        return [(key, ids) for key, ids in sorted(order.items())]
+    def _group_by_provenance(self):
+        """Group entries by the spike train their exemplar came from.
 
-    def _group_by_cluster(self):
-        """Group entries by family: the shape-first library's clusters *are*
-        the motif families, so each entry heads its own cluster."""
+        A train-scale entry is its own provenance. An event-scale entry's
+        provenance is the train-scale entry whose members include the
+        exemplar's own span — every imported motif belongs to exactly one
+        train, so this is a lookup, not a clustering. Entries without a
+        train (e.g. hand-flagged entries from before the importer ran) fall
+        back to their recording so they are never dropped.
+        """
+        by_train = {}
+        by_recording = {}
+        for entry in self.entries:
+            train_id = self._provenance_train_id(entry)
+            if train_id is not None:
+                by_train.setdefault(train_id, []).append(entry["id"])
+            else:
+                by_recording.setdefault(entry["recording_id"], []).append(entry["id"])
+
+        groups = []
+        for train_id, ids in sorted(by_train.items(), key=lambda kv: self._provenance_title(kv[0])):
+            groups.append((self._provenance_title(train_id), ids))
+        for recording_id, ids in sorted(by_recording.items(), key=lambda kv: self._recording_title(kv[0])):
+            groups.append((self._recording_title(recording_id), ids))
+        return groups
+
+    def _group_by_family(self):
+        """Group entries by computed shape family.
+
+        Each event-scale entry IS the exemplar of one computed family, so it
+        heads one section. Train-scale entries have no shape family; they
+        stay their own sections so both scales appear under either axis
+        without intermixing.
+        """
         return [
-            (entry["label"] or f"Exemplar {entry['id']}", [entry["id"]])
+            (self._family_title(entry), [entry["id"]])
             for entry in self.entries
         ]
+
+    def _provenance_train_id(self, entry):
+        """The train-scale entry id an entry belongs to, or None."""
+        if entry["scale"] == ENTRY_SCALE_TRAIN:
+            return entry["id"]
+        return self._train_by_member_span.get(
+            (entry["recording_id"], entry["start_idx"], entry["end_idx"]),
+        )
+
+    def _provenance_title(self, train_id):
+        for entry in self.entries:
+            if entry["id"] == train_id:
+                return entry["label"] or f"Spike train {train_id}"
+        return f"Spike train {train_id}"
+
+    def _family_title(self, entry):
+        if entry["scale"] == ENTRY_SCALE_TRAIN:
+            return entry["label"] or f"Spike train {entry['id']}"
+        return entry["label"] or f"Family {entry['id']}"
+
+    def _recording_title(self, recording_id):
+        recording = q.get_recording_by_id(self.conn, recording_id)
+        if recording is None:
+            return f"Recording {recording_id}"
+        return f"{recording['source_file']} CH{recording['channel']:02d}"
+
+    def _build_train_member_span_map(self):
+        """{(recording_id, start_idx, end_idx): train_entry_id} for every
+        motif belonging to a train-scale entry."""
+        mapping = {}
+        for entry in self.entries:
+            if entry["scale"] != ENTRY_SCALE_TRAIN:
+                continue
+            for member in R.list_motif_members(self.conn, entry["id"]):
+                mapping[
+                    (member["recording_id"], member["start_idx"], member["end_idx"])
+                ] = entry["id"]
+        return mapping
 
     def _group_by_tag(self):
         """Group entries by manual tag. An entry with several tags appears
@@ -160,6 +221,7 @@ class LibraryGrid:
         self.scope_panes = []
         self._card_by_entry = {}
         self.entries = R.list_motif_entries(self.conn)
+        self._train_by_member_span = self._build_train_member_span_map()
         family_ranges = self._family_y_ranges()
         for entry in self.entries:
             card, scope_pane = self._build_card(entry, family_ranges)
@@ -180,10 +242,17 @@ class LibraryGrid:
                 entry, recording, family_ranges.get(self._family_key(entry)),
             )
 
-        scope_text = self._scope_summary(entry)
+        recording_ids = self._member_recording_ids(entry)
+        scope_text = self._scope_summary(entry, recording_ids)
         scope_pane = pn.pane.Markdown(scope_text)
+
+        badges = [self._scale_badge(entry)]
+        if len(recording_ids) > 1:
+            badges.append(pn.pane.Markdown("**Cross-recording**"))
+
         card = pn.Column(
             pn.pane.Markdown(f"**{title}**"),
+            *badges,
             thumb,
             scope_pane,
             width=_CARD_WIDTH,
@@ -191,6 +260,25 @@ class LibraryGrid:
                     "padding": "8px"},
         )
         return card, scope_pane
+
+    def _scale_badge(self, entry):
+        """A visible train/event badge so the two scales do not intermix
+        into one undifferentiated grid (T52/T54)."""
+        label = {
+            ENTRY_SCALE_TRAIN: "TRAIN-SCALE",
+            ENTRY_SCALE_EVENT: "EVENT-SCALE",
+        }.get(entry["scale"], "UNSCALED")
+        return pn.pane.Markdown(f"**{label}**")
+
+    def _member_recording_ids(self, entry):
+        """Every recording a family touches: the exemplar's own recording
+        plus every member's, deduplicated."""
+        recording_ids = {entry["recording_id"]}
+        recording_ids.update(
+            member["recording_id"]
+            for member in R.list_motif_members(self.conn, entry["id"])
+        )
+        return recording_ids
 
     # ── Family y-ranges (ticket 53) ────────────────────────────────────
 
@@ -260,13 +348,7 @@ class LibraryGrid:
             curve, sizing_mode="stretch_width", height=_THUMB_HEIGHT,
         )
 
-    def _scope_summary(self, entry):
-        recording_ids = {entry["recording_id"]}
-        recording_ids.update(
-            member["recording_id"]
-            for member in R.list_motif_members(self.conn, entry["id"])
-        )
-
+    def _scope_summary(self, entry, recording_ids):
         scopes = []
         for recording_id in sorted(recording_ids):
             recording = q.get_recording_by_id(self.conn, recording_id)
