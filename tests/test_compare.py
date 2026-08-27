@@ -52,6 +52,33 @@ def _add_detections(conn, run_id, spans):
     return [run_db.insert_detection(conn, run_id, s, e) for s, e in spans]
 
 
+def _make_named_comparison_runs(steps_a, steps_b, name_a="tuned lowpass", name_b="raw"):
+    """A fresh in-memory database with two completed, differently-named runs
+    whose recipes are built from the supplied step lists."""
+    conn = init_db(":memory:")
+    recording_id = q.insert_recording(conn, "fake_compare.mat", 0, 1.0, 10_000, 0, "fake.npy")
+    recipe_a = make_recipe(recording_id, steps_a)
+    recipe_b = make_recipe(recording_id, steps_b)
+    config_a, _ = run_db.get_or_create_config(conn, recipe_a)
+    config_b, _ = run_db.get_or_create_config(conn, recipe_b)
+    run_a = run_db.insert_run(conn, config_a, recording_id, 0, 10_000,
+                              status="completed", name=name_a)
+    run_b = run_db.insert_run(conn, config_b, recording_id, 0, 10_000,
+                              status="completed", name=name_b)
+    return conn, run_a, run_b
+
+
+def _card_columns(pane):
+    """The direct child `pn.Column` cards of a chain-canvas row."""
+    return [obj for obj in getattr(pane, "objects", ()) if isinstance(obj, pn.Column)]
+
+
+def _is_highlighted(card):
+    """Whether a compare card carries the T69 highlight background."""
+    styles = getattr(card, "styles", {}) or {}
+    return styles.get("background") == "#fff7e6"
+
+
 def _close(conn):
     conn.close()
 
@@ -450,6 +477,91 @@ def test_compare_surface_routes_exclusive_remainder_to_review_queue():
         surface._route_to_review("b")
         assert app.activations[-1] == ("Review", "Candidate queue")
         assert all(row["run_id"] == run_b for row in review.queue.candidates)
+    finally:
+        _close(conn)
+
+
+def test_compare_surface_run_labels_show_name_alongside_id():
+    from UI.workspaces.analyse.compare import CompareSurface
+
+    label = CompareSurface._run_label({
+        "id": 12,
+        "name": "tuned lowpass",
+        "recording_id": 7,
+        "span_start": 0,
+        "span_end": 100,
+    })
+    assert "#12" in label
+    assert "tuned lowpass" in label
+
+
+def test_compare_surface_renders_stacked_chain_canvases_for_differing_runs():
+    from UI.workspaces.analyse.compare import CompareSurface
+
+    conn, run_a, run_b = _make_named_comparison_runs(
+        [{"stage": "preprocessing", "algorithm": "lowpass",
+          "params": {"cutoff_hz": 0.05}}],
+        [{"stage": "preprocessing", "algorithm": "lowpass",
+          "params": {"cutoff_hz": 0.06}}],
+    )
+    try:
+        surface = CompareSurface(_FakeApp(conn))
+        surface.run_a_select.value = run_a
+        surface.run_b_select.value = run_b
+        surface._on_compare()
+
+        assert surface.chain_a_pane is not None
+        assert surface.chain_b_pane is not None
+        assert len(surface.chain_a_pane.objects) >= 1
+        assert len(surface.chain_b_pane.objects) >= 1
+        assert all(obj is not None for obj in surface.chain_a_pane.objects)
+        assert all(obj is not None for obj in surface.chain_b_pane.objects)
+        assert "cutoff_hz" in surface.diff_summary_pane.object
+        assert "Overlap" in surface.summary_pane.object
+    finally:
+        _close(conn)
+
+
+def test_compare_surface_renders_stacked_chain_canvases_for_identical_runs():
+    from UI.workspaces.analyse.compare import CompareSurface
+
+    steps = [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}]
+    conn, run_a, run_b = _make_named_comparison_runs(steps, steps)
+    try:
+        surface = CompareSurface(_FakeApp(conn))
+        surface.run_a_select.value = run_a
+        surface.run_b_select.value = run_b
+        surface._on_compare()
+
+        assert surface.chain_a_pane is not None
+        assert surface.chain_b_pane is not None
+        assert len(surface.chain_a_pane.objects) >= 1
+        assert len(surface.chain_b_pane.objects) >= 1
+        assert "identical" in surface.diff_summary_pane.object.lower()
+    finally:
+        _close(conn)
+
+
+def test_compare_surface_highlights_the_differing_cards():
+    from UI.workspaces.analyse.compare import CompareSurface
+
+    conn, run_a, run_b = _make_named_comparison_runs(
+        [{"stage": "preprocessing", "algorithm": "lowpass",
+          "params": {"cutoff_hz": 0.05}}],
+        [{"stage": "preprocessing", "algorithm": "lowpass",
+          "params": {"cutoff_hz": 0.06}}],
+    )
+    try:
+        surface = CompareSurface(_FakeApp(conn))
+        surface.run_a_select.value = run_a
+        surface.run_b_select.value = run_b
+        surface._on_compare()
+
+        a_cards = _card_columns(surface.chain_a_pane)
+        b_cards = _card_columns(surface.chain_b_pane)
+        assert any(_is_highlighted(card) for card in a_cards)
+        assert any(_is_highlighted(card) for card in b_cards)
     finally:
         _close(conn)
 
