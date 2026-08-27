@@ -556,8 +556,13 @@ def test_filmstrip_marks_stale_steps_while_rerun_in_flight():
         layout = rp._build_filmstrip(
             recipe, step_results, input_value=input_value, stale_indices={1},
         )
+        # The layout is [chain input, step 0, step 1], so a `stale_indices`
+        # of {1} marks the LAST element. The prefix step 0 — the one whose
+        # cached result is still valid — must stay unmarked; that, not the
+        # chain input, is the negative case worth asserting.
         titles = [str(p.opts.get("plot").kwargs.get("title", "")) for p in layout.values()]
-        assert "stale" in titles[1].lower(), titles
+        assert "stale" in titles[2].lower(), titles
+        assert "stale" not in titles[1].lower(), titles
         assert "stale" not in titles[0].lower(), titles
     finally:
         _close_and_unlink(app, db_path)
