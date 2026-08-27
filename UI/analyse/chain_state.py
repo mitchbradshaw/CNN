@@ -35,8 +35,12 @@ recipe schema (`Working.recipes.make_recipe`) does not yet carry bindings
 round-trip `stage`/`algorithm`/`params`.
 """
 
+import os
+
 from Adapters.registry import discover_adapters, get_adapter, list_adapters
 from Working.chain_validation import ROOT_SIGNAL_KIND, check_step_compatibility, validate_recipe_steps
+from Working.database.runs import get_step_artifact
+from Working.execution import _recipe_prefix_hash
 from Working.recipes import make_recipe
 
 
@@ -167,6 +171,78 @@ class ChainState:
             (block,) + check_step_compatibility(producing_kind, block)
             for block in list_adapters()
         ]
+
+    # ── filmstrip plan (ticket 61) ──────────────────────────────────────
+
+    def filmstrip_plan(self, conn):
+        """Ordered per-step plan for what the filmstrip should render — the
+        decision the T62 surface renders, kept here headlessly so the whole
+        feature is testable without a browser.
+
+        Each entry is a dict::
+
+            {
+                "position": <int>,      # 0-based index in execution order
+                "label": <str>,         # adapter display name
+                "input_type": <str>,    # interchange type feeding this step
+                "output_type": <str>,   # interchange type this step produces
+                "cache_state": <str>,   # "current" or "stale"
+            }
+
+        `cache_state` comes from the existing content-addressed step cache
+        (keyed on a recipe-prefix hash): a step is current when its prefix
+        hash has a cached artifact on disk, stale otherwise. An empty chain
+        returns `[]`.
+        """
+        plan = []
+        producing_kind = ROOT_SIGNAL_KIND
+        for i, step in enumerate(self.steps):
+            spec = self._adapter_spec(step)
+            output_type = spec.output_kind if spec is not None else None
+            plan.append({
+                "position": i,
+                "label": spec.display_name if spec is not None else f"{step['stage']}.{step['algorithm']}",
+                "input_type": producing_kind,
+                "output_type": output_type,
+                "cache_state": self._cache_state(conn, i),
+            })
+            producing_kind = output_type
+        return plan
+
+    def _adapter_spec(self, step):
+        """The adapter spec for a step, or None if the registry doesn't
+        know `stage.algorithm` (an unknown adapter can't be typed)."""
+        try:
+            return get_adapter(f"{step['stage']}.{step['algorithm']}")
+        except KeyError:
+            return None
+
+    def _cache_state(self, conn, step_index):
+        """"current" if the step's recipe-prefix hash has a cached artifact
+        on disk, else "stale"."""
+        prefix_hash = self._prefix_hash(step_index)
+        if prefix_hash is None:
+            return "stale"
+        row = get_step_artifact(conn, prefix_hash, step_index)
+        if row is None or not os.path.isdir(row["path"]):
+            return "stale"
+        return "current"
+
+    def _prefix_hash(self, step_index):
+        """The step-cache key for `steps[step_index]` — the recipe prefix
+        through that step, hashed exactly as the executor's step cache does
+        (`Working.execution._recipe_prefix_hash`). Returns None when the
+        prefix is not a valid recipe, so nothing could have been cached for
+        it."""
+        prefix_steps = [
+            {"stage": s["stage"], "algorithm": s["algorithm"], "params": s["params"]}
+            for s in self.steps[:step_index + 1]
+        ]
+        try:
+            recipe = make_recipe(self.recording_id, prefix_steps, self.span)
+        except ValueError:
+            return None
+        return _recipe_prefix_hash(recipe, step_index)
 
     # ── internals ────────────────────────────────────────────────────────
 
