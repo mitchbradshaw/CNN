@@ -196,8 +196,13 @@ class LibraryGrid:
 
     def _family_key(self, entry):
         """The shape family an entry belongs to — the basis the PRD's "same
-        shape" definition is built on (`sax_string`)."""
-        return entry["sax_string"] or _UNCLASSIFIED
+        shape" definition is built on (`sax_string`).
+
+        An entry with no `sax_string` (e.g. an imported entry, where each
+        entry IS the exemplar of its own cluster/family) is its own family:
+        falling back to the row id keeps one imported entry from borrowing
+        another's y-range and flattening its depth."""
+        return entry["sax_string"] or f"entry:{entry['id']}"
 
     def _family_y_ranges(self):
         """{family_key: (y0, y1)} — one y-range shared by every card in the
