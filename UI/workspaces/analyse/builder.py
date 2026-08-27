@@ -414,6 +414,7 @@ class ChainBuilder:
         self.add_column = pn.Column(sizing_mode="stretch_width")
         self.cards = []
         self.connectors = []
+        self._active_insert_index = None
         self._refresh()
 
     def layout(self):
@@ -422,7 +423,7 @@ class ChainBuilder:
             self.status,
             self.steps_row,
             pn.layout.Divider(),
-            pn.pane.Markdown("### Add a step"),
+            pn.pane.Markdown("### Insert a block"),
             self.add_column,
             sizing_mode="stretch_width",
         )
@@ -433,6 +434,30 @@ class ChainBuilder:
         algorithm = block.name.split(".", 1)[1]
         self.chain.add_step(block.stage, algorithm)
         self._refresh()
+
+    def _insert_step(self, block, position):
+        """Insert `block` at `position` (0-based) rather than appending.
+
+        The chain model's `add_step` already accepts an insertion index; the
+        surface has simply never offered one. Inserting mid-chain shifts every
+        step at index >= `position` up by one, so any `earlier_step` side-input
+        bound to a shifted step must follow it or it silently points at the
+        wrong (or the newly inserted) step — `_rebind_after_insertion` keeps
+        those bindings honest without changing the model.
+        """
+        algorithm = block.name.split(".", 1)[1]
+        self.chain.add_step(block.stage, algorithm, index=position)
+        self._rebind_after_insertion(position)
+        self._refresh()
+
+    def _rebind_after_insertion(self, position):
+        """Follow `earlier_step` side-inputs that pointed at a step shifted
+        by an insertion at `position`."""
+        for step in self.chain.steps:
+            for binding in step["side_inputs"].values():
+                if binding.get("source_kind") == "earlier_step" \
+                        and binding["step_index"] >= position:
+                    binding["step_index"] += 1
 
     def _move_step(self, index, delta):
         other = index + delta
@@ -454,6 +479,10 @@ class ChainBuilder:
     # ── rendering ────────────────────────────────────────────────────────
 
     def _refresh(self):
+        # Any edit closes an open + picker: the position it was bound to may
+        # have moved or gone away, and re-opening it for the new layout is
+        # less surprising than keeping a stale picker open.
+        self._active_insert_index = None
         self._render_steps()
         self._render_add_controls()
         self.status.object = "" if self.chain.is_valid else self._invalid_status()
@@ -462,7 +491,10 @@ class ChainBuilder:
         self.cards = []
         self.connectors = []
         if not self.chain.steps:
-            self.steps_row.objects = [pn.pane.Markdown(_EMPTY_STEPS_NOTICE)]
+            self.steps_row.objects = [
+                pn.pane.Markdown(_EMPTY_STEPS_NOTICE),
+                self._render_insert_button(0),
+            ]
             return
 
         objects = []
@@ -476,7 +508,17 @@ class ChainBuilder:
             card = self._render_card(i, step)
             self.cards.append(card)
             objects.append(card)
+            # A + after each card: between this card and the next (position
+            # i + 1), or after the last card (the chain's end).
+            objects.append(self._render_insert_button(i + 1))
         self.steps_row.objects = objects
+
+    def _render_insert_button(self, position):
+        """The `+` between cards / at the chain's end. Clicking it opens the
+        picker for that insertion position."""
+        button = pn.widgets.Button(name="+", width=32, button_type="default")
+        button.on_click(lambda _e, pos=position: self._open_picker(pos))
+        return button
 
     def _render_card(self, index, step):
         adapter = get_adapter(f"{step['stage']}.{step['algorithm']}")
@@ -515,17 +557,70 @@ class ChainBuilder:
             },
         )
 
+    def _open_picker(self, position):
+        """Open the block picker for `position` — the `+` was clicked. The
+        picker lives in `add_column` (the same container the old permanent
+        add-step list used) rather than permanently on the surface."""
+        self._active_insert_index = position
+        self._render_add_controls()
+
     def _render_add_controls(self):
+        """The picker rows for the open `+`, or nothing when no `+` is open.
+        Every registered block is listed; an incompatible one is disabled with
+        the reason `Working.chain_validation` gives, never filtered out."""
+        if self._active_insert_index is None:
+            self.add_column.objects = []
+            return
+        self.add_column.objects = self._picker_rows(self._active_insert_index)
+
+    def _picker_rows(self, position):
+        """The `(button, reason)` rows for inserting at `position`.
+
+        A block is compatible at `position` when it can be fed by the previous
+        step's output (or the root signal at position 0) AND its own output can
+        feed the next step. Both halves go through the one chain-validation
+        function, so the reason text is the same text the rest of the system
+        uses — this surface doesn't invent wording.
+        """
+        producing_kind = self._producing_kind_at(position)
+        next_block = self._next_block_at(position)
         rows = []
-        for block, ok, reason in self.chain.available_blocks():
+        for block in list_adapters():
+            ok, reason = check_step_compatibility(producing_kind, block)
+            if ok and next_block is not None:
+                ok_down, reason_down = check_step_compatibility(block.output_kind, next_block)
+                if not ok_down:
+                    ok, reason = False, reason_down
             button = pn.widgets.Button(
                 name=f"Add {block.display_name}",
                 disabled=not ok,
                 button_type="primary" if ok else "default",
             )
-            button.on_click(lambda _e, b=block: self._add_step(b))
+            button.on_click(lambda _e, b=block, pos=position: self._insert_step(b, pos))
             rows.append(pn.Row(button, pn.pane.Markdown(reason), sizing_mode="stretch_width"))
-        self.add_column.objects = rows
+        return rows
+
+    def _producing_kind_at(self, position):
+        """What feeds a block inserted at `position` — the previous step's
+        output, or the root signal for the chain's start."""
+        if position <= 0:
+            return ROOT_SIGNAL_KIND
+        step = self.chain.steps[position - 1]
+        try:
+            return get_adapter(f"{step['stage']}.{step['algorithm']}").output_kind
+        except KeyError:
+            return ROOT_SIGNAL_KIND
+
+    def _next_block_at(self, position):
+        """The step that will sit after an insertion at `position`, or None
+        when inserting at the chain's end."""
+        if position >= len(self.chain.steps):
+            return None
+        step = self.chain.steps[position]
+        try:
+            return get_adapter(f"{step['stage']}.{step['algorithm']}")
+        except KeyError:
+            return None
 
     def _invalid_status(self):
         """The invalid-chain message with the *junction* named, not just the

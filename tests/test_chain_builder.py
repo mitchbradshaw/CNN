@@ -169,11 +169,13 @@ def test_construction_builds_a_non_none_layout_listing_every_block():
     assert isinstance(builder.steps_row, pn.Row)
     assert builder.steps_row.scroll is True, \
         "the block canvas must scroll horizontally rather than wrap"
-    assert len(builder.add_column.objects) == len(list_adapters()), (
-        "every registered block must be listed, incompatible or not"
-    )
-    # An empty chain says so rather than rendering nothing.
+    # No + has been clicked yet, so no picker is open; every block is listed
+    # only once the + opens the picker.
+    assert builder.add_column.objects == []
+    # An empty chain says so rather than rendering nothing, and offers a
+    # single + at the only insertion position there is.
     assert len(builder.steps_row.objects) >= 1
+    assert [pos for pos, _ in _plus_buttons(builder)] == [0]
     assert builder.cards == []
 
 
@@ -195,6 +197,8 @@ def test_a_fresh_chain_has_no_incompatible_blocks():
     from Working.chain_validation import ROOT_SIGNAL_KIND
 
     builder = ChainBuilder(_FakeApp())
+    # The empty chain's only + (position 0) opens the picker.
+    builder._open_picker(0)
     blocks = [block for block, _ok, _reason in builder.chain.available_blocks()]
     rows = builder.add_column.objects
     assert len(rows) == len(blocks)
@@ -226,7 +230,9 @@ def test_add_step_appends_to_the_staged_list_and_stays_valid():
     assert [s["algorithm"] for s in builder.chain.steps] == ["lowpass"]
     assert builder.chain.is_valid is True
     assert len(builder.cards) == 1
-    assert len(builder.steps_row.objects) == 1
+    # A single card is followed by the trailing + (insert at the end).
+    assert len(builder.steps_row.objects) == 2
+    assert [pos for pos, _ in _plus_buttons(builder)] == [1]
     assert "lowpass" in _card_text(builder.cards[0])
     assert "signal" in _card_text(builder.cards[0])
     assert "invalid" not in builder.status.object.lower()
@@ -255,6 +261,9 @@ def test_incompatible_block_is_disabled_with_reason_not_filtered_out():
 
     builder = ChainBuilder(_FakeApp())
     builder._add_step(get_adapter("catalogue.gramian_gasf"))  # tail now 'encoding'
+
+    # Open the trailing + (insert at the end) to see the picker.
+    builder._open_picker(1)
 
     # Still every block, not a filtered-down list.
     assert len(builder.add_column.objects) == len(list_adapters())
@@ -357,12 +366,13 @@ def test_canvas_is_a_horizontal_scrolling_row_with_connectors_between_cards():
     assert len(builder.cards) == 2
     assert len(builder.connectors) == 1
 
-    # Execution order left to right: card, connector, card.
+    # Execution order left to right: card, +, connector, card, +.
     objects = builder.steps_row.objects
-    assert len(objects) == 3
+    assert len(objects) == 5
     assert objects[0] is builder.cards[0]
-    assert objects[1] is builder.connectors[0]
-    assert objects[2] is builder.cards[1]
+    assert objects[2] is builder.connectors[0]
+    assert objects[3] is builder.cards[1]
+    assert [pos for pos, _ in _plus_buttons(builder)] == [1, 2]
 
     first = _card_text(builder.cards[0])
     second = _card_text(builder.cards[1])
