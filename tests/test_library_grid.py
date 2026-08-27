@@ -47,6 +47,7 @@ from Working.database.schema import ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN, init_d
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.database import vocabulary as v
+from Working.distances import DISTANCE_SCALE_INVARIANT
 from UI.workspaces.library.grid import LibraryGrid
 
 
@@ -64,6 +65,18 @@ def _group_titles_from_layout(layout):
         elif hasattr(obj, "__iter__"):
             titles.extend(_group_titles_from_layout(obj))
     return titles
+
+
+def _all_markdown_texts(obj):
+    """Every markdown string rendered anywhere under a panel tree, for
+    assertions on sentences the grid shows (not just `### ` headings)."""
+    texts = []
+    if isinstance(obj, pn.pane.Markdown):
+        texts.append(obj.object or "")
+    if hasattr(obj, "__iter__"):
+        for child in obj:
+            texts.extend(_all_markdown_texts(child))
+    return texts
 
 
 def _write_recording(conn, npy_dir, source_file, channel, data, fs=1.0):
@@ -198,6 +211,104 @@ def _make_two_axis_library(npy_dir):
     R.get_or_create_motif_member(conn, family_a, rec_b, 10, 50)
     R.get_or_create_motif_member(conn, family_b, rec_b, 110, 150)
     return conn, (train_a, train_b, family_a, family_b)
+
+
+def _make_filter_library(npy_dir):
+    """A scratch library exercising every T55 filter.
+
+    Two recordings — A.mat CH0 (fs=1.0) and B.mat CH1 (fs=2.0) — and two
+    spike trains, one per recording. Five event-scale family entries sit on
+    those recordings with distinct morphologies, purity (quality) tags,
+    peak-to-peak depths and fall durations, so each filter can be asserted
+    against a known subset.
+
+    Train-scale entries span a zero region of their recording, so their
+    depth is 0 mV and they are excluded by any depth range that selects the
+    event entries — keeping the depth/filter expectations about the motifs,
+    not the bounding boxes.
+
+    Returns (conn, (train_a, train_b, e1, e2, e3, e4, e5)).
+    """
+    def _sine(amp, n):
+        return amp * np.sin(2 * np.pi * np.arange(n) / n)
+
+    conn = init_db(":memory:")
+    v.seed_vocabulary(conn)
+
+    sig_a = np.zeros(200)
+    sig_a[10:50] = _sine(10.0, 40)    # e1: ptp 20 mV
+    sig_a[60:100] = _sine(5.0, 40)    # e2: ptp 10 mV
+    sig_a[110:170] = _sine(4.0, 60)   # e3: ptp 8 mV
+    rec_a = _write_recording(conn, npy_dir, "A.mat", 0, sig_a, fs=1.0)
+
+    sig_b = np.zeros(200)
+    sig_b[10:50] = _sine(6.0, 40)     # e4: ptp 12 mV
+    sig_b[60:100] = _sine(3.0, 40)    # e5: ptp 6 mV
+    rec_b = _write_recording(conn, npy_dir, "B.mat", 1, sig_b, fs=2.0)
+
+    train_a = R.insert_motif_entry(conn, rec_a, 0, 10, label="spike train id001")
+    _set_entry_scale(conn, train_a, ENTRY_SCALE_TRAIN)
+    train_b = R.insert_motif_entry(conn, rec_b, 0, 10, label="spike train id002")
+    _set_entry_scale(conn, train_b, ENTRY_SCALE_TRAIN)
+
+    e1 = R.insert_motif_entry(conn, rec_a, 10, 50, label="sine-a", sax_string="aaa")
+    _set_entry_scale(conn, e1, ENTRY_SCALE_EVENT)
+    e2 = R.insert_motif_entry(conn, rec_a, 60, 100, label="sine-b", sax_string="aaa")
+    _set_entry_scale(conn, e2, ENTRY_SCALE_EVENT)
+    e3 = R.insert_motif_entry(conn, rec_a, 110, 170, label="sine-c", sax_string="bbb")
+    _set_entry_scale(conn, e3, ENTRY_SCALE_EVENT)
+    e4 = R.insert_motif_entry(conn, rec_b, 10, 50, label="sine-d", sax_string="ccc")
+    _set_entry_scale(conn, e4, ENTRY_SCALE_EVENT)
+    e5 = R.insert_motif_entry(conn, rec_b, 60, 100, label="sine-e", sax_string="ddd")
+    _set_entry_scale(conn, e5, ENTRY_SCALE_EVENT)
+
+    # Morphology (element) tags.
+    v.set_motif_entry_tags(conn, e1, "element", ["sharkfin"])
+    v.set_motif_entry_tags(conn, e2, "element", ["ridge"])
+    v.set_motif_entry_tags(conn, e3, "element", ["sharkfin"])
+    v.set_motif_entry_tags(conn, e4, "element", ["ridge"])
+    v.set_motif_entry_tags(conn, e5, "element", ["sharkfin"])
+    # Purity (quality) tags.
+    v.set_motif_entry_tags(conn, e1, "quality", ["clean"])
+    v.set_motif_entry_tags(conn, e2, "quality", ["noisy"])
+    v.set_motif_entry_tags(conn, e3, "quality", ["clean"])
+    v.set_motif_entry_tags(conn, e4, "quality", ["clean"])
+    v.set_motif_entry_tags(conn, e5, "quality", ["noisy"])
+
+    # Provenance: each event's own span is a member of its train, which is
+    # how the grid resolves an event entry back to the train it came from.
+    R.get_or_create_motif_member(conn, train_a, rec_a, 10, 50)
+    R.get_or_create_motif_member(conn, train_a, rec_a, 60, 100)
+    R.get_or_create_motif_member(conn, train_a, rec_a, 110, 170)
+    R.get_or_create_motif_member(conn, train_b, rec_b, 10, 50)
+    R.get_or_create_motif_member(conn, train_b, rec_b, 60, 100)
+
+    return conn, (train_a, train_b, e1, e2, e3, e4, e5)
+
+
+def _make_family_with_edges(npy_dir):
+    """One family whose exemplar has two candidate members at known edge
+    distances — m2 (0.1) closer than m1 (0.5). Returns
+    (conn, entry_id, exemplar_member_id, m1, m2)."""
+    conn = init_db(":memory:")
+    v.seed_vocabulary(conn)
+    sine = np.sin(2 * np.pi * np.arange(200) / 200)
+    rec_a = _write_recording(conn, npy_dir, "A.mat", 0, sine)
+    entry_id = R.insert_motif_entry(conn, rec_a, 10, 50, label="family")
+    exemplar_member_id = R.get_or_create_motif_member(conn, entry_id, rec_a, 10, 50)
+    m1 = R.get_or_create_motif_member(conn, entry_id, rec_a, 60, 100)
+    m2 = R.get_or_create_motif_member(conn, entry_id, rec_a, 110, 150)
+    R.insert_motif_edge(
+        conn, exemplar_member_id, m1,
+        distance_function=DISTANCE_SCALE_INVARIANT,
+        threshold=0.1, distance_value=0.5, recipe_hash="h1",
+    )
+    R.insert_motif_edge(
+        conn, exemplar_member_id, m2,
+        distance_function=DISTANCE_SCALE_INVARIANT,
+        threshold=0.1, distance_value=0.1, recipe_hash="h2",
+    )
+    return conn, entry_id, exemplar_member_id, m1, m2
 
 
 def _card_markdown_texts(card):
@@ -443,6 +554,165 @@ def test_grid_constructs_headlessly_with_non_none_panes_under_each_axis():
                 assert len(grid._sections.objects) > 0
                 assert all(obj is not None for obj in grid._sections.objects)
                 assert all(card is not None for card in grid.cards)
+        finally:
+            conn.close()
+
+
+# ── T55: filter and distance-sort the library grid ──────────────────────────
+
+def test_grid_exposes_filter_widgets():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, _ids = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            assert grid.morphology is not None
+            assert grid.purity is not None
+            assert grid.spike_train is not None
+            assert grid.recording is not None
+            assert grid.channel is not None
+            assert grid.depth_range is not None
+            assert grid.fall_duration_range is not None
+        finally:
+            conn.close()
+
+
+def test_morphology_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.morphology.value = ["sharkfin"]   # e1, e3, e5
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {e1, e3, e5}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_purity_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.purity.value = ["clean"]          # e1, e3, e4
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {e1, e3, e4}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_spike_train_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.spike_train.value = [train_a]     # train_a, e1, e2, e3
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {train_a, e1, e2, e3}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_recording_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.recording.value = ["B.mat"]       # train_b, e4, e5
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {train_b, e4, e5}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_channel_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (train_a, train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.channel.value = [0]               # train_a, e1, e2, e3
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {train_a, e1, e2, e3}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_depth_range_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.depth_range.value = (9, 21)       # e1(20), e2(10), e4(12)
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {e1, e2, e4}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_fall_duration_range_filter_narrows_to_matching_entries():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.fall_duration_range.value = (30, 70)   # e1(40), e2(40), e3(60)
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {e1, e2, e3}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_filters_compose():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, e1, e2, e3, e4, e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.morphology.value = ["sharkfin"]   # e1, e3, e5
+            grid.recording.value = ["A.mat"]       # train_a, e1, e2, e3
+            grouped_ids = {eid for _t, ids in grid.groups for eid in ids}
+            assert grouped_ids == {e1, e3}, grouped_ids
+        finally:
+            conn.close()
+
+
+def test_filter_matching_nothing_renders_a_sentence():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_e1, _e2, _e3) = _make_three_entry_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            # "spore_drop" is a vocabulary term but no entry carries it.
+            grid.morphology.value = ["spore_drop"]
+            layout = grid.layout()
+            texts = _all_markdown_texts(layout)
+            assert any("No entries match" in t for t in texts), texts
+            # The sections hold a sentence, not an empty grid.
+            assert len(grid._sections.objects) == 1
+        finally:
+            conn.close()
+
+
+def test_members_sorted_by_edge_distance_to_exemplar():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, entry_id, _exemplar_member_id, m1, m2 = _make_family_with_edges(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            sorted_ids = grid.sorted_member_ids_by_distance(entry_id)
+            assert sorted_ids == [m2, m1]          # closest first
+        finally:
+            conn.close()
+
+
+def test_grid_constructs_headlessly_with_non_none_panes_under_filters():
+    with tempfile.TemporaryDirectory() as npy_dir:
+        conn, (_train_a, _train_b, _e1, _e2, _e3, _e4, _e5) = _make_filter_library(npy_dir)
+        try:
+            grid = LibraryGrid(_FakeLibraryApp(conn))
+            grid.morphology.value = ["sharkfin"]
+            grid.depth_range.value = (9, 21)
+            layout = grid.layout()
+            assert layout is not None
+            assert grid._sections is not None
+            assert len(grid._sections.objects) > 0
+            assert all(obj is not None for obj in grid._sections.objects)
+            assert all(card is not None for card in grid.cards)
         finally:
             conn.close()
 

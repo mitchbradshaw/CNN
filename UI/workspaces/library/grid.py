@@ -23,6 +23,13 @@ entry — it only changes how the cards are sectioned. The shared y-range is per
 shape family and is fixed at construction, so switching basis never rescales a
 card.
 
+Filters (ticket 55) narrow the same set before grouping: morphology, purity,
+spike train, source recording and channel, plus range filters on drop depth
+and fall duration. Filters compose (AND across categories), and a filter that
+matches nothing renders a sentence rather than an empty grid. Families can
+also be distance-sorted through `sorted_member_ids_by_distance`, which reads
+the edge distances the importer already persisted.
+
 The grid is deliberately static at layout time. It is the "what is in the
 library" surface, not the matching/search surface; those actions write rows and
 the grid rebuilds on next app construction.
@@ -35,7 +42,7 @@ import panel as pn
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.database.schema import ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN
-from Working.database.vocabulary import get_motif_entry_tags
+from Working.database.vocabulary import get_motif_entry_tags, list_terms
 from UI.plots import SEED_MOTIF_COLOR, load_channel_mmap
 
 _THUMB_HEIGHT = 120
@@ -51,6 +58,10 @@ GROUPING_OPTIONS = {
 }
 
 _UNTAGGED = "untagged"
+
+# Shown in place of an empty grid when filters compose to nothing, because an
+# empty grid and a broken grid look identical.
+_NO_MATCH_MESSAGE = "*No entries match the current filters.*"
 
 
 class LibraryGrid:
@@ -71,6 +82,9 @@ class LibraryGrid:
         )
         self.group_by.param.watch(self._on_group_by, "value")
         self._build()
+        self._build_filter_widgets()
+        self._connect_filter_watches()
+        self._filter_column = self._build_filter_column()
         self.groups = self._group_entries()
         self._sections = pn.Column(sizing_mode="stretch_width")
         self._render_sections()
@@ -88,7 +102,12 @@ class LibraryGrid:
                 ),
                 sizing_mode="stretch_width",
             )
-        return pn.Column(self.group_by, self._sections, sizing_mode="stretch_width")
+        return pn.Column(
+            self.group_by,
+            self._filter_column,
+            self._sections,
+            sizing_mode="stretch_width",
+        )
 
     # ── Grouping ───────────────────────────────────────────────────────
 
@@ -100,6 +119,10 @@ class LibraryGrid:
         """Rebuild the section panes for the current `self.groups` in place,
         so the `pn.Column` already embedded by `layout()` picks up the new
         grouping without needing `layout()` to be called again."""
+        if not self.groups:
+            # An empty grid and a broken grid look identical; say so.
+            self._sections.objects = [pn.pane.Markdown(_NO_MATCH_MESSAGE)]
+            return
         sections = []
         for title, entry_ids in self.groups:
             sections.append(pn.pane.Markdown(f"### {title}"))
@@ -131,7 +154,7 @@ class LibraryGrid:
         """
         by_train = {}
         by_recording = {}
-        for entry in self.entries:
+        for entry in self._filtered_entries():
             train_id = self._provenance_train_id(entry)
             if train_id is not None:
                 by_train.setdefault(train_id, []).append(entry["id"])
@@ -155,7 +178,7 @@ class LibraryGrid:
         """
         return [
             (self._family_title(entry), [entry["id"]])
-            for entry in self.entries
+            for entry in self._filtered_entries()
         ]
 
     def _provenance_train_id(self, entry):
@@ -201,7 +224,7 @@ class LibraryGrid:
         under each of them — a tag is a heading, never a primary key."""
         tag_order = {}
         untagged = []
-        for entry in self.entries:
+        for entry in self._filtered_entries():
             tags = get_motif_entry_tags(self.conn, entry["id"])
             values = sorted({val for vals in tags.values() for val in vals})
             if not values:
@@ -214,6 +237,179 @@ class LibraryGrid:
             groups.append((_UNTAGGED, untagged))
         return groups
 
+    # ── Filters ────────────────────────────────────────────────────────
+
+    def _build_entry_meta(self):
+        """Per-entry metadata the filters read: source recording and channel,
+        peak-to-peak depth, span duration, the provenance train id and the
+        morphology/purity tags. Computed once at construction because the
+        filter widgets and the filter predicate both need it."""
+        meta = {}
+        for entry in self.entries:
+            recording = q.get_recording_by_id(self.conn, entry["recording_id"])
+            if recording is not None:
+                source_file = recording["source_file"]
+                channel = recording["channel"]
+                fs = float(recording["fs"] or 1.0)
+            else:
+                source_file = None
+                channel = None
+                fs = 1.0
+            values = self._load_span(recording, entry) if recording is not None else np.array([])
+            depth = float(values.max()) - float(values.min()) if values.size else 0.0
+            fall_duration = (int(entry["end_idx"]) - int(entry["start_idx"])) / fs
+            tags = get_motif_entry_tags(self.conn, entry["id"])
+            meta[entry["id"]] = {
+                "source_file": source_file,
+                "channel": channel,
+                "depth_mv": depth,
+                "fall_duration_s": fall_duration,
+                "train_id": self._provenance_train_id(entry),
+                "element_tags": set(tags.get("element", [])),
+                "quality_tags": set(tags.get("quality", [])),
+            }
+        return meta
+
+    def _build_filter_widgets(self):
+        """The seven filter controls. Multi-selects are OR-within-category and
+        empty means unfiltered; the two range sliders default to their full
+        span, which is also unfiltered."""
+        element_terms = list_terms(self.conn, "element")
+        quality_terms = list_terms(self.conn, "quality")
+        self.morphology = pn.widgets.MultiSelect(
+            name="Morphology",
+            options={t["value"]: t["value"] for t in element_terms},
+            size=4,
+        )
+        self.purity = pn.widgets.MultiSelect(
+            name="Purity",
+            options={t["value"]: t["value"] for t in quality_terms},
+            size=4,
+        )
+        train_options = {}
+        for entry in self.entries:
+            if entry["scale"] == ENTRY_SCALE_TRAIN:
+                title = entry["label"] or f"Spike train {entry['id']}"
+                train_options[title] = entry["id"]
+        self.spike_train = pn.widgets.MultiSelect(
+            name="Spike train", options=train_options, size=4,
+        )
+        recording_options = {
+            rec["source_file"]: rec["source_file"]
+            for rec in q.list_recordings(self.conn)
+        }
+        self.recording = pn.widgets.MultiSelect(
+            name="Recording", options=recording_options, size=4,
+        )
+        channel_options = {}
+        for meta in self._entry_meta.values():
+            if meta["channel"] is not None:
+                channel_options[str(meta["channel"])] = meta["channel"]
+        self.channel = pn.widgets.MultiSelect(
+            name="Channel", options=channel_options, size=4,
+        )
+        depths = [meta["depth_mv"] for meta in self._entry_meta.values()]
+        falls = [meta["fall_duration_s"] for meta in self._entry_meta.values()]
+        self.depth_range = pn.widgets.RangeSlider(
+            name="Drop depth (mV)",
+            start=min(depths) - 1.0 if depths else 0.0,
+            end=max(depths) + 1.0 if depths else 1.0,
+            value=(min(depths) - 1.0 if depths else 0.0,
+                   max(depths) + 1.0 if depths else 1.0),
+        )
+        self.fall_duration_range = pn.widgets.RangeSlider(
+            name="Fall duration (s)",
+            start=min(falls) - 1.0 if falls else 0.0,
+            end=max(falls) + 1.0 if falls else 1.0,
+            value=(min(falls) - 1.0 if falls else 0.0,
+                   max(falls) + 1.0 if falls else 1.0),
+        )
+
+    def _connect_filter_watches(self):
+        for widget in (
+            self.morphology, self.purity, self.spike_train,
+            self.recording, self.channel, self.depth_range,
+            self.fall_duration_range,
+        ):
+            widget.param.watch(self._on_filter_change, "value")
+
+    def _build_filter_column(self):
+        return pn.Column(
+            pn.pane.Markdown("**Filters**"),
+            pn.Row(
+                self.morphology, self.purity, self.spike_train,
+                self.recording, self.channel,
+            ),
+            pn.Row(self.depth_range, self.fall_duration_range),
+            sizing_mode="stretch_width",
+        )
+
+    def _on_filter_change(self, event):
+        self.groups = self._group_entries()
+        self._render_sections()
+
+    def _filtered_entries(self):
+        """The entries that pass every active filter."""
+        return [entry for entry in self.entries if self._entry_matches_filters(entry)]
+
+    def _entry_matches_filters(self, entry):
+        meta = self._entry_meta[entry["id"]]
+        if self.morphology.value:
+            if not (meta["element_tags"] & set(self.morphology.value)):
+                return False
+        if self.purity.value:
+            if not (meta["quality_tags"] & set(self.purity.value)):
+                return False
+        if self.spike_train.value:
+            if meta["train_id"] is None or meta["train_id"] not in set(self.spike_train.value):
+                return False
+        if self.recording.value:
+            if meta["source_file"] is None or meta["source_file"] not in set(self.recording.value):
+                return False
+        if self.channel.value:
+            if meta["channel"] is None or meta["channel"] not in set(self.channel.value):
+                return False
+        if self.depth_range.value is not None:
+            lo, hi = self.depth_range.value
+            if not (lo <= meta["depth_mv"] <= hi):
+                return False
+        if self.fall_duration_range.value is not None:
+            lo, hi = self.fall_duration_range.value
+            if not (lo <= meta["fall_duration_s"] <= hi):
+                return False
+        return True
+
+    # ── Distance sort ──────────────────────────────────────────────────
+
+    def sorted_member_ids_by_distance(self, entry_id):
+        """Member ids of one family, ordered by their persisted edge distance
+        to the exemplar (closest first).
+
+        Reads the already-persisted `motif_edge` distance values — no distance
+        is recomputed here. The exemplar's own member is not included.
+        """
+        entry = R.get_motif_entry(self.conn, entry_id)
+        if entry is None:
+            return []
+        exemplar_key = (entry["recording_id"], entry["start_idx"], entry["end_idx"])
+        exemplar_member_id = None
+        for member in R.list_motif_members(self.conn, entry_id):
+            if (member["recording_id"], member["start_idx"], member["end_idx"]) == exemplar_key:
+                exemplar_member_id = member["id"]
+                break
+        if exemplar_member_id is None:
+            return []
+        distances = {}
+        for edge in R.list_motif_edges(self.conn, entry_id):
+            if edge["member_a_id"] == exemplar_member_id:
+                other = edge["member_b_id"]
+            elif edge["member_b_id"] == exemplar_member_id:
+                other = edge["member_a_id"]
+            else:
+                continue
+            distances[other] = edge["distance_value"]
+        return sorted(distances, key=lambda mid: distances[mid])
+
     # ── Construction ───────────────────────────────────────────────────
 
     def _build(self):
@@ -222,6 +418,7 @@ class LibraryGrid:
         self._card_by_entry = {}
         self.entries = R.list_motif_entries(self.conn)
         self._train_by_member_span = self._build_train_member_span_map()
+        self._entry_meta = self._build_entry_meta()
         family_ranges = self._family_y_ranges()
         for entry in self.entries:
             card, scope_pane = self._build_card(entry, family_ranges)
