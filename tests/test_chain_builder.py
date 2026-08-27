@@ -406,6 +406,187 @@ def test_chain_builder_mounts_into_the_analyse_workspace_as_a_real_pane():
         _close_and_unlink(app, db_path)
 
 
+# ── T59: a block's parameters are edited on its card ─────────────────────────
+
+class _FakeAppWithDb:
+    """The shape `ChainBuilder` needs off `app` when a card must reach the
+    database for span-aware recommendations and derived readouts."""
+
+    def __init__(self, conn, recording_id):
+        self.conn = conn
+        self._recording_id = recording_id
+
+
+def _widgets(pane):
+    """Every Panel widget inside `pane`, recursively."""
+    if isinstance(pane, pn.widgets.Widget):
+        return [pane]
+    out = []
+    for obj in getattr(pane, "objects", ()):
+        out.extend(_widgets(obj))
+    return out
+
+
+def _html_texts(pane):
+    """The raw string of every HTML pane inside `pane`, recursively."""
+    if isinstance(pane, pn.pane.HTML):
+        return [str(pane.object)]
+    out = []
+    for obj in getattr(pane, "objects", ()):
+        out.extend(_html_texts(obj))
+    return out
+
+
+def _synthetic_app(n_samples=200):
+    """A fake app backed by a temp db + synthetic channel, headless.
+    Returns (app, db_path, npy_path); caller closes `app.conn` and unlinks
+    the two files."""
+    import tempfile as _tempfile
+    import numpy as _np
+    from Working.database.schema import init_db as _init_db
+    from Working.database import queries as _q
+
+    tf = _tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    tf.close()
+    db_path = tf.name
+    npy_path = os.path.join(os.path.dirname(db_path), "CH0.npy")
+    _np.save(npy_path, _np.arange(n_samples, dtype=float))
+    conn = _init_db(db_path)
+    rid = _q.insert_recording(
+        conn, "UNITTEST_chain_builder_synth.mat", 0, 1.0, n_samples, 0, npy_path
+    )
+    return _FakeAppWithDb(conn, rid), db_path, npy_path
+
+
+def _close_synthetic(app, db_path, npy_path):
+    app.conn.close()
+    os.unlink(db_path)
+    os.unlink(npy_path)
+
+
+def test_card_with_parameters_returns_non_none_panes():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+
+    card = builder.cards[0]
+    assert card is not None
+    assert all(obj is not None for obj in card.objects), \
+        "every pane on a parameter card must be non-None -- the blank-pane failure"
+    # The generated parameter controls are present, not silently blank.
+    assert any(isinstance(w, pn.widgets.FloatInput) for w in _widgets(card))
+    assert any(isinstance(w, pn.widgets.IntInput) for w in _widgets(card))
+
+
+def test_card_shows_generated_parameter_controls_for_its_algorithm():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+
+    names = [w.name for w in _widgets(builder.cards[0])]
+    assert "Cutoff hz" in names
+    assert "Order" in names
+
+
+def test_editing_a_card_param_writes_back_to_the_chain_model():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    builder = ChainBuilder(_FakeApp())
+    builder._add_step(get_adapter("preprocessing.lowpass"))
+
+    order = next(w for w in _widgets(builder.cards[0])
+                 if isinstance(w, pn.widgets.IntInput))
+    order.value = 8
+    assert builder.chain.steps[0]["params"]["order"] == 8
+
+
+def test_card_applies_recommended_defaults_and_marks_modified():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    app, db_path, npy_path = _synthetic_app(n_samples=200)
+    try:
+        builder = ChainBuilder(app)
+        builder._add_step(get_adapter("detection.sax_csax"))
+        card = builder.cards[0]
+
+        seconds = next(
+            w for w in _widgets(card)
+            if isinstance(w, pn.widgets.FloatInput)
+            and w.name.startswith("Seconds per symbol")
+        )
+        # Recommended defaults for the 200-sample span were applied.
+        assert seconds.value > 0
+
+        # A value changed away from the recommendation is marked modified.
+        seconds.value = seconds.value * 2
+        assert seconds.name.endswith("•"), \
+            f"expected a modified marker, got {seconds.name!r}"
+    finally:
+        _close_synthetic(app, db_path, npy_path)
+
+
+def test_card_derived_readout_recomputes_live_without_running():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    app, db_path, npy_path = _synthetic_app(n_samples=200)
+    try:
+        builder = ChainBuilder(app)
+        builder._add_step(get_adapter("detection.sax_csax"))
+        card = builder.cards[0]
+
+        html = " ".join(_html_texts(card))
+        assert "Symbols produced" in html
+
+        seconds = next(
+            w for w in _widgets(card)
+            if isinstance(w, pn.widgets.FloatInput)
+            and w.name.startswith("Seconds per symbol")
+        )
+        seconds.value = seconds.value * 2
+
+        html_after = " ".join(_html_texts(card))
+        assert html_after != html
+        assert "Symbols produced" in html_after
+    finally:
+        _close_synthetic(app, db_path, npy_path)
+
+
+def test_card_shows_a_side_input_picker_for_declared_side_input():
+    from UI.workspaces.analyse.builder import ChainBuilder
+
+    app, db_path, npy_path = _synthetic_app(n_samples=200)
+    try:
+        builder = ChainBuilder(app)
+        builder._add_step(get_adapter("preprocessing.window_matrix"))
+        builder._add_step(get_adapter("catalogue.cluster"))
+        builder._add_step(get_adapter("catalogue.classifier"))
+
+        card = builder.cards[2]
+        source = next(
+            (w for w in _widgets(card)
+             if isinstance(w, pn.widgets.Select) and w.name == "Source"),
+            None,
+        )
+        assert source is not None, \
+            "a block declaring a side input must show a picker on its card"
+        assert "earlier_step" in list(source.options.values())
+    finally:
+        _close_synthetic(app, db_path, npy_path)
+
+
+def test_card_reuses_shared_param_widgets_and_derive_mixin():
+    import UI.workspaces.analyse.builder as b
+    from UI.analyse.derive import DeriveMixin
+    from UI.analyse.param_widgets import _widget_for_param
+
+    assert b.DeriveMixin is DeriveMixin, \
+        "the card must reuse the shared derive mixin, not fork it"
+    assert b._widget_for_param is _widget_for_param, \
+        "the card must reuse the shared param-widget generator, not fork it"
+
+
 # ── runner ───────────────────────────────────────────────────────────────────
 
 def _run_all():
