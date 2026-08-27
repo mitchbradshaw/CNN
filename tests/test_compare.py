@@ -293,6 +293,22 @@ def test_diff_recipes_reports_parameter_present_in_one_absent_in_other():
     assert changed_rev[0].b_value == 50.0
 
 
+def test_diff_recipes_distinguishes_absent_param_from_none_value():
+    from Working.compare import MISSING, diff_recipes
+
+    # A has penalty=None explicitly; B has no penalty parameter at all.
+    a = make_recipe(1, [{"stage": "detection", "algorithm": "rupture",
+                         "params": {"penalty": None}}])
+    b = make_recipe(1, [{"stage": "detection", "algorithm": "rupture"}])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    changed = diff[0].changed_params
+    assert len(changed) == 1
+    assert changed[0].a_value is None
+    assert changed[0].b_value is MISSING
+
+
 def test_diff_recipes_identical_recipes_report_no_difference():
     from Working.compare import diff_recipes
 

@@ -1,14 +1,24 @@
 """
 compare.py
 ==========
-Headless two-run set-overlap computation (ticket 33).
+Headless comparisons for the Compare view (tickets 33, 68).
 
-"Does the banded chain find things the direct chain misses" is answered here:
-given two completed runs, compute the intersection of their detection span
-sets and each run's exclusive remainder. The same mechanism is what ticket 44
-consumes for the surrogate control — a real run compared against its surrogate
-pair is still just two completed runs, so one implementation serves both
-research questions (PRD "Chain shape").
+Two independent questions are answered here, deliberately kept in one module
+so the Compare surface has a single place to talk to:
+
+- `compare_run_sets` (ticket 33): detection-set overlap between two completed
+  runs. "Does the banded chain find things the direct chain misses" is
+  answered by computing the intersection of their detection span sets and
+  each run's exclusive remainder. The same mechanism is what ticket 44
+  consumes for the surrogate control — a real run compared against its
+  surrogate pair is still just two completed runs.
+
+- `diff_recipes` (ticket 68): per-step structural difference between two
+  recipe dicts. "These two chains are identical except low_hz is 0.01 in one
+  and 0.05 in the other" is answered by comparing the ordered step lists,
+  reporting steps present in one and not the other, and parameters whose
+  values differ. Pure and headless — two recipe dicts in, a tuple of
+  `StepDiff` records out.
 
 The overlap notion is deliberately imported, not reimplemented:
 `Working.database.similarity.interval_iou` is the single interval-overlap
@@ -16,11 +26,12 @@ definition in the codebase, and `compare_run_sets` records its name
 (`overlap_criterion`) alongside the result so the criterion is explicit rather
 than an unnamed threshold buried in a loop.
 
-No UI imports. Plain SQL through `Working.database.runs`.
+No UI imports. The run-set comparison reads through `Working.database.runs`;
+the recipe diff touches neither the database nor the UI.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Any, Optional, Tuple
 
 from Working.config import SIMILARITY_IOU_THRESHOLD
 from Working.database import runs as _runs
@@ -156,3 +167,110 @@ def compare_run_sets(conn, run_a_id, run_b_id, *,
         a_only=a_only,
         b_only=b_only,
     )
+
+
+# ── recipe diff (ticket 68) ──────────────────────────────────────────────────
+
+
+class _Missing:
+    """Sentinel type so an absent parameter reads as `<missing>`, not None."""
+
+    def __repr__(self):
+        return "<missing>"
+
+
+#: Marks the side of a `ParamChange` on which the parameter is absent.
+#: Distinct from a value of None, which a parameter may legitimately take.
+MISSING = _Missing()
+
+
+@dataclass(frozen=True)
+class ParamChange:
+    """One parameter whose value differs between two otherwise-same steps.
+
+    `a_value`/`b_value` are the values from recipe A/B respectively. A side
+    on which the parameter is absent carries `MISSING` rather than None.
+    """
+
+    name: str
+    a_value: Any
+    b_value: Any
+
+
+@dataclass(frozen=True)
+class StepDiff:
+    """The difference at one chain position between two recipes.
+
+    `a_step`/`b_step` are the step dicts at `index` from recipe A/B; a step
+    present in only one recipe has `None` on the other side. A step present
+    in both with the same algorithm but different parameters carries those
+    changes in `changed_params`. A step whose algorithm itself differs is
+    reported with both step dicts present and an empty `changed_params`.
+    """
+
+    index: int
+    a_step: Optional[dict]
+    b_step: Optional[dict]
+    changed_params: Tuple[ParamChange, ...] = ()
+
+
+def _step_identity(step):
+    """The (stage, algorithm) pair that identifies a step for matching."""
+    return (step.get("stage"), step.get("algorithm"))
+
+
+def _diff_params(a_params, b_params):
+    """Return the `ParamChange`s between two step parameter dicts.
+
+    A parameter present in one dict and absent in the other is reported with
+    `MISSING` on the absent side, so an explicit None value is not conflated
+    with an absence.
+    """
+    a_params = a_params or {}
+    b_params = b_params or {}
+    changes = []
+    for name in sorted(set(a_params) | set(b_params)):
+        a_value = a_params.get(name, MISSING)
+        b_value = b_params.get(name, MISSING)
+        if a_value != b_value:
+            changes.append(ParamChange(name, a_value, b_value))
+    return tuple(changes)
+
+
+def diff_recipes(recipe_a, recipe_b):
+    """Return the per-step difference between two recipes.
+
+    Steps are compared by position: step i of recipe A against step i of
+    recipe B. Positional comparison is deliberate — it keeps two identical
+    algorithms that appear twice in one chain distinct, and it lets a chain
+    of different length report its surplus steps as added/removed rather
+    than guessing at a re-alignment. A step whose algorithm differs at the
+    same position is reported with both step dicts present.
+
+    Parameters
+    ----------
+    recipe_a, recipe_b : dict
+        Recipe dicts with an ordered `steps` list, as produced by
+        `Working.recipes.make_recipe`.
+
+    Returns
+    -------
+    Tuple[StepDiff, ...]
+        One `StepDiff` per chain position where the two recipes differ. Two
+        identical recipes return the empty tuple.
+    """
+    steps_a = recipe_a.get("steps") or []
+    steps_b = recipe_b.get("steps") or []
+    diffs = []
+    for index in range(max(len(steps_a), len(steps_b))):
+        a_step = steps_a[index] if index < len(steps_a) else None
+        b_step = steps_b[index] if index < len(steps_b) else None
+        if a_step is None or b_step is None:
+            diffs.append(StepDiff(index, a_step, b_step))
+        elif _step_identity(a_step) != _step_identity(b_step):
+            diffs.append(StepDiff(index, a_step, b_step))
+        else:
+            changed = _diff_params(a_step.get("params"), b_step.get("params"))
+            if changed:
+                diffs.append(StepDiff(index, a_step, b_step, changed))
+    return tuple(diffs)
