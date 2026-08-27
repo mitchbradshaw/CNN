@@ -15,11 +15,13 @@ from Working.database import queries as q
 from Working.database import runs as R
 from Working.artifacts import save_plot
 from Working.config import RUN_PREVIEW_HEIGHT
+from Working.types import Signal
 
 from UI.plots import (
     build_peek_curve, compute_display_y_range, style_main_plot_frame, CURVE_COLOR,
-    PLOT_FONTSIZE,
+    PLOT_FONTSIZE, render_value,
 )
+from UI.analyse.chain_state import ChainState
 from UI.analyse.formatting import _format_duration_human
 
 
@@ -32,6 +34,11 @@ class ResultsMixin:
         # both — see `_refresh_preview`/`_show_before_after`, the only two
         # places that assign `result_pane.object`.
         self.result_pane = pn.pane.HoloViews(sizing_mode="stretch_width")
+        # The filmstrip (T62) is the post-run surface: the chain's input at
+        # the top, then one plot per step. It lives beside `result_pane`, not
+        # inside it, so the pre-run staged-span preview and the post-run
+        # filmstrip each have exactly one pane and one writer.
+        self.filmstrip_pane = pn.pane.HoloViews(sizing_mode="stretch_width", visible=False)
         self.preview_info = pn.pane.Markdown("")
         self.yaxis_mode = pn.widgets.RadioButtonGroup(
             name="Y-axis", options=["Independent y-axis", "Shared y-axis"],
@@ -74,6 +81,8 @@ class ResultsMixin:
         `_current_span()` returns.
         """
         app = self.app
+        self.result_pane.visible = True
+        self.filmstrip_pane.visible = False
         if app._recording_id is None or app._fs is None:
             self.result_pane.object = None
             self.preview_info.object = "*No recording loaded.*"
@@ -151,6 +160,8 @@ class ResultsMixin:
         shared range for the (rarer) amplitude-preserving transform where
         that's the more informative comparison.
         """
+        self.result_pane.visible = True
+        self.filmstrip_pane.visible = False
         x_full = np.load(recording["npy_path"], mmap_mode="r")
         start = int(round(result_t[0] * recording["fs"]))
         end = start + len(result_x)
@@ -210,6 +221,59 @@ class ResultsMixin:
             )
         else:
             self.scale_note.object = ""
+
+    # ── Filmstrip (T62): chain input + one plot per step ──────────────────
+
+    def _build_filmstrip(self, recipe, step_results, input_value=None, recording=None):
+        """Render the whole transformation as a single stacked scroll.
+
+        The decision of *what* to show is `ChainState.filmstrip_plan`
+        (T61); the decision of *how* to draw each value is
+        `UI.plots.render_value` (T56). This surface does no type switching
+        of its own — every element, including the chain's input, goes
+        through that one render function. Returns a HoloViews `Layout` whose
+        first element is the chain input and whose remaining elements are
+        the steps in execution order.
+        """
+        plan = ChainState.from_recipe(recipe).filmstrip_plan(self.conn)
+        elements = [self._render_filmstrip_input(recipe, input_value, recording)]
+        for entry in plan:
+            result = step_results.get(entry["position"])
+            if result is None:
+                raise ValueError(
+                    f"filmstrip: no result for step {entry['position']} "
+                    f"({entry['label']})"
+                )
+            element = render_value(entry["output_type"], result.value, result.meta)
+            element = element.opts(
+                title=f"{entry['label']} — {entry['output_type']}",
+            )
+            elements.append(element)
+        return hv.Layout(elements).cols(1).opts(shared_axes=False)
+
+    def _render_filmstrip_input(self, recipe, input_value, recording):
+        """The chain's input as a `Signal` value, drawn through the same
+        `render_value` path as every step — never a second renderer."""
+        if input_value is None:
+            if recording is None:
+                raise ValueError("filmstrip: input_value or recording is required")
+            span = recipe.get("span")
+            start, end = (0, recording["n_samples"]) if span is None else span
+            x_full = np.load(recording["npy_path"], mmap_mode="r")
+            input_value = Signal(x=np.asarray(x_full[start:end]), fs=recording["fs"])
+        return render_value("signal", input_value).opts(title="Chain input — signal")
+
+    def _show_filmstrip(self, recipe, step_results, input_value=None, recording=None):
+        """Put the filmstrip on screen as the post-run surface. The
+        staged-span preview (`result_pane`) and the filmstrip are mutually
+        exclusive — showing one hides the other."""
+        self.result_pane.visible = False
+        self.filmstrip_pane.visible = True
+        self.filmstrip_pane.object = self._build_filmstrip(
+            recipe, step_results, input_value=input_value, recording=recording,
+        )
+        self._last_before_after = None
+        self.scale_note.object = ""
 
     # ── Encoding inspection view (Part 6, Section 3) ─────────────────────
 

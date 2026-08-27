@@ -50,6 +50,7 @@ class LayoutMixin:
                 self.preview_info,
                 pn.pane.Markdown("**Y-axis (Before/After):**"), self.yaxis_mode,
                 self.result_pane,
+                self.filmstrip_pane,
                 # §4: one coverage-ribbon pane per ladder scale that has any
                 # stored coverage, stacked directly under the staged-span
                 # preview — hidden (empty Column) unless the window-matrix

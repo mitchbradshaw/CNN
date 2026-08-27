@@ -389,3 +389,73 @@ def test_detections_caption_is_blank_before_any_run():
         assert app.run_panel.detections_caption.object == ""
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T62: filmstrip renders the chain input and every step ───────────────────
+
+def test_filmstrip_renders_input_and_each_step_with_non_none_panes():
+    """The Run algorithm surface must render the chain's input at the top and
+    one plot per step below it, in execution order, with no blank panes.
+
+    This is a headless construction test: it does not run a recipe, it hands
+    the surface a multi-step recipe and the typed per-step results a run would
+    produce, and asserts the returned HoloViews Layout contains an input curve
+    plus one non-`None` element per step — the silently-blank-pane failure mode
+    this codebase has hit twice must fail here, not on a human's screen.
+    """
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal, SpanSet
+    from UI.analyse.chain_state import ChainState
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "rupture", "params": {}},
+            ],
+        }
+        step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("spanset", SpanSet(starts=(10, 20), ends=(30, 40)), {}),
+        }
+        input_value = Signal(x=np.arange(600) / 1.0, fs=1.0)
+
+        layout = rp._build_filmstrip(recipe, step_results, input_value=input_value)
+
+        assert layout is not None, "the filmstrip must return a HoloViews Layout"
+        panes = list(layout.values())
+        assert len(panes) == 3, (
+            f"expected the chain input plus one pane per step (3), got {len(panes)}"
+        )
+        assert all(pane is not None for pane in panes), (
+            "every filmstrip pane must be a non-None renderable object"
+        )
+
+        # The order must match the headless plan, with the chain input first.
+        plan = ChainState.from_recipe(recipe).filmstrip_plan(rp.conn)
+        assert [entry["position"] for entry in plan] == [0, 1]
+        assert isinstance(panes[0], hv.Curve), "the chain input must render as a signal curve"
+        assert isinstance(panes[1], hv.Curve), "a signal-producing step must render as a curve"
+        assert isinstance(panes[2], hv.Rectangles), (
+            "a spanset-producing step must render as an interval overlay, not a blank pane"
+        )
+
+        # Each plot is labelled with the block that produced it and its type.
+        titles = [str(pane.opts.get("plot").kwargs.get("title", "")) for pane in panes]
+        assert "chain input" in titles[0].lower(), titles
+        assert "lowpass" in titles[1].lower() and "signal" in titles[1].lower(), titles
+        assert "rupture" in titles[2].lower() and "spanset" in titles[2].lower(), titles
+
+        # The surface itself must expose the filmstrip pane, not just a helper.
+        assert rp.filmstrip_pane is not None
+        rp._show_filmstrip(recipe, step_results, input_value=input_value)
+        assert rp.filmstrip_pane.object is not None
+        assert len(list(rp.filmstrip_pane.object.values())) == 3
+    finally:
+        _close_and_unlink(app, db_path)
