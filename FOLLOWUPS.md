@@ -577,3 +577,7 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [standards] (no rule cited) grouping/aggregation logic in _ensure_recordings (group by source_file/channel, max snippet_end_idx) is duplicated in shape by the test's _precreate_recordings fixture
 - [minor] [spec] (no rule cited) on a fresh database (the ticket's own stated starting condition) the importer writes a recording row whose npy_path is a bare unresolvable filename; LibraryGrid's unguarded load_channel_mmap then raises FileNotFoundError, contradicting "the existing Library grid renders the imported entries without modification" and "a card that cannot be traced back to the signal is not evidence" — the included test avoids this path via a fixture that pre-seeds valid recordings before calling the importer
 - [minor] [spec] (no rule cited) spike-train identity (span_key) is not 1:1 with recording_id and is never persisted onto motif_member, so the ticket narrative's "provenance must survive... the spike train it came from... its morphology and purity" is unmet, though the checkbox acceptance criteria and the PRD's Library-import subsection don't require it
+
+## T56 — 2026-08-27 10:12
+
+- [minor] [spec] (no rule cited) Unknown-type error names type_kind, not the literal value object — a faithful but debatable reading of "naming the value it was given"
