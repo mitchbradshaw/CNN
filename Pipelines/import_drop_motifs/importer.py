@@ -28,7 +28,11 @@ that cannot be traced back to the signal is not evidence.
 
 Idempotent: members are keyed on content (recording, start, end) and the
 writers are `get_or_create_*`, so running the importer twice with the same
-parameters never duplicates a row.
+parameters never duplicates a row. Edges are replaced wholesale per
+(distance_function, threshold) — the grouping identity — so re-clustering at
+a new threshold adds a grouping beside the existing ones rather than
+overwriting them, and re-clustering at the same threshold replaces that
+grouping's edges rather than doubling them.
 
 No plotting library — CLAUDE.md rule 1. Callable from a bare script.
 """
@@ -155,6 +159,24 @@ def _write_train_entries(conn, events, recording_map):
     return n_entries, n_members
 
 
+def _replace_grouping_edges(conn, distance_function, threshold):
+    """Delete every edge of the (distance_function, threshold) grouping.
+
+    The grouping identity is (distance_function, threshold) — the pair the
+    PRD keys re-clustering on — not the recipe hash, which also lives on the
+    edge. Two runs at the same threshold via a different parameterization
+    (n_clusters vs a bare threshold) produce different recipe hashes, so a
+    writer keyed on the hash would add a duplicate set of edges beside the
+    first. Deleting the pair's edges first makes the re-run a replacement,
+    which is the behaviour a researcher exploring thresholds expects.
+    """
+    conn.execute(
+        "DELETE FROM motif_edge WHERE distance_function = ? AND threshold = ?",
+        (distance_function, threshold),
+    )
+    conn.commit()
+
+
 def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
                        distance_function=DISTANCE_SCALE_INVARIANT,
                        threshold=None,
@@ -173,6 +195,11 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
       - one `motif_edge` per within-family exemplar->member pair, recording
         the distance function, the clustering threshold, the distance value
         and the recipe hash.
+
+    Edges for the (distance_function, threshold) grouping are replaced
+    wholesale on every run, so re-clustering at the same threshold regroups
+    rather than accumulating duplicate edges, and re-clustering at a
+    different threshold adds a grouping beside the existing ones.
 
     Parameters
     ----------
@@ -247,6 +274,11 @@ def import_drop_motifs(conn, bundle_dir, *, n_clusters=None, height=None,
     # Register the recipe so the edge's hash resolves back to parameters;
     # the short hash it returns is the identifier recorded on every edge.
     _, recipe_hash = R.get_or_create_config(conn, recipe)
+
+    # Re-clustering at the same (distance_function, threshold) replaces that
+    # grouping's edges rather than adding a duplicate set beside them.
+    # Members are content-keyed and reused, so only the edges need this.
+    _replace_grouping_edges(conn, distance_function, threshold)
 
     recording_map = _ensure_recordings(conn, events)
 

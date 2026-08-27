@@ -219,6 +219,92 @@ def test_import_is_idempotent():
         conn.close()
 
 
+# ── T51: idempotent and re-clusterable ─────────────────────────────────────
+# The grouping identity is (distance_function, threshold), not recipe_hash.
+# Two runs that produce the same (df, threshold) grouping — even via a
+# different parameterization (n_clusters vs bare threshold, which changes the
+# recipe hash) — must replace that grouping's rows, not add duplicates.
+
+def test_rerun_at_same_threshold_replaces_edges_not_duplicates():
+    """Re-running at the same (distance_function, threshold) via a different
+    parameterization must replace that grouping's edges, not double them."""
+    conn = init_db(":memory:")
+    try:
+        r1 = import_drop_motifs(conn, BUNDLE_DIR, n_clusters=12)
+        threshold = r1["threshold"]
+
+        # Same cut, different parameterization -> different recipe_hash but
+        # the same grouping identity (distance_function, threshold).
+        r2 = import_drop_motifs(conn, BUNDLE_DIR, threshold=threshold)
+
+        assert r2["n_edges"] == r1["n_edges"]
+        edge_count = conn.execute("SELECT COUNT(*) FROM motif_edge").fetchone()[0]
+        assert edge_count == r1["n_edges"], (
+            f"expected {r1['n_edges']} edges after re-run at same threshold, "
+            f"got {edge_count}")
+        # Entries are content-keyed too: the same exemplars are reused, so
+        # the entry count does not grow either.
+        entry_count = conn.execute("SELECT COUNT(*) FROM motif_entry").fetchone()[0]
+        assert entry_count == r1["n_entries"] + r1["n_train_entries"]
+        # Members are content-keyed and never duplicated (criterion 1).
+        member_count = conn.execute("SELECT COUNT(*) FROM motif_member").fetchone()[0]
+        assert member_count == SEED_N_MOTIFS + r1["n_train_members"]
+    finally:
+        conn.close()
+
+
+def test_rerun_at_different_threshold_preserves_previous_grouping():
+    """Re-clustering at a different threshold adds a grouping beside the
+    existing one rather than overwriting it."""
+    conn = init_db(":memory:")
+    try:
+        r1 = import_drop_motifs(conn, BUNDLE_DIR, n_clusters=12)
+        t1 = r1["threshold"]
+        edges_at_t1 = conn.execute(
+            "SELECT COUNT(*) FROM motif_edge WHERE threshold = ?", (t1,)
+        ).fetchone()[0]
+        assert edges_at_t1 == r1["n_edges"]
+
+        r2 = import_drop_motifs(conn, BUNDLE_DIR, threshold=t1 + 0.5)
+
+        # The previous grouping's edges are untouched.
+        edges_at_t1_after = conn.execute(
+            "SELECT COUNT(*) FROM motif_edge WHERE threshold = ?", (t1,)
+        ).fetchone()[0]
+        assert edges_at_t1_after == edges_at_t1
+
+        # And the new grouping sits beside it.
+        total = conn.execute("SELECT COUNT(*) FROM motif_edge").fetchone()[0]
+        assert total == edges_at_t1 + r2["n_edges"]
+    finally:
+        conn.close()
+
+
+def test_manual_tag_survives_recluster_at_same_threshold():
+    """A manually applied tag on an entry survives a re-cluster at the same
+    threshold (criterion 4)."""
+    from Working.database.vocabulary import (
+        get_motif_entry_tags, seed_vocabulary, set_motif_entry_tags,
+    )
+
+    conn = init_db(":memory:")
+    try:
+        seed_vocabulary(conn)
+        r1 = import_drop_motifs(conn, BUNDLE_DIR, n_clusters=12)
+        row = conn.execute(
+            "SELECT id FROM motif_entry WHERE scale = 'event' ORDER BY id LIMIT 1"
+        ).fetchone()
+        entry_id = row["id"]
+        set_motif_entry_tags(conn, entry_id, "element", ["spike"])
+
+        r2 = import_drop_motifs(conn, BUNDLE_DIR, threshold=r1["threshold"])
+
+        tags = get_motif_entry_tags(conn, entry_id)
+        assert "spike" in tags.get("element", []), tags
+    finally:
+        conn.close()
+
+
 # ── criterion 1: headless CLI, exits 0 ──────────────────────────────────────
 
 def test_cli_runs_headlessly_against_seed_bundle_and_exits_zero():
