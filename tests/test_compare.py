@@ -182,19 +182,19 @@ def test_diff_recipes_reports_changed_parameter_with_both_values():
     """The motivating one-parameter sweep: identical chains, one value differs."""
     from Working.compare import diff_recipes
 
-    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass",
-                         "params": {"cutoff_hz": 0.01}}])
-    b = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass",
-                         "params": {"cutoff_hz": 0.05}}])
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "bandpass",
+                         "params": {"low_hz": 0.01, "high_hz": 0.1}}])
+    b = make_recipe(1, [{"stage": "preprocessing", "algorithm": "bandpass",
+                         "params": {"low_hz": 0.05, "high_hz": 0.1}}])
 
     diff = diff_recipes(a, b)
     assert len(diff) == 1
     step_diff = diff[0]
     assert step_diff.index == 0
-    assert step_diff.a_step["params"]["cutoff_hz"] == 0.01
-    assert step_diff.b_step["params"]["cutoff_hz"] == 0.05
+    assert step_diff.a_step["params"]["low_hz"] == 0.01
+    assert step_diff.b_step["params"]["low_hz"] == 0.05
     assert [(pc.name, pc.a_value, pc.b_value) for pc in step_diff.changed_params] == [
-        ("cutoff_hz", 0.01, 0.05)
+        ("low_hz", 0.01, 0.05)
     ]
 
 
