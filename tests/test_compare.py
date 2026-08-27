@@ -33,6 +33,7 @@ from Working.database import queries as q
 from Working.database import runs as run_db
 from Working.database.schema import init_db
 from Working.database.similarity import interval_iou
+from Working.recipes import make_recipe
 from UI.workspaces.review.queue_state import ReviewQueue
 
 
@@ -173,6 +174,165 @@ def test_compare_rejects_an_unknown_overlap_criterion():
             compare_run_sets(conn, run_a, run_b, overlap_criterion="shape_distance")
     finally:
         _close(conn)
+
+
+# ── headless core: Working.compare recipe diff (ticket 68) ────────────────
+
+def test_diff_recipes_reports_changed_parameter_with_both_values():
+    """The motivating one-parameter sweep: identical chains, one value differs."""
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass",
+                         "params": {"cutoff_hz": 0.01}}])
+    b = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass",
+                         "params": {"cutoff_hz": 0.05}}])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    step_diff = diff[0]
+    assert step_diff.index == 0
+    assert step_diff.a_step["params"]["cutoff_hz"] == 0.01
+    assert step_diff.b_step["params"]["cutoff_hz"] == 0.05
+    assert [(pc.name, pc.a_value, pc.b_value) for pc in step_diff.changed_params] == [
+        ("cutoff_hz", 0.01, 0.05)
+    ]
+
+
+def test_diff_recipes_reports_added_step():
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass"}])
+    b = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass"},
+        {"stage": "detection", "algorithm": "rupture"},
+    ])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    step_diff = diff[0]
+    assert step_diff.index == 1
+    assert step_diff.a_step is None
+    assert step_diff.b_step["algorithm"] == "rupture"
+
+
+def test_diff_recipes_reports_removed_step():
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass"},
+        {"stage": "detection", "algorithm": "rupture"},
+    ])
+    b = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass"}])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    step_diff = diff[0]
+    assert step_diff.index == 1
+    assert step_diff.a_step["algorithm"] == "rupture"
+    assert step_diff.b_step is None
+
+
+def test_diff_recipes_handles_chains_of_different_lengths():
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass"}])
+    b = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass"},
+        {"stage": "preprocessing", "algorithm": "bandpass"},
+        {"stage": "detection", "algorithm": "rupture"},
+    ])
+
+    diff = diff_recipes(a, b)
+    assert [d.index for d in diff] == [1, 2]
+    assert all(d.a_step is None for d in diff)
+    assert [d.b_step["algorithm"] for d in diff] == ["bandpass", "rupture"]
+
+
+def test_diff_recipes_repeated_algorithm_not_mistaken_for_same_step():
+    """Two lowpass steps in one chain stay distinct by position."""
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.10}},
+    ])
+    b = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.06}},
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.10}},
+    ])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    assert diff[0].index == 0
+    assert [(pc.name, pc.a_value, pc.b_value) for pc in diff[0].changed_params] == [
+        ("cutoff_hz", 0.05, 0.06)
+    ]
+
+
+def test_diff_recipes_reports_parameter_present_in_one_absent_in_other():
+    from Working.compare import MISSING, diff_recipes
+
+    a = make_recipe(1, [{"stage": "detection", "algorithm": "rupture",
+                         "params": {"penalty": 50.0}}])
+    b = make_recipe(1, [{"stage": "detection", "algorithm": "rupture"}])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    changed = diff[0].changed_params
+    assert len(changed) == 1
+    assert changed[0].name == "penalty"
+    assert changed[0].a_value == 50.0
+    assert changed[0].b_value is MISSING
+
+    # Symmetric case: the parameter exists only in the second recipe.
+    diff_rev = diff_recipes(b, a)
+    assert len(diff_rev) == 1
+    changed_rev = diff_rev[0].changed_params
+    assert changed_rev[0].name == "penalty"
+    assert changed_rev[0].a_value is MISSING
+    assert changed_rev[0].b_value == 50.0
+
+
+def test_diff_recipes_identical_recipes_report_no_difference():
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+        {"stage": "detection", "algorithm": "rupture", "params": {"penalty": 50.0}},
+    ])
+    b = make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+        {"stage": "detection", "algorithm": "rupture", "params": {"penalty": 50.0}},
+    ])
+
+    assert diff_recipes(a, b) == ()
+
+
+def test_diff_recipes_reports_step_algorithm_change_at_same_position():
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass"}])
+    b = make_recipe(1, [{"stage": "preprocessing", "algorithm": "bandpass"}])
+
+    diff = diff_recipes(a, b)
+    assert len(diff) == 1
+    step_diff = diff[0]
+    assert step_diff.index == 0
+    assert step_diff.a_step["algorithm"] == "lowpass"
+    assert step_diff.b_step["algorithm"] == "bandpass"
+    assert step_diff.changed_params == ()
+
+
+def test_diff_recipes_is_about_the_chain_not_run_scope():
+    """The diff ignores recording_id/span — it compares chains, not runs."""
+    from Working.compare import diff_recipes
+
+    a = make_recipe(1, [{"stage": "preprocessing", "algorithm": "lowpass"}],
+                    span=(0, 100))
+    b = make_recipe(2, [{"stage": "preprocessing", "algorithm": "lowpass"}],
+                    span=(0, 200))
+
+    assert diff_recipes(a, b) == ()
 
 
 # ── UI surface: CompareSurface ─────────────────────────────────────────────
