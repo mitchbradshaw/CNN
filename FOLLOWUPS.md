@@ -594,3 +594,11 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [standards] (no rule cited) Duplicated Code smell: `result_pane.visible`/`filmstrip_pane.visible` toggle pair repeated verbatim in `_refresh_preview`, `_show_before_after`, `_show_filmstrip`
 - [minor] [spec] (no rule cited) Filmstrip is never called from `execution.py:_on_run_finished` — a real Run never shows the filmstrip, only the old single-plot/Before-After pane; core acceptance criterion unmet in the live app
 - [minor] [spec] (no rule cited) The untested `recording`-fallback path in `_render_filmstrip_input` is unverified and, given the wiring gap, currently unreachable in production
+
+## T59 — 2026-08-27 12:11
+
+- [major] [standards] (rule 6.4) Side-input picker methods in _BlockCard are copied near-verbatim from BlockInspector in inspector.py rather than extracted into a shared module
+- [major] [standards] (rule 6.4) _record_recommended_preserving_edits reimplements the recommendation-bookkeeping core of DeriveMixin._apply_recommended_defaults as a parallel path instead of extending the shared mixin
+- [minor] [standards] (no rule cited) Data Clumps: the source/target/exemplar widget triple and the side-input binding dict travel together across methods in both builder.py and inspector.py and arguably want a named type
+- [minor] [spec] (no rule cited) Side-input pickers are reimplemented on the card rather than imported from a shared module, contra the PRD's "relocation, not reimplementation" framing for the inspector's whole content
+- [minor] [spec] (no rule cited) Cached-result display, part of the inspector's "whole content" the PRD says moves onto the card, is not relocated to _BlockCard (outside this ticket's stated acceptance criteria, so arguable)
