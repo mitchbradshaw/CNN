@@ -712,14 +712,24 @@ def test_legacy_motif_entry_gains_scale_column():
         conn.commit()
         conn.close()
 
-        cols_before = {r["name"] for r in sqlite3.connect(path).execute(
-            "PRAGMA table_info(motif_entry)")}
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_before = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
         assert "scale" not in cols_before
 
         init_db(path).close()
 
-        cols_after = {r["name"] for r in sqlite3.connect(path).execute(
-            "PRAGMA table_info(motif_entry)")}
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_after = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
         assert "scale" in cols_after
     finally:
         _cleanup(path)

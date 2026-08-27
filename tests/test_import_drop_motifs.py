@@ -12,8 +12,10 @@ exist and are imported, not reimplemented:
 
 This ticket adds the step that turns a clustering into library rows:
 
-    motif_entry   one row per shape family; the exemplar is the member
-                  closest to the family's mean waveform.
+    motif_entry   one event-scale row per shape family (the exemplar is the
+                  member closest to the family's mean waveform) and, since
+                  ticket 52, one train-scale row per spike train (`span_key`)
+                  in the bundle.
     motif_member  one row per imported motif, keyed on content
                   (recording, start, end) and never duplicated.
     motif_edge    the within-family distances, carrying the distance
