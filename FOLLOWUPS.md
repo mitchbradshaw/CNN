@@ -623,3 +623,14 @@ deviations. The file list is now corrected in the ticket.
 - [minor] [standards] (no rule cited) test's _is_highlighted hardcodes the highlight hex colour, duplicating a cosmetic literal between prod and test
 - [minor] [spec] (no rule cited) Reusing the builder's card wholesale leaves live edit affordances (↑/↓/Delete, param widgets) on what the spec frames as a read-only comparison canvas
 - [minor] [spec] (no rule cited) Diff highlighting marks the step card but not the connecting arrow/placeholder distinctly for added/removed steps
+
+## Harness — 2026-08-27 (post-run-20260827-0811)
+
+17 merged of 21 dispatched. 84.12M tokens, $60.84 total, $7.48 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T64** FAILED (red-at-exit, gate: suite) — Re-run only the suffix when a parameter changes
+- [ ] **T65** DEFERRED (infrastructure, gate: —) — Focus one block, with a per-adapter detail view
+- [ ] **T66** DEFERRED (infrastructure, gate: —) — Run a single algorithm as a one-block chain
+- [ ] **T70** DEFERRED (infrastructure, gate: —) — Collapse the run-history sidebar to a ribbon
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
