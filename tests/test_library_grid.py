@@ -217,37 +217,25 @@ def test_library_grid_has_grouping_selector():
         grid = LibraryGrid(_FakeLibraryApp(conn))
         assert grid.group_by is not None
         bases = set(grid.group_by.options.values())
-        assert {"shape", "cluster", "tag"} <= bases, bases
+        assert {"provenance", "family", "tag"} <= bases, bases
     finally:
         conn.close()
 
 
-# ── criterion 2: shape grouping groups by sax_string ────────────────────────
+# ── criterion 2: shape-family grouping sections one entry per family ────────
 
-def test_group_by_shape_groups_entries_by_sax_string():
+def test_group_by_family_lists_each_entry_as_its_own_family():
     with tempfile.TemporaryDirectory() as npy_dir:
         conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "shape"
-            groups = dict(grid.groups)
-            assert set(groups["aaa"]) == {e1, e2}
-            assert set(groups["bbb"]) == {e3}
-        finally:
-            conn.close()
-
-
-# ── criterion 3: cluster membership lists each entry as its own cluster ─────
-
-def test_group_by_cluster_lists_each_entry_as_its_own_cluster():
-    with tempfile.TemporaryDirectory() as npy_dir:
-        conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
-        try:
-            grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "cluster"
+            grid.group_by.value = "family"
             assert len(grid.groups) == 3
             for title, entry_ids in grid.groups:
                 assert len(entry_ids) == 1, (title, entry_ids)
+            assert {title for title, _ids in grid.groups} == {
+                "sine-a", "sine-b", "sine-c",
+            }
         finally:
             conn.close()
 
@@ -277,17 +265,19 @@ def test_group_by_selector_rerenders_the_layout_when_changed():
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
             layout = grid.layout()
-            assert set(_group_titles_from_layout(layout)) == {"aaa", "bbb"}
+
+            grid.group_by.value = "family"
+            assert set(_group_titles_from_layout(layout)) == {
+                "sine-a", "sine-b", "sine-c",
+            }
 
             grid.group_by.value = "tag"
             assert set(_group_titles_from_layout(layout)) == {
                 "sharkfin", "ridge", "untagged",
             }
 
-            grid.group_by.value = "cluster"
-            assert set(_group_titles_from_layout(layout)) == {
-                "sine-a", "sine-b", "sine-c",
-            }
+            grid.group_by.value = "provenance"
+            assert set(_group_titles_from_layout(layout)) == {"A.mat CH00"}
         finally:
             conn.close()
 
@@ -300,7 +290,7 @@ def test_all_grouping_bases_show_the_same_entries():
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
             all_ids = {e1, e2, e3}
-            for basis in ("shape", "cluster", "tag"):
+            for basis in ("provenance", "family", "tag"):
                 grid.group_by.value = basis
                 grouped_ids = {
                     eid
@@ -322,7 +312,7 @@ def test_thumbnails_share_y_range_within_shape_family_in_millivolts():
         conn, (e1, e2, e3) = _make_three_entry_library(npy_dir)
         try:
             grid = LibraryGrid(_FakeLibraryApp(conn))
-            grid.group_by.value = "shape"
+            grid.group_by.value = "family"
             ranges = {
                 eid: _card_ylim(grid._card_by_entry[eid])
                 for eid in (e1, e2, e3)
