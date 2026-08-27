@@ -687,8 +687,9 @@ def test_choosing_a_block_from_a_plus_inserts_at_that_position_not_the_end():
     builder._add_step(get_adapter("detection.rupture"))
     assert [s["algorithm"] for s in builder.chain.steps] == ["lowpass", "rupture"]
 
-    # The middle + (insert at index 1) chooses detrend.
-    builder._open_picker(1)
+    # Click the middle + (insert at index 1), then choose detrend.
+    middle_plus = _plus_buttons(builder)[0][1]
+    middle_plus.clicks = middle_plus.clicks + 1
     detrend_row = _add_row(builder, "preprocessing.detrend")
     detrend_row[0].clicks = detrend_row[0].clicks + 1
 
