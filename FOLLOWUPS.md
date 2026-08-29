@@ -650,3 +650,11 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) test_analyse_workspace_builds_with_sidebar_in_each_state sets collapsed and calls private _render() directly instead of going through toggle()/section-change, so it wouldn't catch a regression in the real trigger paths
 - [minor] [spec] (no rule cited) register_sidebar's factory signature changed from factory(app) to factory(app, content), a non-additive change to a shared registration seam, even though only Analyse uses it today
 - [minor] [spec] (no rule cited) bind_sections silently no-ops if content is not a pn.Tabs, so a future single-section Analyse would default to always-expanded with no diagnostic
+
+## Harness — 2026-08-29 (post-run-20260827-0811)
+
+20 merged of 21 dispatched. 89.39M tokens, $68.19 total, $7.48 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T64** FAILED (red-at-exit, gate: suite) — Re-run only the suffix when a parameter changes
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
