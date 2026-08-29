@@ -34,6 +34,10 @@ hv.extension("bokeh")
 
 from Working.database.schema import init_db
 from Working.database import queries as q
+from Working.recipes import make_recipe
+from Working.types import Encoding, Signal, SpanSet
+from Adapters.base import AdapterResult
+from Adapters.registry import get_adapter
 from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
 
@@ -305,6 +309,69 @@ def test_motif_buttons_disabled_until_run_or_valid_span():
 
 
 # ── runner ───────────────────────────────────────────────────────────────────
+
+# ── focus mode: detail-view hook vs. type-renderer fallback ──────────────
+
+def test_focus_without_a_detail_view_hook_renders_input_and_output():
+    """Focusing a block with no per-adapter hook opens its input and output
+    through the single type renderer, at full size rather than the small
+    filmstrip cell."""
+    if not _channel_available():
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = make_recipe(rid, [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+            {"stage": "detection", "algorithm": "rupture", "params": {}},
+        ], span=(0, 600))
+
+        x = np.linspace(0.0, 1.0, 600)
+        step_results = {
+            0: AdapterResult(output_kind="signal", value=Signal(x=x, fs=1.0)),
+            1: AdapterResult(output_kind="spanset", value=SpanSet(starts=(10,), ends=(50,))),
+        }
+
+        layout = rp._build_focus(recipe, step_results, focus_position=1)
+        panes = list(layout.values())
+        assert len(panes) == 2, f"unhooked focus should render input + output, got {len(panes)} panes"
+        assert all(pane is not None for pane in panes)
+        assert isinstance(panes[0], hv.Curve), "the step's signal input should render as a curve"
+        assert isinstance(panes[1], hv.Rectangles), "the step's span-set output should render as rectangles"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_focus_with_sax_detail_view_hook_renders_the_four_existing_panels():
+    """Focusing a SAX block goes through its per-adapter hook, which reuses
+    the existing signal/PAA/quantisation/strip panel builder instead of the
+    type renderer."""
+    if not _channel_available():
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        spec = get_adapter("detection.sax_psax")
+        assert spec.detail_view is not None, "the SAX adapter should declare a detail-view hook"
+
+        x = np.random.default_rng(0).normal(size=1000)
+        t = np.arange(1000) / 1.0
+        result = spec.run(x, t, 1.0)
+
+        recipe = make_recipe(rid, [
+            {"stage": "detection", "algorithm": "sax_psax", "params": {}},
+        ], span=(0, 1000))
+
+        layout = rp._build_focus(recipe, {0: result}, focus_position=0,
+                                 input_value=Signal(x=x, fs=1.0))
+        panes = list(layout.values())
+        assert len(panes) == 4, f"SAX focus should render signal/PAA/quantisation/strip, got {len(panes)}"
+        assert all(pane is not None for pane in panes)
+    finally:
+        _close_and_unlink(app, db_path)
+
 
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())

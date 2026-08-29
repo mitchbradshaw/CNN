@@ -169,6 +169,14 @@ class AdapterSpec:
         existing adapter) means "counts as free".
     plot : callable(x, t, result, **params) -> matplotlib.figure.Figure, optional
         None if this algorithm has no natural single-run visualisation.
+    detail_view : callable(result, **params) -> HoloViews element/layout, optional
+        Opt-in, per-adapter focus view. Focus mode calls this when a block
+        declares one, and falls back to the single type renderer for the
+        step's input and output when it does not. None (the default, and
+        every existing adapter at registration time) means "no per-adapter
+        focus view". The callable itself is UI-side: the spec carries the
+        hook so focus mode can route through it without switching on an
+        algorithm's type or name.
     max_span_samples : int, optional
         Declared, not enforced here — `Working.execution.execute_recipe`
         checks `len(x) <= max_span_samples` before calling `run` and
@@ -220,6 +228,7 @@ class AdapterSpec:
     side_inputs: list = field(default_factory=list)
     estimate: Optional[Callable] = None
     plot: Optional[Callable] = None
+    detail_view: Optional[Callable] = None
     max_span_samples: Optional[int] = None
     description: str = ""
     recommend: Optional[Callable] = None

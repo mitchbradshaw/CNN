@@ -184,6 +184,18 @@ def test_estimate_accepts_a_callable_returning_predicted_seconds():
     assert spec.estimate(None, None, 1.0) == 12.5
 
 
+def test_detail_view_defaults_to_none_meaning_fall_back_to_type_renderer():
+    assert _spec().detail_view is None
+
+
+def test_detail_view_accepts_a_callable_hook():
+    def _detail(result, **params):
+        return "detail"
+
+    spec = _spec(detail_view=_detail)
+    assert spec.detail_view(None) == "detail"
+
+
 # â”€â”€ AdapterResult.value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_adapter_result_value_defaults_to_none():
