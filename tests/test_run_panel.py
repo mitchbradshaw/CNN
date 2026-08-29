@@ -797,11 +797,15 @@ def test_run_surface_returns_non_none_panes_without_stage_algorithm_selectors():
         rp = app.run_panel
         layout = rp.layout()
         assert layout is not None, "the run surface must not return None"
-        left, right = layout.objects
-        assert left is not None and right is not None
 
-        left_objects = left.objects
-        names = [getattr(obj, "name", None) for obj in left_objects]
+        def _flatten(container):
+            for obj in container.objects:
+                yield obj
+                if hasattr(obj, "objects"):
+                    yield from _flatten(obj)
+
+        panes = list(_flatten(layout))
+        names = [getattr(obj, "name", None) for obj in panes]
         assert "Stage" not in names, (
             f"the standalone stage selector must be retired, got {names}"
         )
@@ -809,20 +813,43 @@ def test_run_surface_returns_non_none_panes_without_stage_algorithm_selectors():
             f"the standalone algorithm selector must be retired, got {names}"
         )
 
-        assert all(obj is not None for obj in left_objects), (
-            "every pane in the left column must be non-None -- the blank-pane failure"
-        )
-        assert all(obj is not None for obj in right.objects), (
-            "every pane in the right column must be non-None -- the blank-pane failure"
+        assert all(obj is not None for obj in panes), (
+            "every pane on the run surface must be non-None -- the blank-pane failure"
         )
 
         # The chain-wide controls remain.
-        for obj in left_objects:
-            assert obj is not None
-        assert any(obj is rp.staged_table for obj in left_objects)
-        assert any(obj is rp.span_mode for obj in left_objects)
-        assert any(obj is rp.run_button for obj in left_objects)
-        assert any(obj is rp.cancel_button for obj in left_objects)
-        assert any(obj is rp.confirm_rerun_button for obj in left_objects)
+        assert rp.staged_table in panes
+        assert rp.span_mode in panes
+        assert rp.run_button in panes
+        assert rp.cancel_button in panes
+        assert rp.confirm_rerun_button in panes
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_button_launches_a_one_block_chain_from_the_builder():
+    """T66: the run surface's Run button runs the chain under construction,
+    not the retired selectors. A one-block chain produces the same recipe
+    the old single-algorithm path would have."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        rp.span_mode.value = "Whole channel"
+        _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {"cutoff_hz": 0.05}),
+        ])
+
+        rp._on_run(None)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        recipe = calls[0]["recipe"]
+        assert recipe["recording_id"] == rid
+        assert recipe["span"] is None
+        assert [step["stage"] for step in recipe["steps"]] == ["preprocessing"]
+        assert recipe["steps"][0]["algorithm"] == "lowpass"
+        assert recipe["steps"][0]["params"]["cutoff_hz"] == 0.05
     finally:
         _close_and_unlink(app, db_path)

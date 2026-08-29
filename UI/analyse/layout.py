@@ -23,20 +23,8 @@ class LayoutMixin:
                 # place (the exact bug that hit the zoom presets once).
                 pn.FlexBox(self.remove_staged_button, self.clear_staged_button),
                 pn.layout.Divider(),
-                pn.pane.Markdown("### Run an algorithm"),
-                self.stage_select, self.algorithm_select,
+                pn.pane.Markdown("### Run"),
                 pn.pane.Markdown("**Span:**"), self.span_mode,
-                pn.pane.Markdown("**Preprocessing (applied first):**"),
-                self.preprocess_select, self.preprocess_window,
-                pn.pane.Markdown("**Parameters:**"), self.param_column,
-                # Beside, not inside, the auto-generated param form (§3,
-                # ground rules) — hidden entirely unless the window-matrix
-                # algorithm is selected (`set_visible`).
-                self.window_matrix_panel.layout(),
-                pn.pane.Markdown("**Derived:**"), self.derived_pane,
-                self.span_changed_note,
-                pn.Row(self.auto_preview_checkbox),
-                pn.Row(self.reset_recommended_button),
                 pn.FlexBox(self.run_button, self.cancel_button, self.confirm_rerun_button),
                 self.status, self.duration_pane,
                 width=480,  # Part 7, Part 3 item 6 (was 440) — shortened
@@ -51,11 +39,6 @@ class LayoutMixin:
                 pn.pane.Markdown("**Y-axis (Before/After):**"), self.yaxis_mode,
                 self.result_pane,
                 self.filmstrip_pane,
-                # §4: one coverage-ribbon pane per ladder scale that has any
-                # stored coverage, stacked directly under the staged-span
-                # preview — hidden (empty Column) unless the window-matrix
-                # algorithm is selected AND something is actually covered.
-                self.window_matrix_panel.ribbon_column,
                 self.scale_note,
                 pn.Row(self.save_plot_button, self.save_plot_status),
                 self.encoding_section,  # Part 6, 4f: hidden entirely unless the last run was an encoding
