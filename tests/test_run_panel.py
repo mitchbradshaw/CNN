@@ -781,3 +781,75 @@ def test_confirming_launches_the_suffix_that_was_held():
             assert rp.confirm_rerun_button.visible is False, "control stayed visible"
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T66: the run surface keeps only chain-wide controls ──────────────────────
+
+def test_run_surface_returns_non_none_panes_without_stage_algorithm_selectors():
+    """T66: removing the standalone stage/algorithm selectors must not
+    reproduce the silently-blank-pane failure. The run surface still returns
+    its two columns full of non-`None` panes, the chain-wide controls stay,
+    and the retired selectors are gone from the layout."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        layout = rp.layout()
+        assert layout is not None, "the run surface must not return None"
+
+        def _flatten(container):
+            for obj in container.objects:
+                yield obj
+                if hasattr(obj, "objects"):
+                    yield from _flatten(obj)
+
+        panes = list(_flatten(layout))
+        names = [getattr(obj, "name", None) for obj in panes]
+        assert "Stage" not in names, (
+            f"the standalone stage selector must be retired, got {names}"
+        )
+        assert "Algorithm" not in names, (
+            f"the standalone algorithm selector must be retired, got {names}"
+        )
+
+        assert all(obj is not None for obj in panes), (
+            "every pane on the run surface must be non-None -- the blank-pane failure"
+        )
+
+        # The chain-wide controls remain.
+        assert rp.staged_table in panes
+        assert rp.span_mode in panes
+        assert rp.run_button in panes
+        assert rp.cancel_button in panes
+        assert rp.confirm_rerun_button in panes
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_button_launches_a_one_block_chain_from_the_builder():
+    """T66: the run surface's Run button runs the chain under construction,
+    not the retired selectors. A one-block chain produces the same recipe
+    the old single-algorithm path would have."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        rp.span_mode.value = "Whole channel"
+        _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {"cutoff_hz": 0.05}),
+        ])
+
+        rp._on_run(None)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        recipe = calls[0]["recipe"]
+        assert recipe["recording_id"] == rid
+        assert recipe["span"] is None
+        assert [step["stage"] for step in recipe["steps"]] == ["preprocessing"]
+        assert recipe["steps"][0]["algorithm"] == "lowpass"
+        assert recipe["steps"][0]["params"]["cutoff_hz"] == 0.05
+    finally:
+        _close_and_unlink(app, db_path)
