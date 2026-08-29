@@ -634,3 +634,10 @@ deviations. The file list is now corrected in the ticket.
 - [ ] **T70** DEFERRED (infrastructure, gate: —) — Collapse the run-history sidebar to a ribbon
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T65 — 2026-08-29 12:22
+
+- [minor] [standards] (rule 6.2) _build_focus handles list/tuple/bare-element return shapes from detail_view that no hook in this diff exercises
+- [minor] [standards] (no rule cited) _install_sax_detail_view_hooks mutates shared registry AdapterSpec state as a side effect of widget construction (Feature Envy/Divergent Change)
+- [minor] [standards] (no rule cited) _show_focus has no caller anywhere in this diff or its tests (mild Speculative Generality)
+- [minor] [spec] (no rule cited) _build_focus/_show_focus implement focus mode but no UI trigger (button/click handler) wires it up in this diff, so it isn't yet reachable by a user
