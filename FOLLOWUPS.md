@@ -641,3 +641,12 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [minor] [standards] (no rule cited) _install_sax_detail_view_hooks mutates shared registry AdapterSpec state as a side effect of widget construction (Feature Envy/Divergent Change)
 - [minor] [standards] (no rule cited) _show_focus has no caller anywhere in this diff or its tests (mild Speculative Generality)
 - [minor] [spec] (no rule cited) _build_focus/_show_focus implement focus mode but no UI trigger (button/click handler) wires it up in this diff, so it isn't yet reachable by a user
+
+## T70 — 2026-08-29 12:34
+
+- [minor] [standards] (no rule cited) bind_sections duplicates the "resolve active index → is it Chain builder" logic inline and in its watcher closure
+- [minor] [standards] (no rule cited) literal "Chain builder" string is duplicated across builtins.py and history.py with no shared constant, so renaming the section silently breaks the collapse default
+- [major] [standards] (rule 1.3) UI/workspaces/__init__.py keeps changing for two reasons: generic sidebar-registration machinery and Analyse-specific run_history wiring
+- [minor] [standards] (no rule cited) test_analyse_workspace_builds_with_sidebar_in_each_state sets collapsed and calls private _render() directly instead of going through toggle()/section-change, so it wouldn't catch a regression in the real trigger paths
+- [minor] [spec] (no rule cited) register_sidebar's factory signature changed from factory(app) to factory(app, content), a non-additive change to a shared registration seam, even though only Analyse uses it today
+- [minor] [spec] (no rule cited) bind_sections silently no-ops if content is not a pn.Tabs, so a future single-section Analyse would default to always-expanded with no diagnostic
