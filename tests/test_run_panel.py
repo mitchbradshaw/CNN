@@ -781,3 +781,48 @@ def test_confirming_launches_the_suffix_that_was_held():
             assert rp.confirm_rerun_button.visible is False, "control stayed visible"
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T66: the run surface keeps only chain-wide controls ──────────────────────
+
+def test_run_surface_returns_non_none_panes_without_stage_algorithm_selectors():
+    """T66: removing the standalone stage/algorithm selectors must not
+    reproduce the silently-blank-pane failure. The run surface still returns
+    its two columns full of non-`None` panes, the chain-wide controls stay,
+    and the retired selectors are gone from the layout."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        layout = rp.layout()
+        assert layout is not None, "the run surface must not return None"
+        left, right = layout.objects
+        assert left is not None and right is not None
+
+        left_objects = left.objects
+        names = [getattr(obj, "name", None) for obj in left_objects]
+        assert "Stage" not in names, (
+            f"the standalone stage selector must be retired, got {names}"
+        )
+        assert "Algorithm" not in names, (
+            f"the standalone algorithm selector must be retired, got {names}"
+        )
+
+        assert all(obj is not None for obj in left_objects), (
+            "every pane in the left column must be non-None -- the blank-pane failure"
+        )
+        assert all(obj is not None for obj in right.objects), (
+            "every pane in the right column must be non-None -- the blank-pane failure"
+        )
+
+        # The chain-wide controls remain.
+        for obj in left_objects:
+            assert obj is not None
+        assert any(obj is rp.staged_table for obj in left_objects)
+        assert any(obj is rp.span_mode for obj in left_objects)
+        assert any(obj is rp.run_button for obj in left_objects)
+        assert any(obj is rp.cancel_button for obj in left_objects)
+        assert any(obj is rp.confirm_rerun_button for obj in left_objects)
+    finally:
+        _close_and_unlink(app, db_path)
