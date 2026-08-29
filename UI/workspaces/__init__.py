@@ -87,9 +87,12 @@ def sections(workspace):
 def register_sidebar(workspace, factory):
     """Mount `factory` as a persistent sidebar for `workspace`.
 
-    `factory(app)` is called at layout time and must return a Panel object.
-    A sidebar is rendered to the left of the workspace's section content
-    (tabs, single pane, or placeholder) and is never itself a section.
+    `factory(app, content)` is called at layout time and must return a Panel
+    object. `content` is the workspace's section content (a `pn.Tabs` when the
+    workspace has more than one section, otherwise a single pane) -- passed so
+    a sidebar can make itself section-aware, e.g. collapse when a particular
+    section is active. A sidebar is rendered to the left of the workspace's
+    section content and is never itself a section.
     """
     if workspace not in WORKSPACES:
         raise UnknownWorkspace(
@@ -133,8 +136,22 @@ def build(workspace, app, base=None):
 
     sidebar_factory = _SIDEBARS.get(workspace)
     if sidebar_factory is not None:
-        return pn.Row(sidebar_factory(app), content, sizing_mode="stretch_width")
+        return pn.Row(sidebar_factory(app, content), content, sizing_mode="stretch_width")
     return content
+
+
+def _analyse_sidebar(app, content):
+    """Build Analyse's run-history sidebar and make it section-aware.
+
+    Ticket 70: the sidebar collapses to a ribbon while the chain builder is the
+    active section, so the canvas gets the width. `content` is the Analyse
+    section `pn.Tabs`; the browser watches its active section to apply the
+    default. Wired here, through the existing sidebar registration, rather than
+    in the frozen shell assembly.
+    """
+    sidebar = app.run_history.layout()
+    app.run_history.bind_sections(content)
+    return sidebar
 
 
 def reset():
@@ -151,8 +168,9 @@ def reset():
     register("Analyse", "Compare", lambda app: CompareSurface(app).layout())
     register("Analyse", "Export run group",
              lambda app: RunGroupExporter(app).layout())
-    # Ticket 34: run history is Analyse's sidebar, not a section.
-    register_sidebar("Analyse", lambda app: app.run_history.layout())
+    # Ticket 34: run history is Analyse's sidebar, not a section. Ticket 70:
+    # the registration wires the section-aware collapse default.
+    register_sidebar("Analyse", _analyse_sidebar)
 
 
 reset()
