@@ -356,6 +356,117 @@ def test_analyse_workspace_has_run_history_sidebar():
         _close_and_unlink(app, db_path)
 
 
+def test_run_history_sidebar_toggles_collapsed_and_expanded():
+    """T70: the run-history sidebar toggles between a collapsed ribbon and an
+    expanded width. Collapsed, a control to reopen it must remain visible."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        sidebar = analyse.objects[0]
+        assert app.run_history.collapsed is False, \
+            "sidebar should start expanded away from the chain builder"
+        assert _contains_widget(sidebar, app.run_history.table), \
+            "expanded sidebar should contain the run-history table"
+
+        app.run_history.toggle()
+        assert app.run_history.collapsed is True, \
+            "toggle should collapse the sidebar"
+        assert sidebar.width < app.run_history.EXPANDED_WIDTH, \
+            "collapsed sidebar should be a narrow ribbon"
+        assert _contains_widget(sidebar, app.run_history.expand_button), \
+            "collapsed sidebar should still offer a control to expand"
+
+        app.run_history.toggle()
+        assert app.run_history.collapsed is False, \
+            "toggle should expand the sidebar again"
+        assert sidebar.width == app.run_history.EXPANDED_WIDTH, \
+            "expanded sidebar should be the readable width"
+        assert _contains_widget(sidebar, app.run_history.table), \
+            "expanded sidebar should have the table back"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_history_sidebar_collapses_when_chain_builder_is_active():
+    """T70 user story 31: the sidebar defaults to collapsed while the chain
+    builder is the active Analyse section."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        tabs = _tabs_inside(analyse)
+        assert tabs is not None
+        assert _tab_names(tabs)[tabs.active] == "Run algorithm", \
+            "default Analyse section should be Run algorithm"
+        assert app.run_history.collapsed is False, \
+            "sidebar should be expanded away from the chain builder"
+
+        tabs.active = _tab_names(tabs).index("Chain builder")
+        assert app.run_history.collapsed is True, \
+            "sidebar should collapse while the chain builder is active"
+
+        tabs.active = _tab_names(tabs).index("Run algorithm")
+        assert app.run_history.collapsed is False, \
+            "sidebar should expand when leaving the chain builder"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_history_sidebar_expanded_reads_informative_columns():
+    """T70 user story 32: expanded, the recipe and parameter columns are
+    readable and the status filter shows its selections."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        assert app.run_history.filter_status.width >= 200, \
+            "status filter should be wide enough to show its selections"
+        widths = app.run_history.table.widths
+        assert widths.get("recipe"), \
+            "recipe column should have an explicit width"
+        assert widths.get("params"), \
+            "params column should have an explicit width"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_analyse_workspace_builds_with_sidebar_in_each_state():
+    """T70 acceptance: a headless construction test asserts the Analyse
+    workspace builds with the sidebar in each state (collapsed and expanded),
+    never a blank pane."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        assert isinstance(analyse, pn.Row)
+
+        # Expanded.
+        app.run_history.collapsed = False
+        app.run_history._render()
+        sidebar = analyse.objects[0]
+        assert sidebar is not None
+        assert _contains_widget(sidebar, app.run_history.table), \
+            "expanded workspace should show the run-history table"
+        assert _contains_widget(sidebar, app.run_history.collapse_button), \
+            "expanded sidebar should offer a control to collapse"
+
+        # Collapsed.
+        app.run_history.collapsed = True
+        app.run_history._render()
+        sidebar = analyse.objects[0]
+        assert sidebar is not None
+        assert _contains_widget(sidebar, app.run_history.expand_button), \
+            "collapsed workspace should keep a control to reopen the sidebar"
+        assert not _contains_widget(sidebar, app.run_history.table), \
+            "collapsed sidebar should not show the table"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
 def test_run_history_reopens_a_chain_into_the_builder():
     """PRD: 'a history sidebar that can reload a past chain'. Selecting a
     past run and clicking Reopen must reconstruct that run's recipe steps in
