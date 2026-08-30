@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import panel as pn
 
-from Adapters.registry import discover_adapters, get_adapter
+from Adapters.registry import get_adapter
 
 from Working.database import queries as q
 from Working.database import runs as R
@@ -20,60 +20,16 @@ from Working.hpc.job_export import estimate_recipe_seconds
 from Working.types import Signal
 
 from UI.plots import (
-    build_encoding_panels, build_peek_curve, compute_display_y_range,
+    build_peek_curve, compute_display_y_range,
     style_main_plot_frame, CURVE_COLOR, PLOT_FONTSIZE, render_value,
 )
 from UI.analyse.chain_state import ChainState
 from UI.analyse.formatting import _format_duration_human
 
-_SAX_DETAIL_VIEW_ADAPTERS = (
-    "detection.sax_csax",
-    "detection.sax_psax",
-    "detection.sax_dsax",
-)
-
-
-def _sax_detail_view(result, **params):
-    """The per-adapter focus hook shared by the three SAX blocks.
-
-    Reuses the exact `build_encoding_panels` call the run panel's full
-    encoding view uses, so focus mode and the encoding section can never
-    draw the same run differently. Returns the four panels — encoded
-    signal, PAA, quantisation (with cutlines), symbol strip — stacked as
-    one focus layout.
-    """
-    x = result.meta["encoded_x"]
-    t = result.meta["encoded_t"]
-    symbols = result.value.values
-    details = result.meta["details"]
-    dmap_signal, dmap_paa, dmap_quant, dmap_strip, _ = build_encoding_panels(
-        x, t, symbols, details,
-    )
-    return hv.Layout([dmap_signal, dmap_paa, dmap_quant, dmap_strip]).cols(1).opts(
-        shared_axes=True,
-    )
-
-
 class ResultsMixin:
     """The preview/Before-After pane, preprocessing banner and detections table."""
 
-    def _install_sax_detail_view_hooks(self):
-        """Attach the SAX focus hook to the three SAX adapter specs.
-
-        The hook is UI-side (it returns HoloViews panels); the specs merely
-        carry it.
-        """
-        discover_adapters()  # idempotent — guarantees SAX specs exist even if imported standalone
-        for name in _SAX_DETAIL_VIEW_ADAPTERS:
-            try:
-                get_adapter(name).detail_view = _sax_detail_view
-            except KeyError:
-                # A missing SAX adapter is not a focus-mode error: the rest
-                # of the surface still works and simply has no SAX blocks.
-                continue
-
     def _build_result_widgets(self):
-        self._install_sax_detail_view_hooks()
         # Part 5, Section A: a single pane that holds EITHER the pre-run
         # "staged span" preview OR the post-run Before/After pair, never
         # both — see `_refresh_preview`/`_show_before_after`, the only two
@@ -84,6 +40,12 @@ class ResultsMixin:
         # inside it, so the pre-run staged-span preview and the post-run
         # filmstrip each have exactly one pane and one writer.
         self.filmstrip_pane = pn.pane.HoloViews(sizing_mode="stretch_width", visible=False)
+        # T65: focus mode replaces the filmstrip in place, so it needs a way
+        # out or it is a dead end. Hidden until a block is actually focused.
+        self.back_to_filmstrip_button = pn.widgets.Button(
+            name="\u2190 Back to all steps", button_type="default", visible=False,
+        )
+        self.back_to_filmstrip_button.on_click(self._on_back_to_filmstrip)
         self.preview_info = pn.pane.Markdown("")
         self.yaxis_mode = pn.widgets.RadioButtonGroup(
             name="Y-axis", options=["Independent y-axis", "Shared y-axis"],
@@ -386,85 +348,6 @@ class ResultsMixin:
         return render_value(
             "signal", self._root_signal_value(recipe, input_value, recording),
         ).opts(title="Chain input — signal")
-
-    def _focus_input(self, recipe, step_results, focus_position, input_value, recording):
-        """The typed value feeding the focused step, plus its metadata.
-
-        Step 0's input is the chain's root signal; any later step's input is
-        the previous step's output, already computed into `step_results`."""
-        if focus_position == 0:
-            return self._root_signal_value(recipe, input_value, recording), {}
-        previous = step_results.get(focus_position - 1)
-        if previous is None:
-            raise ValueError(
-                f"focus: no result for step {focus_position - 1}, so step "
-                f"{focus_position}'s input cannot be rendered"
-            )
-        return previous.value, previous.meta
-
-    def _build_focus(self, recipe, step_results, focus_position, input_value=None,
-                     recording=None):
-        """Render one block at full size.
-
-        A block whose adapter declares `detail_view` routes through that
-        hook; every other block falls back to the single type renderer for
-        its input and output. The decision is made per adapter, not per type
-        or per algorithm name, so future per-adapter richness has one place
-        to go.
-
-        Returns a HoloViews `Layout`, never `None`. `focus_position` is the
-        0-based execution position of the focused step.
-        """
-        plan = ChainState.from_recipe(recipe).filmstrip_plan(self.conn)
-        entry = next((e for e in plan if e["position"] == focus_position), None)
-        if entry is None:
-            raise ValueError(f"focus: no filmstrip entry for position {focus_position}")
-
-        step = recipe["steps"][focus_position]
-        spec = get_adapter(f"{step['stage']}.{step['algorithm']}")
-        result = step_results.get(focus_position)
-        if result is None:
-            raise ValueError(
-                f"focus: no result for step {focus_position} ({entry['label']})"
-            )
-
-        if spec.detail_view is not None:
-            params = spec.validate_params(step.get("params") or {})
-            detail = spec.detail_view(result, **params)
-            if isinstance(detail, hv.Layout):
-                return detail
-            if isinstance(detail, (list, tuple)):
-                return hv.Layout(list(detail)).cols(1)
-            if detail is None:
-                raise ValueError(
-                    f"focus: detail_view hook for {spec.name} returned None"
-                )
-            return hv.Layout([detail]).cols(1)
-
-        input_value, input_meta = self._focus_input(
-            recipe, step_results, focus_position, input_value, recording,
-        )
-        input_el = render_value(entry["input_type"], input_value, input_meta).opts(
-            title=f"{entry['label']} — input {entry['input_type']}",
-        )
-        output_el = render_value(entry["output_type"], result.value, result.meta).opts(
-            title=f"{entry['label']} — {entry['output_type']}",
-        )
-        return hv.Layout([input_el, output_el]).cols(1).opts(shared_axes=False)
-
-    def _show_focus(self, recipe, step_results, focus_position, input_value=None,
-                    recording=None):
-        """Put a focused block on screen in the single result pane, hiding
-        the filmstrip — the two are alternative post-run surfaces, exactly
-        like the filmstrip and the pre-run staged-span preview are."""
-        self.result_pane.visible = True
-        self.filmstrip_pane.visible = False
-        self.result_pane.object = self._build_focus(
-            recipe, step_results, focus_position,
-            input_value=input_value, recording=recording,
-        )
-        self._last_before_after = None
-        self.scale_note.object = ""
 
     def _show_filmstrip(self, recipe, step_results, input_value=None, recording=None):
         """Put the filmstrip on screen as the post-run surface. The

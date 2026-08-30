@@ -6,7 +6,7 @@ size: S
 blocked_by: [50]
 mutex: []
 files: ["UI/workspaces/library/grid.py", "tests/test_library_grid.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 1
 unblocks: 1
 budget_minutes: 30

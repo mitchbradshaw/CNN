@@ -20,6 +20,7 @@ from UI.analyse.layout import LayoutMixin
 from UI.analyse.morphology import MorphologySearchMixin
 from UI.analyse.motifs import MotifsMixin
 from UI.analyse.noise_floor import NoiseFloorMixin
+from UI.analyse.focus import FocusMixin
 from UI.analyse.results import ResultsMixin
 from UI.analyse.staged_chain import StagedChainMixin
 
@@ -29,6 +30,7 @@ class RunPanel(
     DeriveMixin,
     ExecutionMixin,
     ResultsMixin,
+    FocusMixin,
     EncodingDisplayMixin,
     MorphologySearchMixin,
     NoiseFloorMixin,

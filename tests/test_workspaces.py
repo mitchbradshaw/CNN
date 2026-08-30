@@ -528,3 +528,87 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+# ── T70 follow-ups: the collapse default, through its real trigger ──────────
+
+
+def test_chain_builder_section_name_has_one_definition():
+    """The collapse default keys off the section's label. The review flagged
+    that literal being duplicated across the section table and the sidebar:
+    renaming the section would silently stop the sidebar collapsing, with no
+    test failing. One constant, referenced by both."""
+    from UI.workspaces.builtins import BUILTIN_SECTIONS, CHAIN_BUILDER_SECTION
+    labels = [label for workspace, label, _ in BUILTIN_SECTIONS
+              if workspace == "Analyse"]
+    assert CHAIN_BUILDER_SECTION in labels, (
+        f"{CHAIN_BUILDER_SECTION!r} is not a registered Analyse section — the "
+        f"constant and the section table have drifted apart"
+    )
+
+
+def test_sidebar_collapses_via_the_real_section_change_not_a_private_render():
+    """The review flagged the acceptance test driving `_render()` directly,
+    which cannot catch a regression in the trigger. This drives the actual
+    `pn.Tabs.active` change the user's click produces."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from UI.workspaces.builtins import CHAIN_BUILDER_SECTION
+    app, db_path = _fresh_app()
+    try:
+        analyse = _pane_named(app.tabs, "Analyse")
+        tabs = next(o for o in analyse.objects if isinstance(o, pn.Tabs))
+        names = list(tabs._names)
+
+        tabs.active = names.index(CHAIN_BUILDER_SECTION)
+        assert app.run_history.collapsed is True,             "selecting the chain builder did not collapse the sidebar"
+
+        tabs.active = names.index("Run algorithm")
+        assert app.run_history.collapsed is False,             "leaving the chain builder did not expand the sidebar"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_toggle_flips_the_sidebar_and_rebuilds_it():
+    """The other real trigger: the collapse/expand buttons."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        history = app.run_history
+        history._set_collapsed(False)
+        history.toggle()
+        assert history.collapsed is True
+        assert _contains_widget(history.sidebar, history.expand_button),             "a collapsed ribbon must still offer a way to reopen it"
+        history.toggle()
+        assert history.collapsed is False
+        assert _contains_widget(history.sidebar, history.table)
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_bind_sections_reports_rather_than_silently_doing_nothing():
+    """The review flagged `bind_sections` no-opping on a non-Tabs content, so a
+    future single-section Analyse would default to always-expanded with no
+    diagnostic. It must say so instead."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path = _fresh_app()
+    try:
+        with pytest.raises(TypeError, match="Tabs"):
+            app.run_history.bind_sections(pn.Column())
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_analyse_sidebar_wiring_lives_in_the_analyse_package():
+    """The review's one [major]: `UI/workspaces/__init__.py` was changing for
+    two reasons — generic sidebar-registration machinery AND Analyse-specific
+    run-history wiring. The Analyse-specific half belongs to Analyse."""
+    import UI.workspaces as W
+    from UI.workspaces.analyse import analyse_sidebar
+    assert not hasattr(W, "_analyse_sidebar"), (
+        "the Analyse-specific sidebar factory still lives in the generic "
+        "registry module"
+    )
+    assert callable(analyse_sidebar)

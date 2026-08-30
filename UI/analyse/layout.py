@@ -38,6 +38,7 @@ class LayoutMixin:
                 self.preview_info,
                 pn.pane.Markdown("**Y-axis (Before/After):**"), self.yaxis_mode,
                 self.result_pane,
+                self.back_to_filmstrip_button,
                 self.filmstrip_pane,
                 self.scale_note,
                 pn.Row(self.save_plot_button, self.save_plot_status),

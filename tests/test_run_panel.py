@@ -853,3 +853,114 @@ def test_run_button_launches_a_one_block_chain_from_the_builder():
         assert recipe["steps"][0]["params"]["cutoff_hz"] == 0.05
     finally:
         _close_and_unlink(app, db_path)
+
+
+# ── T65 follow-up: focus mode is reachable ──────────────────────────────────
+#
+# The review recorded, and the ticket's own acceptance implies, that
+# `_build_focus`/`_show_focus` landed with NO caller: focus mode existed and no
+# user could get to it. Same shape of gap as T64's unwired plan. The trigger is
+# the "Show algorithm" control on each block card, which is what the surface was
+# asked for in the first place — "a button to show algorithm ... it essentially
+# takes you back to the run algorithm page".
+
+
+def test_block_card_offers_a_show_algorithm_control():
+    """Every card carries the trigger; without it focus mode is unreachable."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        card = builder.editors[0]
+        assert card.focus_button is not None
+        assert "algorithm" in card.focus_button.name.lower(), card.focus_button.name
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_focuses_that_step_and_switches_to_the_run_surface():
+    """Clicking it focuses that block and brings the run surface forward."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        rp._last_recipe = builder.chain.to_recipe()
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        activated = []
+        app.activate_workspace = lambda ws, section=None: activated.append((ws, section))
+
+        builder.editors[1].focus_button.clicks += 1
+
+        assert rp.result_pane.visible is True, "focus did not put anything on screen"
+        assert rp.result_pane.object is not None, "focus pane is blank"
+        assert rp.filmstrip_pane.visible is False, "filmstrip should yield to focus"
+        assert ("Analyse", "Run algorithm") in activated, activated
+        assert rp.back_to_filmstrip_button.visible is True,             "focus must offer a way back, or it is a dead end"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_before_a_run_says_so_rather_than_raising():
+    """No run yet means no step results to draw. That is a normal state and
+    must not raise out of a button callback."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        builder.editors[0].focus_button.clicks += 1
+        assert "run" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_back_from_focus_restores_the_filmstrip():
+    """The way out of focus mode returns the whole chain."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        rp._last_recipe = builder.chain.to_recipe()
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        app.activate_workspace = lambda ws, section=None: None
+
+        builder.editors[0].focus_button.clicks += 1
+        assert rp.filmstrip_pane.visible is False
+
+        rp.back_to_filmstrip_button.clicks += 1
+        assert rp.filmstrip_pane.visible is True, "back did not restore the filmstrip"
+        assert rp.filmstrip_pane.object is not None
+        assert rp.back_to_filmstrip_button.visible is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_sax_detail_hooks_are_installed_without_constructing_a_run_panel():
+    """The SAX focus hook is a property of the adapters, not a side effect of
+    building widgets. Constructing a RunPanel mutating the shared adapter
+    registry is the Feature Envy the review flagged; importing the module is
+    what installs them now, so the hook is there for any consumer."""
+    from Adapters.registry import discover_adapters, get_adapter
+    discover_adapters()
+    for name in ("detection.sax_csax", "detection.sax_psax", "detection.sax_dsax"):
+        assert get_adapter(name).detail_view is not None,             f"{name} has no detail_view hook without a RunPanel being built"

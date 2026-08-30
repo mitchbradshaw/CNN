@@ -658,3 +658,40 @@ For each: was this the ticket, or was this the harness? A harness cause belongs 
 - [ ] **T64** FAILED (red-at-exit, gate: suite) — Re-run only the suffix when a parameter changes
 
 For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T65 / T70 follow-ups actioned — 2026-08-30
+
+All ten findings above are addressed; the notes stay as the record of what was
+found. Not a re-review — the fixes carry their own tests.
+
+**T65**
+- The [spec] finding was the real one: `_build_focus`/`_show_focus` had no
+  caller, so focus mode existed and no researcher could reach it. Each block
+  card now carries a "Show algorithm" control that focuses that step on the run
+  surface and brings that section forward, plus a "Back to all steps" control so
+  focus is not a dead end. Fixing it surfaced a second gap the merged tests
+  missed: focusing step 0 needs the recording, because its input is the chain's
+  ROOT signal rather than a previous step's output. The merged test only focused
+  step 1 and so never loaded a root signal.
+- `_install_sax_detail_view_hooks` no longer runs from `_build_result_widgets`.
+  Mutating the shared adapter registry as a side effect of constructing a widget
+  meant two run panels installed it twice and any consumer that had not built
+  one saw adapters with no hook. It runs once at module import.
+- `_build_focus`'s list/tuple branch is gone (rule 6.2). The documented contract
+  is one element or one Layout; a hook wanting several stacks them itself.
+
+**T70**
+- [major, rule 1.3] `analyse_sidebar` moved out of `UI/workspaces/__init__.py`
+  into the Analyse package. That module owns generic sidebar-registration
+  machinery; deciding what Analyse's own sidebar does is not its job.
+- `CHAIN_BUILDER_SECTION` is defined once, beside the section table that names
+  it. The literal was duplicated, so renaming the section would have silently
+  stopped the sidebar collapsing with nothing failing.
+- `bind_sections` and its watcher shared one `_apply_section_default`; they
+  resolved the active index and compared the label separately before.
+- `bind_sections` raises on non-Tabs content instead of returning quietly. A
+  binding that cannot bind is a wiring error, and silent ones are how a surface
+  goes missing.
+- The acceptance test drove `_render()` directly and so could not catch a
+  regression in the trigger. Replaced by tests that drive `pn.Tabs.active` and
+  `toggle()` — the two paths a user actually takes.

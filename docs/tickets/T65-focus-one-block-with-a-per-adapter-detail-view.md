@@ -6,7 +6,7 @@ size: M
 blocked_by: [62]
 mutex: [64, 66]
 files: ["Adapters/base.py", "UI/analyse/results.py", "tests/test_adapter_spec.py", "tests/test_run_panel.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 2
 unblocks: 0
 budget_minutes: 60

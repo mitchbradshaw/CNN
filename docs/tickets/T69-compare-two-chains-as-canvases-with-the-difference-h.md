@@ -6,7 +6,7 @@ size: M
 blocked_by: [57, 67, 68]
 mutex: []
 files: ["UI/workspaces/analyse/compare.py", "tests/test_compare.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 1
 unblocks: 0
 budget_minutes: 60

@@ -12,6 +12,13 @@ The factories take the `ViewerApp` and read attributes off it, so they need no
 imports at all.
 """
 
+#: The Analyse section whose surface wants the full width — the sidebar
+#: collapses to a ribbon while it is active (ticket 70). Named here, beside the
+#: table that defines the label, because the sidebar keys its default off the
+#: STRING: with the literal duplicated in both places, renaming the section
+#: would silently stop the sidebar collapsing and no test would fail.
+CHAIN_BUILDER_SECTION = "Chain builder"
+
 #: `(workspace, label, factory)`, in the order they mount. The label is what a
 #: workspace with more than one section shows on its sub-tab, so it is user-
 #: facing text, not an identifier.
@@ -24,7 +31,7 @@ BUILTIN_SECTIONS = (
     # Ticket 29: the chain builder. `ChainBuilder` is instantiated in
     # `UI/viewer/app.py`, same as `run_panel` above -- this table only ever
     # reads the attribute off `app`, per its own docstring.
-    ("Analyse", "Chain builder", lambda app: app.chain_builder.layout()),
+    ("Analyse", CHAIN_BUILDER_SECTION, lambda app: app.chain_builder.layout()),
     ("Review", "Candidate queue", lambda app: app.review_surface.layout()),
     ("Library", "Motif browser", lambda app: app.motif_browser.layout()),
 )

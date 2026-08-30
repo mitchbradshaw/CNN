@@ -6,7 +6,7 @@ size: M
 blocked_by: []
 mutex: [52]
 files: ["Working/database/schema.py", "Working/database/runs.py", "UI/workspaces/analyse/history.py", "tests/test_database.py", "tests/test_run_groups.py"]
-flags: []
+flags: ['done']
 level: 0
 unblocks: 1
 budget_minutes: 60

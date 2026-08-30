@@ -6,7 +6,7 @@ size: S
 blocked_by: []
 mutex: []
 files: ["Working/compare.py", "tests/test_compare.py"]
-flags: []
+flags: ['done']
 level: 0
 unblocks: 1
 budget_minutes: 30

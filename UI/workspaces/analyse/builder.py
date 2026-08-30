@@ -72,6 +72,14 @@ class _BlockCard(DeriveMixin):
         self.auto_run_checkbox = pn.widgets.Checkbox(
             name="Auto-run on change", value=False,
         )
+        # T65's trigger. Focus mode shipped with no caller, so no researcher
+        # could reach it; this is the "button to show algorithm" the surface
+        # was asked for, and it hands off to the run panel because that is
+        # where the last run's per-step results live.
+        self.focus_button = pn.widgets.Button(
+            name="Show algorithm", button_type="default",
+        )
+        self.focus_button.on_click(self._on_focus_clicked)
         self.span_changed_note = pn.pane.Markdown("")
         self.derived_pane = pn.pane.HTML("", sizing_mode="stretch_width")
         self.reset_recommended_button = pn.widgets.Button(
@@ -213,6 +221,13 @@ class _BlockCard(DeriveMixin):
                 widget.name = new_name
         self._sync_segment_mode_controls()
         self._refresh_derived()
+
+    def _on_focus_clicked(self, _event=None):
+        """Open this block on the run surface at full size."""
+        run_panel = getattr(self.app, "run_panel", None)
+        if run_panel is None:
+            return None
+        return run_panel.request_focus(self.index)
 
     def _schedule_auto_preview(self):
         """`DeriveMixin` calls this after every user parameter edit (T64's
@@ -421,6 +436,7 @@ class _BlockCard(DeriveMixin):
             parts.append(pn.pane.Markdown("**Side inputs**"))
             parts.append(self.side_inputs_column)
         parts.append(self.auto_run_checkbox)
+        parts.append(self.focus_button)
         return parts
 
 

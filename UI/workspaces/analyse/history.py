@@ -31,6 +31,8 @@ from Working.database import queries as q
 from Working.database import runs as R
 from Working.recipes import recipe_summary
 
+from UI.workspaces.builtins import CHAIN_BUILDER_SECTION
+
 TABLE_COLUMNS = ["id", "name", "source_file", "channel", "recipe", "params",
                   "span_start", "span_end", "duration_s", "status",
                   "detections", "artifacts", "started_at"]
@@ -197,7 +199,7 @@ class RunHistoryBrowser:
         builder._refresh()
 
         if self.app.tabs is not None:
-            self.app.activate_workspace("Analyse", "Chain builder")
+            self.app.activate_workspace("Analyse", CHAIN_BUILDER_SECTION)
         name = run["name"]
         label = f"#{run_id}" if not name else f"{name} (#{run_id})"
         self.status.object = (
@@ -227,20 +229,38 @@ class RunHistoryBrowser:
         applied immediately for the currently active section and re-applied on
         every section change, so a manual toggle within a section is honoured
         until the section changes.
+
+        Raises on anything that is not a `pn.Tabs`. It used to return quietly,
+        which meant a future single-section Analyse — rendered directly rather
+        than as sub-tabs — would silently lose the collapse default with no
+        diagnostic anywhere. A binding that cannot bind is a wiring error, and
+        wiring errors that say nothing are how a surface goes missing.
         """
         if not isinstance(tabs, pn.Tabs):
+            raise TypeError(
+                f"bind_sections needs the Analyse section pn.Tabs, got "
+                f"{type(tabs).__name__}. A workspace rendering one section "
+                f"directly has no tabs to watch, and the collapse default "
+                f"would be silently lost."
+            )
+
+        tabs.param.watch(
+            lambda event: self._apply_section_default(tabs, event.new), "active",
+        )
+        self._apply_section_default(tabs, tabs.active)
+
+    def _apply_section_default(self, tabs, active):
+        """Collapse iff `active` names the chain-builder section.
+
+        One implementation, called both for the initial state and from the
+        watcher — the two used to resolve the active index and compare the
+        label separately, which is two chances to disagree.
+        """
+        index = max(active if active is not None else 0, 0)
+        names = list(tabs._names)
+        if not 0 <= index < len(names):
             return
-
-        def _on_section_change(event):
-            names = list(tabs._names)
-            active = event.new if event.new is not None else 0
-            active = max(active, 0)
-            self._set_collapsed(names[active] == "Chain builder")
-
-        tabs.param.watch(_on_section_change, "active")
-        active = tabs.active if tabs.active is not None else 0
-        active = max(active, 0)
-        self._set_collapsed(list(tabs._names)[active] == "Chain builder")
+        self._set_collapsed(names[index] == CHAIN_BUILDER_SECTION)
 
     def _render(self):
         """Rebuild the sidebar Column to match `self.collapsed`."""

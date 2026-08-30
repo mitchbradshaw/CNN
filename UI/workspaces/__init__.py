@@ -23,6 +23,7 @@ merely empty.
 
 import panel as pn
 
+from UI.workspaces.analyse import analyse_sidebar
 from UI.workspaces.analyse.compare import CompareSurface
 from UI.workspaces.analyse.export import RunGroupExporter
 from UI.workspaces.builtins import BUILTIN_SECTIONS
@@ -140,20 +141,6 @@ def build(workspace, app, base=None):
     return content
 
 
-def _analyse_sidebar(app, content):
-    """Build Analyse's run-history sidebar and make it section-aware.
-
-    Ticket 70: the sidebar collapses to a ribbon while the chain builder is the
-    active section, so the canvas gets the width. `content` is the Analyse
-    section `pn.Tabs`; the browser watches its active section to apply the
-    default. Wired here, through the existing sidebar registration, rather than
-    in the frozen shell assembly.
-    """
-    sidebar = app.run_history.layout()
-    app.run_history.bind_sections(content)
-    return sidebar
-
-
 def reset():
     """Drop every registration and re-seed the pre-split surfaces.
 
@@ -170,7 +157,7 @@ def reset():
              lambda app: RunGroupExporter(app).layout())
     # Ticket 34: run history is Analyse's sidebar, not a section. Ticket 70:
     # the registration wires the section-aware collapse default.
-    register_sidebar("Analyse", _analyse_sidebar)
+    register_sidebar("Analyse", analyse_sidebar)
 
 
 reset()
