@@ -394,6 +394,37 @@ class ExecutionMixin:
         self._cancel_event.set()
         self.status.object = "Cancelling after the current step finishes ..."
 
+    def _show_filmstrip_if_multi_step(self, recording=None):
+        """Put the filmstrip up when the completed run had more than one step.
+
+        A one-block chain is deliberately excluded: a "filmstrip" of one plot
+        is just the result view with extra chrome, and the per-kind views below
+        (Before/After, the encoding panels) say more about a single block than
+        a generic type render does.
+
+        Never raises. This runs on the run-finished path, where an exception
+        would replace a completed run's results with a traceback; a filmstrip
+        that cannot be drawn should cost the filmstrip, not the run.
+        """
+        recipe = getattr(self, "_last_recipe", None)
+        results = getattr(self, "_last_step_results", None)
+        if not recipe or not results:
+            return
+        if len(recipe["steps"]) < 2:
+            return
+        if any(i not in results for i in range(len(recipe["steps"]))):
+            # A cancelled or partly-cached run may not have handed back every
+            # step. Showing a filmstrip with holes in it would be worse than
+            # showing none.
+            return
+        if recording is None:
+            recording = q.get_recording_by_id(self.conn, recipe["recording_id"])
+        try:
+            self._show_filmstrip(recipe, results, recording=recording)
+        except Exception as e:  # noqa: BLE001 - see the docstring
+            self.filmstrip_pane.visible = False
+            self.status.object += f"  |  *filmstrip unavailable: {e}*"
+
     def _on_run_finished(self, out, display_data):
         self.run_button.disabled = False
         self.cancel_button.disabled = True
@@ -467,6 +498,19 @@ class ExecutionMixin:
                 self.status.object += (
                     f"  |  no artifact was registered for this run{reused_note2} — nothing to show."
                 )
+
+        # T62's filmstrip had no caller: every run rendered only its LAST step,
+        # exactly as before that ticket, so the whole point of the surface —
+        # seeing what each stage did to the signal — was invisible.
+        #
+        # LAST, deliberately. Every branch above assigns `result_pane` and the
+        # single-result views hide the filmstrip, so calling this first shows a
+        # filmstrip that is hidden again a line later. For a real chain the
+        # filmstrip is the surface and wins; a one-block chain keeps its
+        # per-kind view, which says more about one block than a generic type
+        # render does.
+        self._show_filmstrip_if_multi_step(display_data.get("recording"))
+
         self._update_motif_button_states()
 
     def _on_run_cancelled(self):

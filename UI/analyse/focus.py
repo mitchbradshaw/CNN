@@ -173,6 +173,15 @@ class FocusMixin:
         reached from a button callback, where an exception would break the
         widget rather than the run.
         """
+        # Bring the run surface forward FIRST, and unconditionally. The card
+        # lives on the Chain builder and every message below is written onto
+        # the run panel's status pane, so returning early without switching
+        # left the explanation on a surface the researcher was not looking at
+        # — reported from a live session as the button doing nothing at all.
+        activate = getattr(self.app, "activate_workspace", None)
+        if activate is not None:
+            activate("Analyse", "Run algorithm")
+
         recipe = getattr(self, "_last_recipe", None)
         results = getattr(self, "_last_step_results", None)
         if not recipe or not results:
@@ -196,11 +205,6 @@ class FocusMixin:
         recording = q.get_recording_by_id(self.conn, recipe["recording_id"])
         self._show_focus(recipe, results, position, recording=recording)
         self.back_to_filmstrip_button.visible = True
-        # The card lives on the Chain builder; focus renders on the run
-        # surface, so bring that forward or the click appears to do nothing.
-        activate = getattr(self.app, "activate_workspace", None)
-        if activate is not None:
-            activate("Analyse", "Run algorithm")
         return position
 
     def _on_back_to_filmstrip(self, _event=None):

@@ -964,3 +964,155 @@ def test_sax_detail_hooks_are_installed_without_constructing_a_run_panel():
     discover_adapters()
     for name in ("detection.sax_csax", "detection.sax_psax", "detection.sax_dsax"):
         assert get_adapter(name).detail_view is not None,             f"{name} has no detail_view hook without a RunPanel being built"
+
+
+# ── Reported from the running app, 2026-08-30 ───────────────────────────────
+#
+# Three symptoms on a live session: "Show algorithm" did nothing when clicked,
+# no filmstrip ever appeared, and the run surface felt disconnected from the
+# chain builder. Two distinct defects, both of the same family as T64/T65 —
+# machinery built and verified in isolation, never driven end to end.
+#
+# The T62 filmstrip test called `_build_filmstrip` directly, so it proved the
+# LAYOUT was right and never that anything called it. These drive the real
+# paths instead.
+
+
+def _finished_run_payload(rid):
+    """The `(out, display_data)` pair `_on_run_finished` receives after a
+    completed two-step signal chain."""
+    from Working.types import Signal
+    recipe = {
+        "recording_id": rid,
+        "span": [1000, 1600],
+        "steps": [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+            {"stage": "preprocessing", "algorithm": "highpass", "params": {}},
+        ],
+    }
+    out = {"run_id": 1, "reused": False, "step_timings": {0: 0.1, 1: 0.2}}
+    return recipe, out
+
+
+def test_a_finished_run_puts_the_filmstrip_on_screen():
+    """The reported defect: the filmstrip existed and nothing ever showed it.
+    `_show_filmstrip` had no caller, so every run rendered only its LAST step
+    exactly as it did before T62."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe, out = _finished_run_payload(rid)
+        rp._last_recipe = recipe
+        rp._last_recording = rid
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        recording = q.get_recording_by_id(app.conn, rid)
+        display_data = {
+            "kind": "signal",
+            "recording": recording,
+            "result_x": np.arange(600, dtype=float),
+            "result_t": np.arange(1000, 1600, dtype=float),
+        }
+
+        rp._on_run_finished(out, display_data)
+
+        assert rp.filmstrip_pane.visible is True, (
+            "a finished multi-step run left the filmstrip hidden — every step "
+            "but the last is invisible"
+        )
+        assert rp.filmstrip_pane.object is not None, "filmstrip pane is blank"
+        panes = list(rp.filmstrip_pane.object.values())
+        assert len(panes) == 3, f"expected input + 2 steps, got {len(panes)}"
+        assert all(p is not None for p in panes)
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_a_single_block_run_still_shows_its_result_without_a_filmstrip():
+    """A one-block chain has nothing to strip: the existing single-result view
+    is still the right surface, and must not be replaced by a filmstrip of
+    one."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        rp._last_recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [{"stage": "preprocessing", "algorithm": "lowpass", "params": {}}],
+        }
+        rp._last_recording = rid
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        recording = q.get_recording_by_id(app.conn, rid)
+        rp._on_run_finished(
+            {"run_id": 1, "reused": False, "step_timings": {0: 0.1}},
+            {"kind": "signal", "recording": recording,
+             "result_x": np.arange(600, dtype=float),
+             "result_t": np.arange(1000, 1600, dtype=float)},
+        )
+        assert rp.filmstrip_pane.visible is False,             "a one-block chain does not need a filmstrip"
+        assert rp.result_pane.visible is True
+        assert rp.result_pane.object is not None
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_before_a_run_is_visible_to_the_person_who_clicked():
+    """The reported defect: the button appeared dead. It wrote its explanation
+    onto the RUN PANEL's status pane while the researcher was looking at the
+    CHAIN BUILDER, so nothing on screen changed. Feedback has to arrive where
+    the person is — bring the run surface forward so its message is read."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        activated = []
+        app.activate_workspace = lambda ws, section=None: activated.append((ws, section))
+
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        builder.editors[0].focus_button.clicks += 1
+
+        assert ("Analyse", "Run algorithm") in activated, (
+            "clicking Show algorithm with no run yet left the researcher on the "
+            "chain builder, where the explanation is not rendered — the button "
+            "reads as dead"
+        )
+        assert "run" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_activate_workspace_actually_reaches_the_run_algorithm_section():
+    """`activate_workspace` documents that it silently does nothing for a
+    section that is not mounted. Focus mode depends on it, so assert the
+    section name it is called with is real and selectable."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        app.activate_workspace("Analyse", "Run algorithm")
+        analyse = None
+        for name, pane in zip(app.tabs._names, app.tabs.objects):
+            if name == "Analyse":
+                analyse = pane
+        tabs = next(o for o in analyse.objects if isinstance(o, pn.Tabs))
+        assert list(tabs._names)[tabs.active] == "Run algorithm", (
+            f"activate_workspace did not land on Run algorithm; active section "
+            f"is {list(tabs._names)[tabs.active]!r}"
+        )
+    finally:
+        _close_and_unlink(app, db_path)
