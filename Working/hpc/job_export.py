@@ -27,13 +27,26 @@ Two things this module does NOT resolve on its own:
    working tree (`HPC/Detection/generated/` by default). The generated
    `.sh`/`.json` pair still needs to reach rangpur the same way the
    hand-written scripts do (git sync, scp, ...) before `sbatch` can run it.
+3. **Partition names.** `HPC_CPU_PARTITION`/`HPC_GPU_PARTITION`
+   (`Working/config.py`) are this account's real partition names as of
+   2026-08-31 (`sinfo`/`scontrol show partition`) — a reconfiguration
+   (rangpur's login banner warns these do happen) could rename or remove
+   them again. If `sbatch` ever says `invalid partition specified`, re-run
+   `sinfo -o "%P %a %l %D %G %f"` before guessing a replacement string —
+   two rounds of guessing (`gpu`, then `--partition=gpu` without `--gres`)
+   both failed against the live account before the real names were pulled
+   from `sinfo` directly.
 """
 
 import json
 import math
 import os
 
-from Working.config import CLUSTER_ROUTING_CEILING_S, HPC_REMOTE_REPO_ROOT
+from Working.config import (
+    CLUSTER_ROUTING_CEILING_S, HPC_CONDA_ENV_CPU, HPC_CONDA_ENV_GPU,
+    HPC_CPU_PARTITION, HPC_GPU_PARTITION, HPC_MAX_WALLTIME_MINUTES,
+    HPC_REMOTE_REPO_ROOT,
+)
 from Working.database import queries as q
 from Working.database.runs import get_or_create_config
 from Working.recipes import make_recipe
@@ -50,13 +63,25 @@ def _slurm_time_from_estimate(est_seconds):
     """`--time`, per MATRIX_PROFILE_UI_PROMPT.md §5: `est_seconds * 3`,
     rounded up to the next 15 minutes, floor 30 minutes. `None` (no
     calibration on this machine) also floors to 30 minutes — a
-    deliberately conservative default, not a guessed estimate."""
+    deliberately conservative default, not a guessed estimate.
+
+    Then clamped to `HPC_MAX_WALLTIME_MINUTES`: this account's QOS rejects
+    submission outright above that wall-clock (`Working/config.py`), so the
+    §5 formula's own 30-minute floor is unreachable here in practice — every
+    job this returns is effectively pinned to the QOS ceiling instead, same
+    as the hand-written `wm_job.sh` already hardcodes. A resumable job just
+    ends up chaining through more (shorter) resubmits than the formula
+    alone would have asked for; a non-resumable one (e.g. matrix-profile)
+    has no such fallback, so a workload whose real cost exceeds the ceiling
+    will still be submittable but will not finish in one job.
+    """
     if est_seconds is None:
         minutes = 0
     else:
         minutes = (est_seconds / 60.0) * _TIME_SAFETY_FACTOR
     rounded = math.ceil(minutes / _TIME_ROUND_MINUTES) * _TIME_ROUND_MINUTES
     minutes = max(_MIN_TIME_MINUTES, rounded)
+    minutes = min(minutes, HPC_MAX_WALLTIME_MINUTES)
     h, m = divmod(int(minutes), 60)
     return f"{h:02d}:{m:02d}:00"
 
@@ -146,6 +171,7 @@ _SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --error={remote_root}/logs/{base_name}_%j.err
 #SBATCH --time={slurm_time}
 #SBATCH --gres=gpu:a100
+#SBATCH --partition={gpu_partition}
 #SBATCH --cpus-per-task=4
 {array_line}
 
@@ -256,9 +282,28 @@ def export_job(recipe, *, out_dir, base_name, job_name, est_seconds=None,
         script = _WM_SCRIPT_TEMPLATE.format(
             job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
             slurm_time=slurm_time, max_chain=int(max_chain),
-            gpu_line=("#SBATCH --gres=gpu:a100\n#SBATCH --partition=gpu" if uses_gpu
-                      else "# CPU-only build (no CNN stage) -- no GPU requested."),
+            # THIRD iteration, now from `sinfo`/`scontrol show partition`
+            # ground truth (2026-08-31), not a guess: `--partition=gpu`
+            # (the first two fixes) doesn't exist on this cluster at all
+            # ("invalid partition specified: gpu") -- stale from before the
+            # reconfiguration the login banner mentions. Real partitions:
+            # `HPC_CPU_PARTITION` ("cpu", GRES=(null), no GPU -- correct
+            # for a stat-only build, and off the tiny 2-node/2-GPU
+            # `a100-test` this account defaults to) for CPU-only, or
+            # `HPC_GPU_PARTITION` ("a100", 10 nodes) + `--gres=gpu:a100`
+            # when the CNN stage actually needs one. A CPU-only build
+            # requests NO `--gres` at all now: `cpu`'s own GRES is `(null)`,
+            # so asking it for a GPU device would just be a second wrong
+            # constraint on top of a fixed one.
+            gpu_line=(f"#SBATCH --gres=gpu:a100\n#SBATCH --partition={HPC_GPU_PARTITION}" if uses_gpu
+                      else f"#SBATCH --partition={HPC_CPU_PARTITION}"),
             module_line=("module load cuda/12.2\n" if uses_gpu else ""),
+            # `torch_env` (GPU/CNN) does not have `aeon` installed --
+            # confirmed 2026-08-31 by a real run failing with "No module
+            # named 'aeon'" after every scheduling issue was already fixed.
+            # `aeon-env` is this account's separate environment for the
+            # catch22/entropy stack a stat-only build actually needs.
+            conda_env=(HPC_CONDA_ENV_GPU if uses_gpu else HPC_CONDA_ENV_CPU),
             artifact_repo_path=artifact_repo_path,
             array_line=array_line,
             run_command=run_command,
@@ -275,8 +320,15 @@ def export_job(recipe, *, out_dir, base_name, job_name, est_seconds=None,
         script = _SCRIPT_TEMPLATE.format(
             job_name=job_name, remote_root=HPC_REMOTE_REPO_ROOT, base_name=base_name,
             slurm_time=slurm_time, array_line=array_line, run_command=run_command,
+            gpu_partition=HPC_GPU_PARTITION,
         )
-    with open(script_path, "w") as f:
+    # newline="\n": these scripts run on a Linux cluster via `sbatch`, which
+    # rejects CRLF outright ("Batch script contains DOS line breaks"). Plain
+    # text mode on Windows (this repo's dev environment, per CLAUDE.md)
+    # silently translates every `\n` in the template to `\r\n`, so without
+    # this the generator produces a script that fails on the one platform
+    # it's actually meant to run on.
+    with open(script_path, "w", newline="\n") as f:
         f.write(script)
 
     return {
@@ -344,8 +396,22 @@ def export_mp_job(conn, recording_id, window_min, span=None, *,
 #  - resuming jobs pass `--force`, because `execute_recipe` short-circuits
 #    on a completed run for the same recipe and span and would otherwise
 #    "reuse" the partial matrix instead of continuing it;
-#  - `--gres=gpu:a100` only when a CNN stage is enabled. A Catch22 +
-#    entropy build is CPU-only and should not queue for a GPU node.
+#  - `--gres=gpu:a100` (and `HPC_GPU_PARTITION`) only when a CNN stage is
+#    enabled; a Catch22 + entropy build is CPU-only and requests
+#    `HPC_CPU_PARTITION` instead, with no `--gres` at all -- it should not
+#    queue for a GPU node, both because it doesn't need one and because
+#    the account's GPU partitions are small and department-shared
+#    (`a100-test`: 2 nodes, 2 total A100s) next to the CPU partitions
+#    (`Working/config.py`, informed by `sinfo`/`scontrol show partition`
+#    on the real account, 2026-08-31).
+#  - NO `--mem=` line at all. `16G` (a100-test-sized), then `4G` (a
+#    measurement-informed reduction) were both rejected outright with
+#    "Memory specification can not be satisfied" on `HPC_CPU_PARTITION`
+#    (2026-08-31) -- two attempts at picking a number, both wrong. The
+#    user's own prior experience with this exact SLURM error, matching the
+#    official Rangpur guide's own working example (which never sets `--mem`
+#    either), is that omitting `--mem` and letting the scheduler allocate
+#    its default is what actually works here.
 
 _WM_SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --job-name={job_name}
@@ -354,7 +420,6 @@ _WM_SCRIPT_TEMPLATE = """#!/bin/bash
 #SBATCH --error={remote_root}/logs/{base_name}_%j.err
 #SBATCH --time={slurm_time}
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
 {gpu_line}
 {array_line}
 # Chain position, incremented on each resubmit. Capped at {max_chain} so a
@@ -376,7 +441,7 @@ mkdir -p logs
 
 {module_line}
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate torch_env
+conda activate {conda_env}
 
 # --force on every job in the chain: the recipe and span are identical each
 # time (the resume path is baked in from the first export, deliberately, so

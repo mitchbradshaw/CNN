@@ -34,6 +34,10 @@ hv.extension("bokeh")
 
 from Working.database.schema import init_db
 from Working.database import queries as q
+from Working.recipes import make_recipe
+from Working.types import Encoding, Signal, SpanSet
+from Adapters.base import AdapterResult
+from Adapters.registry import get_adapter
 from UI.viewer import ViewerApp
 from tests._session_isolation import scratch_session_file
 
@@ -306,6 +310,69 @@ def test_motif_buttons_disabled_until_run_or_valid_span():
 
 # ── runner ───────────────────────────────────────────────────────────────────
 
+# ── focus mode: detail-view hook vs. type-renderer fallback ──────────────
+
+def test_focus_without_a_detail_view_hook_renders_input_and_output():
+    """Focusing a block with no per-adapter hook opens its input and output
+    through the single type renderer, at full size rather than the small
+    filmstrip cell."""
+    if not _channel_available():
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = make_recipe(rid, [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+            {"stage": "detection", "algorithm": "rupture", "params": {}},
+        ], span=(0, 600))
+
+        x = np.linspace(0.0, 1.0, 600)
+        step_results = {
+            0: AdapterResult(output_kind="signal", value=Signal(x=x, fs=1.0)),
+            1: AdapterResult(output_kind="spanset", value=SpanSet(starts=(10,), ends=(50,))),
+        }
+
+        layout = rp._build_focus(recipe, step_results, focus_position=1)
+        panes = list(layout.values())
+        assert len(panes) == 2, f"unhooked focus should render input + output, got {len(panes)} panes"
+        assert all(pane is not None for pane in panes)
+        assert isinstance(panes[0], hv.Curve), "the step's signal input should render as a curve"
+        assert isinstance(panes[1], hv.Rectangles), "the step's span-set output should render as rectangles"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_focus_with_sax_detail_view_hook_renders_the_four_existing_panels():
+    """Focusing a SAX block goes through its per-adapter hook, which reuses
+    the existing signal/PAA/quantisation/strip panel builder instead of the
+    type renderer."""
+    if not _channel_available():
+        pytest.skip(
+            f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        spec = get_adapter("detection.sax_psax")
+        assert spec.detail_view is not None, "the SAX adapter should declare a detail-view hook"
+
+        x = np.random.default_rng(0).normal(size=1000)
+        t = np.arange(1000) / 1.0
+        result = spec.run(x, t, 1.0)
+
+        recipe = make_recipe(rid, [
+            {"stage": "detection", "algorithm": "sax_psax", "params": {}},
+        ], span=(0, 1000))
+
+        layout = rp._build_focus(recipe, {0: result}, focus_position=0,
+                                 input_value=Signal(x=x, fs=1.0))
+        panes = list(layout.values())
+        assert len(panes) == 4, f"SAX focus should render signal/PAA/quantisation/strip, got {len(panes)}"
+        assert all(pane is not None for pane in panes)
+    finally:
+        _close_and_unlink(app, db_path)
+
+
 def _run_all():
     fns = [obj for name, obj in sorted(globals().items())
            if name.startswith("test_") and inspect.isfunction(obj)]
@@ -387,5 +454,665 @@ def test_detections_caption_is_blank_before_any_run():
     app, db_path, rid = _fresh_app()
     try:
         assert app.run_panel.detections_caption.object == ""
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T62: filmstrip renders the chain input and every step ───────────────────
+
+def test_filmstrip_renders_input_and_each_step_with_non_none_panes():
+    """The Run algorithm surface must render the chain's input at the top and
+    one plot per step below it, in execution order, with no blank panes.
+
+    This is a headless construction test: it does not run a recipe, it hands
+    the surface a multi-step recipe and the typed per-step results a run would
+    produce, and asserts the returned HoloViews Layout contains an input curve
+    plus one non-`None` element per step — the silently-blank-pane failure mode
+    this codebase has hit twice must fail here, not on a human's screen.
+    """
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal, SpanSet
+    from UI.analyse.chain_state import ChainState
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "rupture", "params": {}},
+            ],
+        }
+        step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("spanset", SpanSet(starts=(10, 20), ends=(30, 40)), {}),
+        }
+        input_value = Signal(x=np.arange(600) / 1.0, fs=1.0)
+
+        layout = rp._build_filmstrip(recipe, step_results, input_value=input_value)
+
+        assert layout is not None, "the filmstrip must return a HoloViews Layout"
+        panes = list(layout.values())
+        assert len(panes) == 3, (
+            f"expected the chain input plus one pane per step (3), got {len(panes)}"
+        )
+        assert all(pane is not None for pane in panes), (
+            "every filmstrip pane must be a non-None renderable object"
+        )
+
+        # The order must match the headless plan, with the chain input first.
+        plan = ChainState.from_recipe(recipe).filmstrip_plan(rp.conn)
+        assert [entry["position"] for entry in plan] == [0, 1]
+        assert isinstance(panes[0], hv.Curve), "the chain input must render as a signal curve"
+        assert isinstance(panes[1], hv.Curve), "a signal-producing step must render as a curve"
+        assert isinstance(panes[2], hv.Rectangles), (
+            "a spanset-producing step must render as an interval overlay, not a blank pane"
+        )
+
+        # Each plot is labelled with the block that produced it and its type.
+        titles = [str(pane.opts.get("plot").kwargs.get("title", "")) for pane in panes]
+        assert "chain input" in titles[0].lower(), titles
+        assert "lowpass" in titles[1].lower() and "signal" in titles[1].lower(), titles
+        assert "rupture" in titles[2].lower() and "spanset" in titles[2].lower(), titles
+
+        # The surface itself must expose the filmstrip pane, not just a helper.
+        assert rp.filmstrip_pane is not None
+        rp._show_filmstrip(recipe, step_results, input_value=input_value)
+        assert rp.filmstrip_pane.object is not None
+        assert len(list(rp.filmstrip_pane.object.values())) == 3
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T64: re-run only the suffix when a parameter changes ─────────────────────
+
+def test_suffix_recompute_plan_reruns_middle_step_and_successors():
+    """T64: a parameter change on a middle step recomputes that step and
+    every step after it — never an earlier step. The recomputed set is the
+    suffix derived from T63's `invalidated_step_indices`; this test pins the
+    RunPanel's use of that rule for a middle step of a multi-step chain."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.10}},
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.15}},
+            ],
+        }
+        plan = rp._suffix_recompute_plan(recipe, 1)
+        assert plan["indices"] == {1, 2}, (
+            f"a change on the middle step must recompute that step and its "
+            f"successor, never the earlier step; got {plan['indices']}"
+        )
+        assert 0 not in plan["indices"]
+        # No calibrated estimator on these blocks → the suffix is free, so it
+        # runs automatically (below the interactive budget).
+        assert plan["estimate_s"] == 0
+        assert plan["requires_confirmation"] is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_suffix_recompute_plan_expensive_suffix_requires_confirmation():
+    """T64: a suffix whose summed estimate is above the interactive budget
+    must ask first, reporting the estimate — the existing estimator and the
+    existing interactive-budget constant, not a second cost model."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            recipe = {
+                "recording_id": rid,
+                "span": [0, 10_000_000],
+                "steps": [
+                    {"stage": "preprocessing", "algorithm": "lowpass", "params": {"cutoff_hz": 0.05}},
+                    {"stage": "detection", "algorithm": "matrix_profile",
+                     "params": {"window_min": 10.0, "backend": "stump"}},
+                ],
+            }
+            plan = rp._suffix_recompute_plan(recipe, 1)
+            assert plan["indices"] == {1}
+            assert plan["estimate_s"] is not None and plan["estimate_s"] > 0
+            assert plan["requires_confirmation"] is True
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_filmstrip_marks_stale_steps_while_rerun_in_flight():
+    """T64: plots for steps being recomputed are visibly marked stale — the
+    suffix steps are flagged in the filmstrip while a re-run is in flight,
+    and the unaffected prefix is not."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal, SpanSet
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [
+                {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+                {"stage": "detection", "algorithm": "rupture", "params": {}},
+            ],
+        }
+        step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("spanset", SpanSet(starts=(10, 20), ends=(30, 40)), {}),
+        }
+        input_value = Signal(x=np.arange(600) / 1.0, fs=1.0)
+
+        layout = rp._build_filmstrip(
+            recipe, step_results, input_value=input_value, stale_indices={1},
+        )
+        # The layout is [chain input, step 0, step 1], so a `stale_indices`
+        # of {1} marks the LAST element. The prefix step 0 — the one whose
+        # cached result is still valid — must stay unmarked; that, not the
+        # chain input, is the negative case worth asserting.
+        titles = [str(p.opts.get("plot").kwargs.get("title", "")) for p in layout.values()]
+        assert "stale" in titles[2].lower(), titles
+        assert "stale" not in titles[1].lower(), titles
+        assert "stale" not in titles[0].lower(), titles
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T64: editing a parameter launches the suffix, when opted in ──────────────
+#
+# Wiring the plan to an actual trigger. The opt-in is the card's OWN checkbox,
+# not `DeriveMixin.auto_preview_checkbox`: the mixin reassigns that one from the
+# span length every time recommendations are applied, so a researcher who turned
+# it off would find it back on after changing span. An opt-in that reverts by
+# itself is not an opt-in.
+
+
+def _chain_card(app, recording_id, steps):
+    """A builder card over a chain of `steps`, plus that card's chain.
+
+    `recording_id` is set explicitly: a fresh `ViewerApp` has none selected,
+    and a chain without one cannot serialise to a recipe at all.
+    """
+    builder = app.chain_builder
+    builder.chain.recording_id = recording_id
+    builder.chain.steps = []
+    for stage, algorithm, params in steps:
+        builder.chain.add_step(stage, algorithm, params=params)
+    builder._refresh()
+    return builder
+
+
+def _capture_launches(rp):
+    """Record `_launch_recipe` calls instead of starting a run."""
+    calls = []
+    rp._launch_recipe = lambda recipe, stale_indices=(): calls.append(
+        {"recipe": recipe, "stale_indices": set(stale_indices)}
+    )
+    return calls
+
+
+def test_param_edit_does_not_launch_a_run_when_auto_run_is_off():
+    """Off by default: a stray keystroke in a parameter box must never start
+    work. This is the whole reason the trigger is opt-in."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        assert card.auto_run_checkbox.value is False, "auto-run must default to off"
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+        assert calls == [], "a parameter edit launched a run with auto-run off"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_cheap_suffix_launches_and_marks_only_the_suffix_stale():
+    """Opted in and cheap: it just runs, and only the suffix is marked stale."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        card = builder.editors[1]
+        card.auto_run_checkbox.value = True
+
+        pname = next(iter(card._param_widgets))
+        card._on_param_changed(pname)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        assert calls[0]["stale_indices"] == {1, 2}, calls[0]["stale_indices"]
+        assert rp.confirm_rerun_button.visible is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_expensive_suffix_asks_before_launching():
+    """Opted in but expensive: nothing runs, the estimate is stated, and the
+    confirm control appears. Losing an afternoon to a keystroke is the thing
+    being prevented."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+
+            pname = next(iter(card._param_widgets))
+            card._on_param_changed(pname)
+
+            assert calls == [], "an expensive suffix launched without asking"
+            assert rp.confirm_rerun_button.visible is True
+            assert "estimate" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_confirming_launches_the_suffix_that_was_held():
+    """The held suffix is exactly what runs when the researcher confirms."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from tests._calibration_isolation import scratch_calibration
+    from Working.Detection.matrix_profiling import cost as mp_cost
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        with scratch_calibration(mp_cost):
+            mp_cost.calibrate("stump", n0=2000)
+            builder = _chain_card(app, rid, [
+                ("preprocessing", "lowpass", {}),
+                ("detection", "matrix_profile",
+                 {"window_min": 10.0, "backend": "stump"}),
+            ])
+            builder.chain.span = (0, 10_000_000)
+            card = builder.editors[1]
+            card.auto_run_checkbox.value = True
+            card._on_param_changed(next(iter(card._param_widgets)))
+            assert calls == []
+
+            rp._on_confirm_rerun(None)
+            assert len(calls) == 1, "confirming did not launch the held suffix"
+            assert calls[0]["stale_indices"] == {1}
+            assert rp.confirm_rerun_button.visible is False, "control stayed visible"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T66: the run surface keeps only chain-wide controls ──────────────────────
+
+def test_run_surface_returns_non_none_panes_without_stage_algorithm_selectors():
+    """T66: removing the standalone stage/algorithm selectors must not
+    reproduce the silently-blank-pane failure. The run surface still returns
+    its two columns full of non-`None` panes, the chain-wide controls stay,
+    and the retired selectors are gone from the layout."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        layout = rp.layout()
+        assert layout is not None, "the run surface must not return None"
+
+        def _flatten(container):
+            for obj in container.objects:
+                yield obj
+                if hasattr(obj, "objects"):
+                    yield from _flatten(obj)
+
+        panes = list(_flatten(layout))
+        names = [getattr(obj, "name", None) for obj in panes]
+        assert "Stage" not in names, (
+            f"the standalone stage selector must be retired, got {names}"
+        )
+        assert "Algorithm" not in names, (
+            f"the standalone algorithm selector must be retired, got {names}"
+        )
+
+        assert all(obj is not None for obj in panes), (
+            "every pane on the run surface must be non-None -- the blank-pane failure"
+        )
+
+        # The chain-wide controls remain.
+        assert rp.staged_table in panes
+        assert rp.span_mode in panes
+        assert rp.run_button in panes
+        assert rp.cancel_button in panes
+        assert rp.confirm_rerun_button in panes
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_run_button_launches_a_one_block_chain_from_the_builder():
+    """T66: the run surface's Run button runs the chain under construction,
+    not the retired selectors. A one-block chain produces the same recipe
+    the old single-algorithm path would have."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        calls = _capture_launches(rp)
+        rp.span_mode.value = "Whole channel"
+        _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {"cutoff_hz": 0.05}),
+        ])
+
+        rp._on_run(None)
+
+        assert len(calls) == 1, f"expected exactly one launch, got {len(calls)}"
+        recipe = calls[0]["recipe"]
+        assert recipe["recording_id"] == rid
+        assert recipe["span"] is None
+        assert [step["stage"] for step in recipe["steps"]] == ["preprocessing"]
+        assert recipe["steps"][0]["algorithm"] == "lowpass"
+        assert recipe["steps"][0]["params"]["cutoff_hz"] == 0.05
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+# ── T65 follow-up: focus mode is reachable ──────────────────────────────────
+#
+# The review recorded, and the ticket's own acceptance implies, that
+# `_build_focus`/`_show_focus` landed with NO caller: focus mode existed and no
+# user could get to it. Same shape of gap as T64's unwired plan. The trigger is
+# the "Show algorithm" control on each block card, which is what the surface was
+# asked for in the first place — "a button to show algorithm ... it essentially
+# takes you back to the run algorithm page".
+
+
+def test_block_card_offers_a_show_algorithm_control():
+    """Every card carries the trigger; without it focus mode is unreachable."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        card = builder.editors[0]
+        assert card.focus_button is not None
+        assert "algorithm" in card.focus_button.name.lower(), card.focus_button.name
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_focuses_that_step_and_switches_to_the_run_surface():
+    """Clicking it focuses that block and brings the run surface forward."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [
+            ("preprocessing", "lowpass", {}),
+            ("preprocessing", "lowpass", {}),
+        ])
+        rp._last_recipe = builder.chain.to_recipe()
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        activated = []
+        app.activate_workspace = lambda ws, section=None: activated.append((ws, section))
+
+        builder.editors[1].focus_button.clicks += 1
+
+        assert rp.result_pane.visible is True, "focus did not put anything on screen"
+        assert rp.result_pane.object is not None, "focus pane is blank"
+        assert rp.filmstrip_pane.visible is False, "filmstrip should yield to focus"
+        assert ("Analyse", "Run algorithm") in activated, activated
+        assert rp.back_to_filmstrip_button.visible is True,             "focus must offer a way back, or it is a dead end"
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_before_a_run_says_so_rather_than_raising():
+    """No run yet means no step results to draw. That is a normal state and
+    must not raise out of a button callback."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        builder.editors[0].focus_button.clicks += 1
+        assert "run" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_back_from_focus_restores_the_filmstrip():
+    """The way out of focus mode returns the whole chain."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        rp._last_recipe = builder.chain.to_recipe()
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        app.activate_workspace = lambda ws, section=None: None
+
+        builder.editors[0].focus_button.clicks += 1
+        assert rp.filmstrip_pane.visible is False
+
+        rp.back_to_filmstrip_button.clicks += 1
+        assert rp.filmstrip_pane.visible is True, "back did not restore the filmstrip"
+        assert rp.filmstrip_pane.object is not None
+        assert rp.back_to_filmstrip_button.visible is False
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_sax_detail_hooks_are_installed_without_constructing_a_run_panel():
+    """The SAX focus hook is a property of the adapters, not a side effect of
+    building widgets. Constructing a RunPanel mutating the shared adapter
+    registry is the Feature Envy the review flagged; importing the module is
+    what installs them now, so the hook is there for any consumer."""
+    from Adapters.registry import discover_adapters, get_adapter
+    discover_adapters()
+    for name in ("detection.sax_csax", "detection.sax_psax", "detection.sax_dsax"):
+        assert get_adapter(name).detail_view is not None,             f"{name} has no detail_view hook without a RunPanel being built"
+
+
+# ── Reported from the running app, 2026-08-30 ───────────────────────────────
+#
+# Three symptoms on a live session: "Show algorithm" did nothing when clicked,
+# no filmstrip ever appeared, and the run surface felt disconnected from the
+# chain builder. Two distinct defects, both of the same family as T64/T65 —
+# machinery built and verified in isolation, never driven end to end.
+#
+# The T62 filmstrip test called `_build_filmstrip` directly, so it proved the
+# LAYOUT was right and never that anything called it. These drive the real
+# paths instead.
+
+
+def _finished_run_payload(rid):
+    """The `(out, display_data)` pair `_on_run_finished` receives after a
+    completed two-step signal chain."""
+    from Working.types import Signal
+    recipe = {
+        "recording_id": rid,
+        "span": [1000, 1600],
+        "steps": [
+            {"stage": "preprocessing", "algorithm": "lowpass", "params": {}},
+            {"stage": "preprocessing", "algorithm": "highpass", "params": {}},
+        ],
+    }
+    out = {"run_id": 1, "reused": False, "step_timings": {0: 0.1, 1: 0.2}}
+    return recipe, out
+
+
+def test_a_finished_run_puts_the_filmstrip_on_screen():
+    """The reported defect: the filmstrip existed and nothing ever showed it.
+    `_show_filmstrip` had no caller, so every run rendered only its LAST step
+    exactly as it did before T62."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        recipe, out = _finished_run_payload(rid)
+        rp._last_recipe = recipe
+        rp._last_recording = rid
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+            1: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        recording = q.get_recording_by_id(app.conn, rid)
+        display_data = {
+            "kind": "signal",
+            "recording": recording,
+            "result_x": np.arange(600, dtype=float),
+            "result_t": np.arange(1000, 1600, dtype=float),
+        }
+
+        rp._on_run_finished(out, display_data)
+
+        assert rp.filmstrip_pane.visible is True, (
+            "a finished multi-step run left the filmstrip hidden — every step "
+            "but the last is invisible"
+        )
+        assert rp.filmstrip_pane.object is not None, "filmstrip pane is blank"
+        panes = list(rp.filmstrip_pane.object.values())
+        assert len(panes) == 3, f"expected input + 2 steps, got {len(panes)}"
+        assert all(p is not None for p in panes)
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_a_single_block_run_still_shows_its_result_without_a_filmstrip():
+    """A one-block chain has nothing to strip: the existing single-result view
+    is still the right surface, and must not be replaced by a filmstrip of
+    one."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    from Adapters.base import AdapterResult
+    from Working.types import Signal
+
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        rp._last_recipe = {
+            "recording_id": rid,
+            "span": [1000, 1600],
+            "steps": [{"stage": "preprocessing", "algorithm": "lowpass", "params": {}}],
+        }
+        rp._last_recording = rid
+        rp._last_step_results = {
+            0: AdapterResult("signal", Signal(x=np.arange(600) / 1.0, fs=1.0), {}),
+        }
+        recording = q.get_recording_by_id(app.conn, rid)
+        rp._on_run_finished(
+            {"run_id": 1, "reused": False, "step_timings": {0: 0.1}},
+            {"kind": "signal", "recording": recording,
+             "result_x": np.arange(600, dtype=float),
+             "result_t": np.arange(1000, 1600, dtype=float)},
+        )
+        assert rp.filmstrip_pane.visible is False,             "a one-block chain does not need a filmstrip"
+        assert rp.result_pane.visible is True
+        assert rp.result_pane.object is not None
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_show_algorithm_before_a_run_is_visible_to_the_person_who_clicked():
+    """The reported defect: the button appeared dead. It wrote its explanation
+    onto the RUN PANEL's status pane while the researcher was looking at the
+    CHAIN BUILDER, so nothing on screen changed. Feedback has to arrive where
+    the person is — bring the run surface forward so its message is read."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        rp = app.run_panel
+        activated = []
+        app.activate_workspace = lambda ws, section=None: activated.append((ws, section))
+
+        builder = _chain_card(app, rid, [("preprocessing", "lowpass", {})])
+        builder.editors[0].focus_button.clicks += 1
+
+        assert ("Analyse", "Run algorithm") in activated, (
+            "clicking Show algorithm with no run yet left the researcher on the "
+            "chain builder, where the explanation is not rendered — the button "
+            "reads as dead"
+        )
+        assert "run" in rp.status.object.lower(), rp.status.object
+    finally:
+        _close_and_unlink(app, db_path)
+
+
+def test_activate_workspace_actually_reaches_the_run_algorithm_section():
+    """`activate_workspace` documents that it silently does nothing for a
+    section that is not mounted. Focus mode depends on it, so assert the
+    section name it is called with is real and selectable."""
+    if not _channel_available():
+        pytest.skip(f"real channel data not present: {REAL_CHANNEL_PATH}")
+    app, db_path, rid = _fresh_app()
+    try:
+        app.activate_workspace("Analyse", "Run algorithm")
+        analyse = None
+        for name, pane in zip(app.tabs._names, app.tabs.objects):
+            if name == "Analyse":
+                analyse = pane
+        tabs = next(o for o in analyse.objects if isinstance(o, pn.Tabs))
+        assert list(tabs._names)[tabs.active] == "Run algorithm", (
+            f"activate_workspace did not land on Run algorithm; active section "
+            f"is {list(tabs._names)[tabs.active]!r}"
+        )
     finally:
         _close_and_unlink(app, db_path)

@@ -22,6 +22,12 @@ from Working.recipes import canonical_json, short_hash
 
 ARTIFACT_KINDS = ("plot", "encoding", "model", "csv", "other")
 
+# T67: the marker appended to a surrogate run's inherited name. A surrogate
+# is a paired null run (`runs.surrogate_of_run_id`); its name is the parent's
+# name plus this suffix, so the pair reads as related rather than one named
+# run beside an anonymous stranger.
+SURROGATE_NAME_SUFFIX = " (surrogate)"
+
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -67,32 +73,99 @@ def load_recipe(conn, config_id):
 # ── runs ─────────────────────────────────────────────────────────────────────
 
 def insert_run(conn, config_id, recording_id, span_start, span_end,
-                status="running", started_at=None):
+                status="running", started_at=None, name=None):
     started_at = started_at or _now()
     cur = conn.execute(
-        """INSERT INTO runs (config_id, recording_id, span_start, span_end, started_at, status)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (config_id, recording_id, span_start, span_end, started_at, status),
+        """INSERT INTO runs (config_id, recording_id, span_start, span_end, started_at, status, name)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (config_id, recording_id, span_start, span_end, started_at, status, name),
     )
     conn.commit()
     return cur.lastrowid
 
 
+def _surrogate_name_for(parent_name):
+    """The inherited name of a surrogate whose parent is named `parent_name`.
+    A surrogate of an unnamed parent stays unnamed — there is nothing to
+    inherit."""
+    if parent_name is None:
+        return None
+    return parent_name + SURROGATE_NAME_SUFFIX
+
+
+def _inherit_name_from_parent(conn, surrogate_run_id, parent_run_id):
+    """When a surrogate is linked to a parent, copy the parent's name (with
+    the surrogate marker) onto the surrogate unless it already carries an
+    explicit name."""
+    surrogate = conn.execute(
+        "SELECT name FROM runs WHERE id = ?", (surrogate_run_id,)
+    ).fetchone()
+    if surrogate is None or surrogate["name"] is not None:
+        return
+    parent = conn.execute(
+        "SELECT name FROM runs WHERE id = ?", (parent_run_id,)
+    ).fetchone()
+    if parent is None:
+        return
+    inherited = _surrogate_name_for(parent["name"])
+    if inherited is not None:
+        conn.execute(
+            "UPDATE runs SET name = ? WHERE id = ?", (inherited, surrogate_run_id)
+        )
+        conn.commit()
+
+
+def _propagate_name_to_surrogates(conn, run_id, old_name, new_name):
+    """A rename of a run propagates to its paired surrogates. A surrogate
+    with no explicit name — either still NULL or carrying the previous
+    inherited value — follows the new name; a surrogate the researcher has
+    manually renamed is left alone."""
+    surrogates = conn.execute(
+        "SELECT id, name FROM runs WHERE surrogate_of_run_id = ?", (run_id,)
+    ).fetchall()
+    if not surrogates:
+        return
+    new_inherited = _surrogate_name_for(new_name)
+    old_inherited = _surrogate_name_for(old_name)
+    for s in surrogates:
+        if s["name"] is None or (old_inherited is not None and s["name"] == old_inherited):
+            conn.execute(
+                "UPDATE runs SET name = ? WHERE id = ?", (new_inherited, s["id"])
+            )
+    conn.commit()
+
+
 def update_run(conn, run_id, **fields):
     """Update editable run fields: status, finished_at, duration_s,
     error_text, step_timings_json, artifact_path, current_step,
-    run_group_id, surrogate_of_run_id."""
+    run_group_id, surrogate_of_run_id, name.
+
+    T67: naming a run propagates to its surrogates (they inherit the parent's
+    name with a surrogate suffix), and linking a surrogate to a named parent
+    copies the name at link time.
+    """
     allowed = {"status", "finished_at", "duration_s", "error_text",
                "step_timings_json", "artifact_path", "current_step",
-               "run_group_id", "surrogate_of_run_id"}
+               "run_group_id", "surrogate_of_run_id", "name"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
     if not fields:
         return
+
+    old_name = None
+    if "name" in fields:
+        row = conn.execute("SELECT name FROM runs WHERE id = ?", (run_id,)).fetchone()
+        old_name = row["name"] if row else None
+
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     conn.execute(f"UPDATE runs SET {set_clause} WHERE id = ?", (*fields.values(), run_id))
     conn.commit()
+
+    if "name" in fields:
+        _propagate_name_to_surrogates(conn, run_id, old_name, fields["name"])
+    if "surrogate_of_run_id" in fields and fields["surrogate_of_run_id"] is not None:
+        _inherit_name_from_parent(conn, run_id, fields["surrogate_of_run_id"])
 
 
 def get_run(conn, run_id):

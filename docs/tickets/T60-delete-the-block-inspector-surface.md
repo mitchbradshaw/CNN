@@ -6,7 +6,7 @@ size: S
 blocked_by: [59]
 mutex: []
 files: ["UI/workspaces/analyse/inspector.py", "UI/workspaces/__init__.py", "tests/test_block_inspector.py"]
-flags: []
+flags: ['done']
 level: 2
 unblocks: 0
 budget_minutes: 30

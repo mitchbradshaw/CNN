@@ -25,7 +25,10 @@ while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from Working.config import HPC_REMOTE_REPO_ROOT
+from Working.config import (
+    HPC_CONDA_ENV_CPU, HPC_CONDA_ENV_GPU, HPC_CPU_PARTITION, HPC_GPU_PARTITION,
+    HPC_REMOTE_REPO_ROOT,
+)
 from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.database import window_matrix_store as wm_store
@@ -77,28 +80,37 @@ def test_script_contains_resolved_chdir_and_job_name():
         os.unlink(db_path)
 
 
-def test_time_floors_at_30_minutes_when_uncalibrated():
+def test_time_floors_at_30_minutes_then_clamps_to_qos_ceiling_when_uncalibrated():
+    """The §5 formula's own floor is 30 minutes (uncalibrated -> 0 estimated
+    minutes -> floored to 30), but `HPC_MAX_WALLTIME_MINUTES=20`
+    (`Working/config.py`) is this account's real SLURM QOS ceiling
+    (confirmed 2026-08-31 via `sbatch`'s own
+    "QOSMaxWallDurationPerJobLimit... cannot be more than 20 minutes"
+    rejection) and wins the final clamp -- so the floor is unreachable in
+    practice and every uncalibrated job gets exactly the ceiling."""
     conn, db_path, recording_id = _fresh_conn_with_recording()
     try:
         with tempfile.TemporaryDirectory() as out_dir:
             result = export_mp_job(conn, recording_id, 1.0, out_dir=out_dir, est_seconds=None)
             with open(result["script_path"]) as f:
                 script = f.read()
-            assert "--time=00:30:00" in script
+            assert "--time=00:20:00" in script
     finally:
         conn.close()
         os.unlink(db_path)
 
 
-def test_time_is_3x_estimate_rounded_up_to_15min():
+def test_time_is_3x_estimate_rounded_up_to_15min_then_clamped_to_qos_ceiling():
     conn, db_path, recording_id = _fresh_conn_with_recording()
     try:
         with tempfile.TemporaryDirectory() as out_dir:
-            # 1000s * 3 = 3000s = 50 min -> rounded up to 60 min.
+            # 1000s * 3 = 3000s = 50 min -> rounded up to 60 min -> floored
+            # at 30 (moot, 60 > 30 already) -> clamped down to this
+            # account's 20-minute QOS ceiling regardless of the estimate.
             result = export_mp_job(conn, recording_id, 1.0, out_dir=out_dir, est_seconds=1000)
             with open(result["script_path"]) as f:
                 script = f.read()
-            assert "--time=01:00:00" in script
+            assert "--time=00:20:00" in script
     finally:
         conn.close()
         os.unlink(db_path)
@@ -171,7 +183,20 @@ def test_wm_recipe_json_is_loadable_and_resume_path_matches_the_store():
         os.unlink(db_path)
 
 
-def test_wm_gpu_line_present_only_with_cnn_stage():
+def test_wm_partition_and_gres_follow_cnn_stage():
+    """CPU-only (no `cnn` stage) -> `HPC_CPU_PARTITION`, no `--gres` at all.
+    CNN stage present -> `HPC_GPU_PARTITION` + `--gres=gpu:a100`.
+
+    Three iterations to get here, all against the live account (2026-08-31):
+    (1) no `--partition` at all landed on the account's default
+    (`a100-test`, 2 nodes / 2 total A100s department-wide) and sat
+    PD/BadConstraints forever; (2) `--partition=gpu` (guessed from the
+    hand-written scripts) doesn't exist on this cluster at all
+    ("invalid partition specified: gpu") -- stale from before a
+    reconfiguration. `sinfo -o "%P %a %l %D %G %f"` against the real
+    account is what actually settled it: `cpu` (`GRES=(null)`, no GPU) is
+    the correct partition for a stat-only build, `a100` the correct one
+    for a CNN build -- see `Working/config.py`."""
     conn, db_path, recording_id = _fresh_conn_with_recording()
     try:
         with tempfile.TemporaryDirectory() as out_dir:
@@ -179,13 +204,88 @@ def test_wm_gpu_line_present_only_with_cnn_stage():
                                    stages=("catch22", "fast_entropy"))
             with open(no_cnn["script_path"]) as f:
                 script_no_cnn = f.read()
+            assert f"--partition={HPC_CPU_PARTITION}" in script_no_cnn
             assert "--gres=gpu:a100" not in script_no_cnn
 
             with_cnn = export_wm_job(conn, recording_id, 60.0, out_dir=out_dir,
                                      stages=("catch22", "cnn"))
             with open(with_cnn["script_path"]) as f:
                 script_with_cnn = f.read()
+            assert f"--partition={HPC_GPU_PARTITION}" in script_with_cnn
             assert "--gres=gpu:a100" in script_with_cnn
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_wm_script_omits_mem_directive():
+    """Two attempts at picking an explicit `--mem` value for
+    `HPC_CPU_PARTITION` (16G, then a measurement-informed 4G) were both
+    rejected outright with "Memory specification can not be satisfied"
+    (2026-08-31). Per the user's own prior experience with this exact SLURM
+    error, and matching the official Rangpur guide's own working example
+    (which never sets `--mem` either), the generated WM template omits
+    `--mem` entirely -- CPU-only build or not -- and lets the scheduler
+    assign its default."""
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        with tempfile.TemporaryDirectory() as out_dir:
+            no_cnn = export_wm_job(conn, recording_id, 10.0, out_dir=out_dir,
+                                   stages=("catch22", "fast_entropy"))
+            with open(no_cnn["script_path"]) as f:
+                assert "--mem=" not in f.read()
+
+            with_cnn = export_wm_job(conn, recording_id, 60.0, out_dir=out_dir,
+                                     stages=("catch22", "cnn"))
+            with open(with_cnn["script_path"]) as f:
+                assert "--mem=" not in f.read()
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_wm_conda_env_follows_cnn_stage():
+    """`torch_env` (this template's original, unconditional choice) does not
+    have `aeon` installed -- confirmed 2026-08-31 by an actual run on the
+    live account failing with "No module named 'aeon'" only after every
+    scheduling problem (partition, mem, line endings) was already fixed.
+    `aeon-env` is this account's separate environment for the
+    catch22/entropy stack a stat-only build needs; a CNN-stage build still
+    needs `torch_env` for torch/CUDA."""
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        with tempfile.TemporaryDirectory() as out_dir:
+            no_cnn = export_wm_job(conn, recording_id, 10.0, out_dir=out_dir,
+                                   stages=("catch22", "fast_entropy"))
+            with open(no_cnn["script_path"]) as f:
+                script_no_cnn = f.read()
+            assert f"conda activate {HPC_CONDA_ENV_CPU}" in script_no_cnn
+            assert f"conda activate {HPC_CONDA_ENV_GPU}" not in script_no_cnn
+
+            with_cnn = export_wm_job(conn, recording_id, 60.0, out_dir=out_dir,
+                                     stages=("catch22", "cnn"))
+            with open(with_cnn["script_path"]) as f:
+                script_with_cnn = f.read()
+            assert f"conda activate {HPC_CONDA_ENV_GPU}" in script_with_cnn
+            assert f"conda activate {HPC_CONDA_ENV_CPU}" not in script_with_cnn
+    finally:
+        conn.close()
+        os.unlink(db_path)
+
+
+def test_mp_script_requests_real_gpu_partition():
+    """The non-resumable template (`export_mp_job`, always GPU) must request
+    `HPC_GPU_PARTITION` -- not the nonexistent `gpu`, and not no partition
+    at all (this account's default, `a100-test`, is a tiny 2-node/2-GPU
+    department-shared test partition, not meant for production MP runs)."""
+    conn, db_path, recording_id = _fresh_conn_with_recording()
+    try:
+        with tempfile.TemporaryDirectory() as out_dir:
+            result = export_mp_job(conn, recording_id, 10.0, out_dir=out_dir)
+            with open(result["script_path"]) as f:
+                script = f.read()
+            assert f"--partition={HPC_GPU_PARTITION}" in script
+            assert "--gres=gpu:a100" in script
     finally:
         conn.close()
         os.unlink(db_path)
@@ -229,12 +329,14 @@ def test_wm_timeout_is_slurm_wall_clock_minus_cleanup_margin():
     conn, db_path, recording_id = _fresh_conn_with_recording()
     try:
         with tempfile.TemporaryDirectory() as out_dir:
-            # 30-minute floor (uncalibrated) -> 1800s - 300s margin = 1500s.
+            # 30-minute §5 floor (uncalibrated) is clamped to this account's
+            # 20-minute QOS ceiling (HPC_MAX_WALLTIME_MINUTES) -> 1200s - 300s
+            # margin = 900s.
             result = export_wm_job(conn, recording_id, 10.0, out_dir=out_dir, est_seconds=None)
-            assert result["slurm_time"] == "00:30:00"
-            assert result["timeout_s"] == 1500.0
+            assert result["slurm_time"] == "00:20:00"
+            assert result["timeout_s"] == 900.0
             recipe = load_recipe_from_file(result["recipe_path"])
-            assert recipe["steps"][0]["params"]["timeout_s"] == 1500.0
+            assert recipe["steps"][0]["params"]["timeout_s"] == 900.0
     finally:
         conn.close()
         os.unlink(db_path)
@@ -385,7 +487,9 @@ def test_array_job_task_index_selects_its_target_from_the_recipe():
 def test_generic_export_job_writes_an_array_job_for_a_fanout_recipe():
     """The generic `export_job` (the backend both bespoke exporters now wrap)
     handles the fan-out array case directly, preserving the 3x wall-time
-    safety factor (30-minute uncalibrated floor)."""
+    safety factor (30-minute uncalibrated floor, clamped to this account's
+    20-minute QOS ceiling -- see `test_wm_timeout_is_slurm_wall_clock_minus_
+    cleanup_margin` for why the floor alone is no longer what's observed)."""
     from Working.hpc.job_export import export_job
     from Working.database.runs import get_or_create_config
     from Working.recipes import make_recipe
@@ -406,7 +510,7 @@ def test_generic_export_job_writes_an_array_job_for_a_fanout_recipe():
             assert "#SBATCH --array=0-1" in script
             assert "$SLURM_ARRAY_TASK_ID" in script
             assert "materialize_target" in script
-            assert "--time=00:30:00" in script  # 3x safety, 30-min floor
+            assert "--time=00:20:00" in script  # 3x safety/30-min floor, clamped to the 20-min QOS ceiling
     finally:
         conn.close()
         os.unlink(db_path)

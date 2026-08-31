@@ -6,7 +6,7 @@ size: M
 blocked_by: [59, 62]
 mutex: [64, 65]
 files: ["UI/analyse/controls.py", "UI/analyse/layout.py", "tests/test_run_panel.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 2
 unblocks: 0
 budget_minutes: 60

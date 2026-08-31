@@ -36,11 +36,17 @@ describes the chain builder as a vertical staged list, which is exactly what Par
 
 1. **No module below `UI/` may import Panel, HoloViews, Bokeh or matplotlib.** This is what makes
    cluster execution, headless tests and the reproducibility claim possible. It is enforced by a test.
-2. **The suite must pass with no regressions.** `pytest` from your worktree root: 486 tests, about
-   four minutes, exit code 0. Do not chase a fixed number — every merged ticket adds tests, so the
-   gate is "nothing that passed before now fails", not "N tests pass". If your change breaks one,
-   either your change is wrong or the test encodes a behaviour your ticket is deliberately changing —
-   and if it is the latter, say so explicitly in your commit message.
+2. **The suite must pass with no regressions.** `pytest` from your worktree root: 1049 tests as of
+   2026-08-31, about six minutes serial (`pytest -n auto` — needs `pytest-xdist`, see Environment —
+   cuts this to about five; most of the wall-clock is Panel/HoloViews/numpy/aeon import cost paid
+   per worker, so the speedup is real but not linear in core count). Do not chase a fixed number —
+   every merged ticket adds tests, so the gate is "nothing that passed before now fails", not "N
+   tests pass". If your change breaks one, either your change is wrong or the test encodes a
+   behaviour your ticket is deliberately changing — and if it is the latter, say so explicitly in
+   your commit message. For a change scoped to one module, running just its matching
+   `tests/test_<module>.py` first (seconds, not minutes) is the faster feedback loop — the full
+   suite is still the actual gate before calling anything done, especially for a change to
+   widely-shared code (`Working/config.py`, `execution.py`, the DB schema).
 3. **Plain SQL, no ORM.** Schema changes are additive and applied through `init_db()`, which must stay
    idempotent.
 4. **Bulk arrays never enter the database.** They live on disk, referenced by path.
@@ -74,6 +80,8 @@ write.
 
 Windows, PowerShell, conda. The environment is shared across worktrees — **do not install packages or
 change dependencies.** A ticket that genuinely needs a new dependency should stop and report it.
+`pytest-xdist` (`pytest -n auto`) was added 2026-08-31 with the user's explicit sign-off for this
+reason — it is now available, not an example to follow silently for the next dependency.
 
 Run tests with `pytest` from your worktree root. Your worktree has its own `DATA/` fixture database;
 it is not the real one and you cannot reach the real one. That is deliberate.

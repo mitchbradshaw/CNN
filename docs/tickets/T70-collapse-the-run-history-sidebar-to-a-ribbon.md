@@ -6,7 +6,7 @@ size: M
 blocked_by: [57]
 mutex: []
 files: ["UI/workspaces/analyse/history.py", "UI/workspaces/__init__.py", "tests/test_workspaces.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 1
 unblocks: 0
 budget_minutes: 60

@@ -23,9 +23,9 @@ merely empty.
 
 import panel as pn
 
+from UI.workspaces.analyse import analyse_sidebar
 from UI.workspaces.analyse.compare import CompareSurface
 from UI.workspaces.analyse.export import RunGroupExporter
-from UI.workspaces.analyse.inspector import BlockInspector
 from UI.workspaces.builtins import BUILTIN_SECTIONS
 
 #: The four workspaces, in the order the shell presents them. Admin is a group
@@ -88,9 +88,12 @@ def sections(workspace):
 def register_sidebar(workspace, factory):
     """Mount `factory` as a persistent sidebar for `workspace`.
 
-    `factory(app)` is called at layout time and must return a Panel object.
-    A sidebar is rendered to the left of the workspace's section content
-    (tabs, single pane, or placeholder) and is never itself a section.
+    `factory(app, content)` is called at layout time and must return a Panel
+    object. `content` is the workspace's section content (a `pn.Tabs` when the
+    workspace has more than one section, otherwise a single pane) -- passed so
+    a sidebar can make itself section-aware, e.g. collapse when a particular
+    section is active. A sidebar is rendered to the left of the workspace's
+    section content and is never itself a section.
     """
     if workspace not in WORKSPACES:
         raise UnknownWorkspace(
@@ -134,7 +137,7 @@ def build(workspace, app, base=None):
 
     sidebar_factory = _SIDEBARS.get(workspace)
     if sidebar_factory is not None:
-        return pn.Row(sidebar_factory(app), content, sizing_mode="stretch_width")
+        return pn.Row(sidebar_factory(app, content), content, sizing_mode="stretch_width")
     return content
 
 
@@ -152,10 +155,9 @@ def reset():
     register("Analyse", "Compare", lambda app: CompareSurface(app).layout())
     register("Analyse", "Export run group",
              lambda app: RunGroupExporter(app).layout())
-    register("Analyse", "Block inspector",
-             lambda app: BlockInspector(app).layout())
-    # Ticket 34: run history is Analyse's sidebar, not a section.
-    register_sidebar("Analyse", lambda app: app.run_history.layout())
+    # Ticket 34: run history is Analyse's sidebar, not a section. Ticket 70:
+    # the registration wires the section-aware collapse default.
+    register_sidebar("Analyse", analyse_sidebar)
 
 
 reset()

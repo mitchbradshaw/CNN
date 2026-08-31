@@ -6,7 +6,7 @@ size: L
 blocked_by: [57]
 mutex: [58]
 files: ["UI/workspaces/analyse/builder.py", "tests/test_chain_builder.py"]
-flags: ['human-verify']
+flags: ['human-verify', 'done']
 level: 1
 unblocks: 2
 budget_minutes: 120

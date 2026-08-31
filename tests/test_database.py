@@ -26,6 +26,7 @@ if PROJECT_ROOT not in sys.path:
 from Working.database.schema import init_db
 from Working.database import schema as sch
 from Working.database import queries as q
+from Working.database import runs as R
 
 
 def _fresh_conn():
@@ -292,6 +293,61 @@ def test_motif_member_accepts_different_recording_and_channel():
     assert row["end_idx"] == 150
 
 
+# ── T52: motif_entry scale column (event-scale vs train-scale) ───────────────
+
+def test_motif_entry_has_scale_column():
+    conn = _fresh_conn()
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+    assert "scale" in cols
+
+
+def test_motif_entry_scale_column_is_nullable():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx) VALUES (?, ?, ?)",
+        (rid, 0, 100),
+    )
+    conn.commit()
+    row = conn.execute("SELECT scale FROM motif_entry LIMIT 1").fetchone()
+    assert row["scale"] is None
+
+
+def test_motif_entry_scale_column_accepts_event_and_train():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx, scale) "
+        "VALUES (?, ?, ?, ?)",
+        (rid, 0, 100, sch.ENTRY_SCALE_EVENT),
+    )
+    conn.execute(
+        "INSERT INTO motif_entry (recording_id, start_idx, end_idx, scale) "
+        "VALUES (?, ?, ?, ?)",
+        (rid, 200, 300, sch.ENTRY_SCALE_TRAIN),
+    )
+    conn.commit()
+    scales = {r["scale"] for r in conn.execute("SELECT scale FROM motif_entry")}
+    assert scales == {"event", "train"}
+    assert sch.ENTRY_SCALE_EVENT == "event"
+    assert sch.ENTRY_SCALE_TRAIN == "train"
+
+
+def test_init_db_adds_scale_column_once():
+    path = _temp_db_path()
+    try:
+        conn = init_db(path)
+        cols1 = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+        conn.close()
+        conn = init_db(path)
+        cols2 = {r["name"] for r in conn.execute("PRAGMA table_info(motif_entry)")}
+        conn.close()
+        assert cols1 == cols2
+        assert "scale" in cols2
+    finally:
+        _cleanup(path)
+
+
 def test_init_db_idempotent_preserves_all_row_counts():
     # Unlike the presence check above, this hits a real on-disk db twice —
     # ":memory:" makes a fresh anonymous database per connection, which
@@ -367,6 +423,27 @@ _LEGACY_INDEXES = [
     "CREATE INDEX idx_annotations_recording ON annotations(recording_id)",
     "CREATE INDEX idx_annotations_verdict   ON annotations(verdict)",
 ]
+
+# The `motif_entry` table as it stands before ticket 52: the shape-first
+# library table with its legacy presentation columns but no `scale` column.
+# Reproduced so the additive migration can be verified against a database
+# that predates the change.
+_LEGACY_MOTIF_ENTRY_DDL = """
+CREATE TABLE motif_entry (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    start_idx     INTEGER NOT NULL,
+    end_idx       INTEGER NOT NULL,
+    detection_id  INTEGER REFERENCES detections(id),
+    label         TEXT,
+    rating        INTEGER,
+    notes         TEXT,
+    tags          TEXT,
+    sax_string    TEXT,
+    created_at    TEXT,
+    UNIQUE (recording_id, start_idx, end_idx)
+);
+"""
 
 
 def _make_legacy_db(path):
@@ -620,6 +697,148 @@ def test_verdict_rebuild_is_idempotent():
         # A second rebuild would be harmless but wrong: it would re-copy 11k
         # rows and drop a fresh backup on every startup forever.
         assert _backups_for(path) == backups_once
+    finally:
+        _cleanup(path)
+
+
+def test_legacy_motif_entry_gains_scale_column():
+    # A database created before T52 has a `motif_entry` without `scale`;
+    # `init_db()` must add the column when it next runs.
+    path = _temp_db_path()
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_LEGACY_MOTIF_ENTRY_DDL)
+        conn.executescript(sch._SCHEMA)
+        conn.commit()
+        conn.close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_before = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
+        assert "scale" not in cols_before
+
+        init_db(path).close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_after = {r["name"] for r in probe.execute(
+                "PRAGMA table_info(motif_entry)")}
+        finally:
+            probe.close()
+        assert "scale" in cols_after
+    finally:
+        _cleanup(path)
+
+
+# ── T67: runs.name column (run naming) ───────────────────────────────────────
+
+_LEGACY_RUNS_DDL = """
+CREATE TABLE runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    config_id     INTEGER NOT NULL REFERENCES configs(id),
+    recording_id  INTEGER NOT NULL REFERENCES recordings(id),
+    span_start    INTEGER NOT NULL,
+    span_end      INTEGER NOT NULL,
+    started_at    TEXT    NOT NULL,
+    status        TEXT    NOT NULL,
+    artifact_path TEXT
+);
+"""
+
+
+def _insert_config(conn, hash_suffix):
+    cid = conn.execute(
+        "INSERT INTO configs (config_hash, config_json, created_at) VALUES (?, ?, ?)",
+        (f"hash-{hash_suffix}", "{}", "2026-01-01T00:00:00"),
+    ).lastrowid
+    conn.commit()
+    return cid
+
+
+def test_runs_table_has_name_column():
+    conn = _fresh_conn()
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}
+    assert "name" in cols
+
+
+def test_runs_name_column_is_nullable():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    cid = _insert_config(conn, "nullable")
+    run_id = R.insert_run(conn, cid, rid, 0, 100, status="completed")
+    row = R.get_run(conn, run_id)
+    assert row["name"] is None
+
+
+def test_run_name_is_editable_and_persists():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    cid = _insert_config(conn, "name")
+    run_id = R.insert_run(conn, cid, rid, 0, 100, status="completed")
+    R.update_run(conn, run_id, name="tuned lowpass")
+    row = R.get_run(conn, run_id)
+    assert row["name"] == "tuned lowpass"
+    # a second edit overwrites rather than accumulating
+    R.update_run(conn, run_id, name="raw comparison")
+    assert R.get_run(conn, run_id)["name"] == "raw comparison"
+
+
+def test_run_name_does_not_enforce_uniqueness():
+    conn = _fresh_conn()
+    rid = q.insert_recording(conn, "a.mat", 0, 1.0, 1000, 0, "a/CH0.npy")
+    cid = _insert_config(conn, "unique")
+    run_a = R.insert_run(conn, cid, rid, 0, 100, status="completed", name="shared name")
+    run_b = R.insert_run(conn, cid, rid, 100, 200, status="completed", name="shared name")
+    assert run_a != run_b
+    assert R.get_run(conn, run_a)["name"] == "shared name"
+    assert R.get_run(conn, run_b)["name"] == "shared name"
+
+
+def test_init_db_adds_runs_name_column_once():
+    # A database created before T67 has a `runs` table without `name`;
+    # `init_db()` must add the column when it next runs, and only once.
+    path = _temp_db_path()
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(_LEGACY_RUNS_DDL)
+        conn.executescript(sch._SCHEMA)
+        conn.commit()
+        conn.close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_before = {r["name"] for r in probe.execute("PRAGMA table_info(runs)")}
+        finally:
+            probe.close()
+        assert "name" not in cols_before
+
+        init_db(path).close()
+
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_after = {r["name"] for r in probe.execute("PRAGMA table_info(runs)")}
+        finally:
+            probe.close()
+        assert "name" in cols_after
+
+        # idempotent: a second init adds nothing and changes nothing
+        init_db(path).close()
+        probe = sqlite3.connect(path)
+        probe.row_factory = sqlite3.Row
+        try:
+            cols_twice = {r["name"] for r in probe.execute("PRAGMA table_info(runs)")}
+        finally:
+            probe.close()
+        assert cols_twice == cols_after
     finally:
         _cleanup(path)
 

@@ -22,8 +22,8 @@ Migrations
 ----------
 `init_db()` is always additive and safe to call repeatedly: base tables use
 `CREATE TABLE IF NOT EXISTS`, and anything added to an *existing* table
-(new columns on `annotations`; `run_group_id`/`surrogate_of_run_id` on
-`runs`) is applied by `_migrate_columns`, which checks `PRAGMA table_info`
+(new columns on `annotations`; `run_group_id`/`surrogate_of_run_id`/`name`
+on `runs`) is applied by `_migrate_columns`, which checks `PRAGMA table_info`
 first and only adds what's missing.
 
 The one exception is `_migrate_annotations_verdict`, which SQLite forces to be
@@ -339,12 +339,23 @@ _RUNS_NEW_COLUMNS = [
     # a run belongs to neither unless something opts it in.
     ("run_group_id", "INTEGER REFERENCES run_groups(id)"),
     ("surrogate_of_run_id", "INTEGER REFERENCES runs(id)"),
+    # T67: a researcher-chosen label. A label, never an identifier — nothing
+    # keys on it and no uniqueness constraint applies; the recipe hash remains
+    # a run's content identity.
+    ("name", "TEXT"),
 ]
 
 # `motifs` += the symbolic SAX string, when one exists for the motif's span.
 _MOTIFS_NEW_COLUMNS = [
     ("sax_string", "TEXT"),
 ]
+
+# The two scales a motif-library entry may take (ticket 52). Stored, never
+# inferred from a span's duration: a long single event and a short spike
+# train would be silently misclassified by any duration heuristic.
+ENTRY_SCALE_EVENT = "event"
+ENTRY_SCALE_TRAIN = "train"
+ENTRY_SCALES = (ENTRY_SCALE_EVENT, ENTRY_SCALE_TRAIN)
 
 # `motif_entry` += the legacy presentation columns carried across from
 # `motifs` by the shape-first migration (ticket 16). They are nullable
@@ -358,6 +369,10 @@ _MOTIF_ENTRY_NEW_COLUMNS = [
     ("tags", "TEXT"),
     ("sax_string", "TEXT"),
     ("created_at", "TEXT"),
+    # T52: distinguishes an event-scale entry (one spike) from a train-scale
+    # entry (a whole spike train). Nullable because the column is additive and
+    # an eye-created entry may carry no scale.
+    ("scale", "TEXT"),
 ]
 
 

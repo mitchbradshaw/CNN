@@ -18,7 +18,10 @@ import sys
 import tempfile
 
 import numpy as np
+import panel as pn
 import pytest
+
+pn.extension("tabulator")
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(PROJECT_ROOT, "Working")) \
@@ -412,6 +415,175 @@ def test_band_fan_out_materializes_a_bandpass_step():
     assert first["params"]["low_hz"] == 0.05
     assert first["params"]["high_hz"] == 0.2
     assert len(per_target["steps"]) == 2
+
+
+# ── T67: run naming / surrogate name inheritance ─────────────────────────────
+
+def test_surrogate_run_inherits_parents_name():
+    """PRD: 'A paired surrogate run inherits its parent's name with a
+    surrogate suffix.' Naming the parent after the fact must propagate to the
+    already-linked surrogate, so a paired run is not an anonymous stranger."""
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        recipe["surrogate"] = True
+
+        out = run_groups.run_paired_recipe(recipe, db_path=db_path)
+        assert out.get("surrogate_run_id") is not None
+
+        conn = init_db(db_path)
+        try:
+            R.update_run(conn, out["run_id"], name="tuned lowpass")
+            surrogate = R.get_run(conn, out["surrogate_run_id"])
+            assert surrogate["name"] == "tuned lowpass" + R.SURROGATE_NAME_SUFFIX
+            # the parent's own name is untouched by the inheritance
+            assert R.get_run(conn, out["run_id"])["name"] == "tuned lowpass"
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_surrogate_linked_to_named_parent_inherits_name():
+    """Linking a surrogate to an already-named parent copies the parent's name
+    with the surrogate marker at link time."""
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        conn = init_db(db_path)
+        try:
+            config_id, _ = R.get_or_create_config(conn, recipe)
+            parent_id = R.insert_run(conn, config_id, rec_id, 0, 100,
+                                     status="completed", name="raw comparison")
+            surrogate_id = R.insert_run(conn, config_id, rec_id, 100, 200,
+                                        status="completed")
+            R.update_run(conn, surrogate_id, surrogate_of_run_id=parent_id)
+            surrogate = R.get_run(conn, surrogate_id)
+            assert surrogate["name"] == "raw comparison" + R.SURROGATE_NAME_SUFFIX
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_surrogate_name_follows_parent_rename():
+    """A surrogate's inherited name tracks the parent's rename: it is not a
+    one-shot copy."""
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        conn = init_db(db_path)
+        try:
+            config_id, _ = R.get_or_create_config(conn, recipe)
+            parent_id = R.insert_run(conn, config_id, rec_id, 0, 100,
+                                     status="completed", name="first")
+            surrogate_id = R.insert_run(conn, config_id, rec_id, 100, 200,
+                                        status="completed")
+            R.update_run(conn, surrogate_id, surrogate_of_run_id=parent_id)
+            assert R.get_run(conn, surrogate_id)["name"] == "first" + R.SURROGATE_NAME_SUFFIX
+
+            R.update_run(conn, parent_id, name="second")
+            surrogate = R.get_run(conn, surrogate_id)
+            assert surrogate["name"] == "second" + R.SURROGATE_NAME_SUFFIX
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_manually_named_surrogate_is_left_alone():
+    """A surrogate the researcher has explicitly renamed is not clobbered when
+    the parent is renamed again."""
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        conn = init_db(db_path)
+        try:
+            config_id, _ = R.get_or_create_config(conn, recipe)
+            parent_id = R.insert_run(conn, config_id, rec_id, 0, 100,
+                                     status="completed", name="first")
+            surrogate_id = R.insert_run(conn, config_id, rec_id, 100, 200,
+                                        status="completed", name="my explicit surrogate")
+            R.update_run(conn, surrogate_id, surrogate_of_run_id=parent_id)
+            # explicit name is respected at link time
+            assert R.get_run(conn, surrogate_id)["name"] == "my explicit surrogate"
+
+            R.update_run(conn, parent_id, name="second")
+            # ... and after a parent rename
+            assert R.get_run(conn, surrogate_id)["name"] == "my explicit surrogate"
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_run_history_browser_shows_and_edits_name():
+    """Headless construction check: the run-history table carries the run name
+    in its own column, and only that column is editable."""
+    from UI.workspaces.analyse.history import RunHistoryBrowser
+
+    db_path, tmpdir = _fresh_db_with_channels(1)
+    try:
+        rec_id = _recording_ids(db_path)[0]
+        recipe = make_recipe(
+            rec_id,
+            [{"stage": "preprocessing", "algorithm": "lowpass",
+              "params": {"cutoff_hz": 0.05}}],
+            span=(0, 100),
+        )
+        conn = init_db(db_path)
+        try:
+            config_id, _ = R.get_or_create_config(conn, recipe)
+            R.insert_run(conn, config_id, rec_id, 0, 100,
+                         status="completed", name="tuned lowpass")
+        finally:
+            conn.close()
+
+        conn = init_db(db_path)
+        try:
+            class _FakeApp:
+                def __init__(self, conn):
+                    self.conn = conn
+                    self.chain_builder = None
+                    self.tabs = None
+
+            browser = RunHistoryBrowser(_FakeApp(conn))
+            layout = browser.layout()
+            assert layout is not None
+            assert "name" in browser.table.value.columns
+            assert browser.table.value.iloc[0]["name"] == "tuned lowpass"
+            # the name column is the only editable one in the table
+            assert browser.table.disabled is False
+            assert browser.table.editors["name"] is not None
+            assert browser.table.editors["id"] is None
+        finally:
+            conn.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── runner ───────────────────────────────────────────────────────────────────

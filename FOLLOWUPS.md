@@ -561,3 +561,137 @@ deviations. The file list is now corrected in the ticket.
       Previously each adapter passed `t` through by hand, so a block that resampled would have
       silently misaligned every downstream plot against the channel. `execute_recipe` now refuses it
       with a message naming both lengths. No shipped block violates it.
+
+## T57 — 2026-08-27 08:53
+
+- [major] [standards] (rule 6.4) builder.py's _first_invalid_junction duplicates the chain-walk already in Working.chain_validation.validate_chain
+- [major] [standards] (rule 1.3) junction-location capability belongs in chain_validation.py (its stated purpose) but was added to the UI renderer
+- [minor] [standards] (no rule cited) baseline Data Clump: (index, producing_kind, block) tuple returned/unpacked positionally by _first_invalid_junction
+- [minor] [spec] (no rule cited) multi-step construction test never calls builder.layout() to assert non-None, only inspects steps_row/cards directly
+- [minor] [spec] (no rule cited) builder.py reimplements chain_validation.py's chain-walk rather than reusing it, risking future drift between the two traversals
+- [minor] [spec] (no rule cited) unregistered-adapter edge case falls back to an un-named generic invalid-chain message even if a later junction is the real type break
+
+## T50 — 2026-08-27 09:36
+
+- [minor] [standards] (no rule cited) npy_path in _ensure_recordings is set to the raw source_file string (e.g. "CH0.npy"), contradicting its own docstring claim of a materialised per-channel path; masked by a test fixture that pre-creates valid recordings before the importer runs
+- [minor] [standards] (no rule cited) grouping/aggregation logic in _ensure_recordings (group by source_file/channel, max snippet_end_idx) is duplicated in shape by the test's _precreate_recordings fixture
+- [minor] [spec] (no rule cited) on a fresh database (the ticket's own stated starting condition) the importer writes a recording row whose npy_path is a bare unresolvable filename; LibraryGrid's unguarded load_channel_mmap then raises FileNotFoundError, contradicting "the existing Library grid renders the imported entries without modification" and "a card that cannot be traced back to the signal is not evidence" — the included test avoids this path via a fixture that pre-seeds valid recordings before calling the importer
+- [minor] [spec] (no rule cited) spike-train identity (span_key) is not 1:1 with recording_id and is never persisted onto motif_member, so the ticket narrative's "provenance must survive... the spike train it came from... its morphology and purity" is unmet, though the checkbox acceptance criteria and the PRD's Library-import subsection don't require it
+
+## T56 — 2026-08-27 10:12
+
+- [minor] [spec] (no rule cited) Unknown-type error names type_kind, not the literal value object — a faithful but debatable reading of "naming the value it was given"
+
+## T52 — 2026-08-27 10:57
+
+- [minor] [standards] (no rule cited) importer.py bypasses the single-writer convention (raw UPDATE on motif_entry.scale after insert_motif_entry) instead of extending the writer, duplicating the 3-line SQL pattern twice in one file
+- [minor] [standards] (no rule cited) _write_train_entries re-derives (source_file, channel) keys into recording_map already computed by the caller (mild feature envy)
+- [minor] [spec] (no rule cited) insert_motif_entry's INSERT-OR-IGNORE-and-return-existing-id means a train bounding box that coincides with an existing event-scale entry's span silently relabels and re-parents that entry to scale='train', violating "Event-scale entries from T50 are unaffected and still resolve" for cluster cuts other than the one exercised by current tests
+
+## T62 — 2026-08-27 11:05
+
+- [minor] [standards] (rule 6.2) `_render_filmstrip_input`'s `recording`-only fallback branch is unexercised by any caller — speculative generality
+- [minor] [standards] (no rule cited) Duplicated Code smell: `result_pane.visible`/`filmstrip_pane.visible` toggle pair repeated verbatim in `_refresh_preview`, `_show_before_after`, `_show_filmstrip`
+- [minor] [spec] (no rule cited) Filmstrip is never called from `execution.py:_on_run_finished` — a real Run never shows the filmstrip, only the old single-plot/Before-After pane; core acceptance criterion unmet in the live app
+- [minor] [spec] (no rule cited) The untested `recording`-fallback path in `_render_filmstrip_input` is unverified and, given the wiring gap, currently unreachable in production
+
+## T59 — 2026-08-27 12:11
+
+- [major] [standards] (rule 6.4) Side-input picker methods in _BlockCard are copied near-verbatim from BlockInspector in inspector.py rather than extracted into a shared module
+- [major] [standards] (rule 6.4) _record_recommended_preserving_edits reimplements the recommendation-bookkeeping core of DeriveMixin._apply_recommended_defaults as a parallel path instead of extending the shared mixin
+- [minor] [standards] (no rule cited) Data Clumps: the source/target/exemplar widget triple and the side-input binding dict travel together across methods in both builder.py and inspector.py and arguably want a named type
+- [minor] [spec] (no rule cited) Side-input pickers are reimplemented on the card rather than imported from a shared module, contra the PRD's "relocation, not reimplementation" framing for the inspector's whole content
+- [minor] [spec] (no rule cited) Cached-result display, part of the inspector's "whole content" the PRD says moves onto the card, is not relocated to _BlockCard (outside this ticket's stated acceptance criteria, so arguable)
+
+## T53 — 2026-08-27 12:30
+
+- [major] [standards] (rule 6.4) grid.py hand-rolls an hv.Curve shape closely mirroring _decimated_curve's documented "ONE renderer" pattern instead of reusing/generalising it
+- [minor] [standards] (no rule cited) _build_card and _family_data_bounds each re-fetch the same recording row per entry, and _load_span re-slices the same span twice (range calc + thumbnail)
+- [minor] [spec] (no rule cited) commit f054a47's sax-string-less fallback family key (imported entries) ships with no test; both new tests only cover entries with real sax_string values
+- [minor] [spec] (no rule cited) "thumbnails render the detrended trace" is assumed via the unchanged recording["npy_path"] load path, not established or verified by this diff
+- [major] [spec] (rule 7.1) _Y_PAD_FRACTION, xlabel/ylabel, and responsive=True are additions not traceable to any acceptance criterion or PRD line
+
+## T63 — 2026-08-27 12:44
+
+- [minor] [standards] (no rule cited) invalidated_step_indices(recipe, step_index) mirrors _recipe_prefix_hash's (recipe, up_to_index) parameter shape — consistent with existing module convention, flagged as a Data Clumps judgement call only
+
+## T69 — 2026-08-27 16:05
+
+- [minor] [standards] (no rule cited) Compare reaches into builder.py's private (_-prefixed) card-rendering surface instead of a purposely-exposed method
+- [major] [standards] (rule 6.1) _ReadOnlyCardApp implies read-only but rendered cards keep live move/delete/param-edit controls wired to a throwaway chain
+- [minor] [standards] (no rule cited) _builder_for_recipe builds a full ChainBuilder (running __init__'s _refresh()) only to discard it and reach one method
+- [minor] [standards] (no rule cited) test's _is_highlighted hardcodes the highlight hex colour, duplicating a cosmetic literal between prod and test
+- [minor] [spec] (no rule cited) Reusing the builder's card wholesale leaves live edit affordances (↑/↓/Delete, param widgets) on what the spec frames as a read-only comparison canvas
+- [minor] [spec] (no rule cited) Diff highlighting marks the step card but not the connecting arrow/placeholder distinctly for added/removed steps
+
+## Harness — 2026-08-27 (post-run-20260827-0811)
+
+17 merged of 21 dispatched. 84.12M tokens, $60.84 total, $7.48 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T64** FAILED (red-at-exit, gate: suite) — Re-run only the suffix when a parameter changes
+- [ ] **T65** DEFERRED (infrastructure, gate: —) — Focus one block, with a per-adapter detail view
+- [ ] **T66** DEFERRED (infrastructure, gate: —) — Run a single algorithm as a one-block chain
+- [ ] **T70** DEFERRED (infrastructure, gate: —) — Collapse the run-history sidebar to a ribbon
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T65 — 2026-08-29 12:22
+
+- [minor] [standards] (rule 6.2) _build_focus handles list/tuple/bare-element return shapes from detail_view that no hook in this diff exercises
+- [minor] [standards] (no rule cited) _install_sax_detail_view_hooks mutates shared registry AdapterSpec state as a side effect of widget construction (Feature Envy/Divergent Change)
+- [minor] [standards] (no rule cited) _show_focus has no caller anywhere in this diff or its tests (mild Speculative Generality)
+- [minor] [spec] (no rule cited) _build_focus/_show_focus implement focus mode but no UI trigger (button/click handler) wires it up in this diff, so it isn't yet reachable by a user
+
+## T70 — 2026-08-29 12:34
+
+- [minor] [standards] (no rule cited) bind_sections duplicates the "resolve active index → is it Chain builder" logic inline and in its watcher closure
+- [minor] [standards] (no rule cited) literal "Chain builder" string is duplicated across builtins.py and history.py with no shared constant, so renaming the section silently breaks the collapse default
+- [major] [standards] (rule 1.3) UI/workspaces/__init__.py keeps changing for two reasons: generic sidebar-registration machinery and Analyse-specific run_history wiring
+- [minor] [standards] (no rule cited) test_analyse_workspace_builds_with_sidebar_in_each_state sets collapsed and calls private _render() directly instead of going through toggle()/section-change, so it wouldn't catch a regression in the real trigger paths
+- [minor] [spec] (no rule cited) register_sidebar's factory signature changed from factory(app) to factory(app, content), a non-additive change to a shared registration seam, even though only Analyse uses it today
+- [minor] [spec] (no rule cited) bind_sections silently no-ops if content is not a pn.Tabs, so a future single-section Analyse would default to always-expanded with no diagnostic
+
+## Harness — 2026-08-29 (post-run-20260827-0811)
+
+20 merged of 21 dispatched. 89.39M tokens, $68.19 total, $7.48 of it on work that did not land. Written by the runner; the triage below is not.
+
+- [ ] **T64** FAILED (red-at-exit, gate: suite) — Re-run only the suffix when a parameter changes
+
+For each: was this the ticket, or was this the harness? A harness cause belongs in the runner's own tests before the next run.
+
+## T65 / T70 follow-ups actioned — 2026-08-30
+
+All ten findings above are addressed; the notes stay as the record of what was
+found. Not a re-review — the fixes carry their own tests.
+
+**T65**
+- The [spec] finding was the real one: `_build_focus`/`_show_focus` had no
+  caller, so focus mode existed and no researcher could reach it. Each block
+  card now carries a "Show algorithm" control that focuses that step on the run
+  surface and brings that section forward, plus a "Back to all steps" control so
+  focus is not a dead end. Fixing it surfaced a second gap the merged tests
+  missed: focusing step 0 needs the recording, because its input is the chain's
+  ROOT signal rather than a previous step's output. The merged test only focused
+  step 1 and so never loaded a root signal.
+- `_install_sax_detail_view_hooks` no longer runs from `_build_result_widgets`.
+  Mutating the shared adapter registry as a side effect of constructing a widget
+  meant two run panels installed it twice and any consumer that had not built
+  one saw adapters with no hook. It runs once at module import.
+- `_build_focus`'s list/tuple branch is gone (rule 6.2). The documented contract
+  is one element or one Layout; a hook wanting several stacks them itself.
+
+**T70**
+- [major, rule 1.3] `analyse_sidebar` moved out of `UI/workspaces/__init__.py`
+  into the Analyse package. That module owns generic sidebar-registration
+  machinery; deciding what Analyse's own sidebar does is not its job.
+- `CHAIN_BUILDER_SECTION` is defined once, beside the section table that names
+  it. The literal was duplicated, so renaming the section would have silently
+  stopped the sidebar collapsing with nothing failing.
+- `bind_sections` and its watcher shared one `_apply_section_default`; they
+  resolved the active index and compared the label separately before.
+- `bind_sections` raises on non-Tabs content instead of returning quietly. A
+  binding that cannot bind is a wiring error, and silent ones are how a surface
+  goes missing.
+- The acceptance test drove `_render()` directly and so could not catch a
+  regression in the trigger. Replaced by tests that drive `pn.Tabs.active` and
+  `toggle()` — the two paths a user actually takes.

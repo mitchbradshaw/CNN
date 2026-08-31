@@ -6,7 +6,7 @@ size: M
 blocked_by: []
 mutex: []
 files: ["Pipelines/import_drop_motifs/", "tests/test_import_drop_motifs.py"]
-flags: []
+flags: ['done']
 level: 0
 unblocks: 5
 budget_minutes: 60

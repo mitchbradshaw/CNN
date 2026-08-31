@@ -139,6 +139,53 @@ class ControlsMixin:
     def _current_params(self):
         return {name: w.value for name, w in self._param_widgets.items()}
 
+    def _build_steps(self):
+        """The steps a run should execute.
+
+        T66: the chain under construction is the source of truth. A chain
+        with at least one block runs exactly those blocks — one block is the
+        old single-algorithm run, so the simplest case stays direct. The
+        run surface still supplies the live recording and span (`_on_run`
+        passes those into `make_recipe`), so this only hands back the
+        per-block content.
+
+        The legacy selector path stays as a hidden fallback for callers
+        that still drive `RunPanel` headlessly (the auto-preview path and
+        its tests); the run surface no longer renders those selectors.
+        """
+        chain = getattr(getattr(self.app, "chain_builder", None), "chain", None)
+        if chain is not None and chain.steps:
+            return [
+                {
+                    "stage": step["stage"],
+                    "algorithm": step["algorithm"],
+                    "params": dict(step.get("params") or {}),
+                    "side_inputs": dict(step.get("side_inputs") or {}),
+                }
+                for step in chain.steps
+            ]
+        return super()._build_steps()
+
+    def _on_run(self, _event=None):
+        """Entry guard for the run button.
+
+        In a live session the chain builder is the only way to choose what
+        runs, so an empty chain is a clear prompt — not an invitation to run
+        whatever the now-hidden selectors happen to hold. Headless callers
+        (tests and the legacy auto-preview path) still reach the old
+        selector fallback, where `pn.state.curdoc is None` exactly as
+        `_schedule_auto_preview` already reasons.
+        """
+        chain = getattr(getattr(self.app, "chain_builder", None), "chain", None)
+        if chain is not None and not chain.steps and pn.state.curdoc is not None:
+            self.status.object = "*Add a block in the Chain builder first.*"
+            return
+        try:
+            super()._on_run(_event)
+        except ValueError as e:
+            self.status.object = f"**{e}**"
+            return
+
     # ── Part 6, 4a: span-aware recommended defaults ─────────────────────
 
     def _current_span_signal(self):

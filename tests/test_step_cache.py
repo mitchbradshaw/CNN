@@ -36,7 +36,7 @@ from Adapters.registry import get_adapter, register
 from Working.database.schema import init_db
 from Working.database import queries as q
 from Working.database import runs as R
-from Working.execution import execute_recipe
+from Working.execution import execute_recipe, invalidated_step_indices
 from Working.recipes import make_recipe, recipe_hash
 from Working.types import Scores
 
@@ -252,3 +252,52 @@ def test_changing_side_input_binding_invalidates_step_and_downstream(step_cache_
         assert second_paths[(_prefix_hash(changed, 1), 1)] != first_paths[(_prefix_hash(first, 1), 1)]
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ── suffix recomputation from a changed step (ticket 63) ────────────────────
+
+def _suffix_recipe(n_steps):
+    """A valid n-step lowpass chain — signal->signal throughout, so it
+    validates — for exercising `invalidated_step_indices` without needing a
+    real recording."""
+    return make_recipe(1, [
+        {"stage": "preprocessing", "algorithm": "lowpass",
+         "params": {"cutoff_hz": 0.05 * (i + 1)}}
+        for i in range(n_steps)
+    ], span=(0, 200))
+
+
+def test_invalidated_step_indices_returns_changed_step_and_suffix():
+    recipe = _suffix_recipe(4)
+    assert invalidated_step_indices(recipe, 1) == {1, 2, 3}
+
+
+def test_invalidated_step_indices_never_returns_prefix():
+    recipe = _suffix_recipe(4)
+    for changed in range(len(recipe["steps"])):
+        indices = invalidated_step_indices(recipe, changed)
+        assert indices, "a change must invalidate at least the changed step"
+        assert all(i >= changed for i in indices)
+
+
+def test_invalidated_step_indices_changing_first_step_returns_all():
+    recipe = _suffix_recipe(4)
+    assert invalidated_step_indices(recipe, 0) == {0, 1, 2, 3}
+
+
+def test_invalidated_step_indices_changing_last_step_returns_only_itself():
+    recipe = _suffix_recipe(4)
+    assert invalidated_step_indices(recipe, 3) == {3}
+
+
+def test_invalidated_step_indices_single_step_recipe_returns_only_step_zero():
+    recipe = _suffix_recipe(1)
+    assert invalidated_step_indices(recipe, 0) == {0}
+
+
+def test_invalidated_step_indices_raises_for_index_outside_recipe():
+    recipe = _suffix_recipe(4)
+    with pytest.raises(IndexError):
+        invalidated_step_indices(recipe, -1)
+    with pytest.raises(IndexError):
+        invalidated_step_indices(recipe, 4)

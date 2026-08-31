@@ -14,14 +14,17 @@ from Adapters.registry import get_adapter
 from Working.database import queries as q
 from Working.database import runs as R
 from Working.artifacts import save_plot
-from Working.config import RUN_PREVIEW_HEIGHT
+from Working.config import MP_INTERACTIVE_BUDGET_S, RUN_PREVIEW_HEIGHT
+from Working.execution import invalidated_step_indices
+from Working.hpc.job_export import estimate_recipe_seconds
+from Working.types import Signal
 
 from UI.plots import (
-    build_peek_curve, compute_display_y_range, style_main_plot_frame, CURVE_COLOR,
-    PLOT_FONTSIZE,
+    build_peek_curve, compute_display_y_range,
+    style_main_plot_frame, CURVE_COLOR, PLOT_FONTSIZE, render_value,
 )
+from UI.analyse.chain_state import ChainState
 from UI.analyse.formatting import _format_duration_human
-
 
 class ResultsMixin:
     """The preview/Before-After pane, preprocessing banner and detections table."""
@@ -32,6 +35,17 @@ class ResultsMixin:
         # both — see `_refresh_preview`/`_show_before_after`, the only two
         # places that assign `result_pane.object`.
         self.result_pane = pn.pane.HoloViews(sizing_mode="stretch_width")
+        # The filmstrip (T62) is the post-run surface: the chain's input at
+        # the top, then one plot per step. It lives beside `result_pane`, not
+        # inside it, so the pre-run staged-span preview and the post-run
+        # filmstrip each have exactly one pane and one writer.
+        self.filmstrip_pane = pn.pane.HoloViews(sizing_mode="stretch_width", visible=False)
+        # T65: focus mode replaces the filmstrip in place, so it needs a way
+        # out or it is a dead end. Hidden until a block is actually focused.
+        self.back_to_filmstrip_button = pn.widgets.Button(
+            name="\u2190 Back to all steps", button_type="default", visible=False,
+        )
+        self.back_to_filmstrip_button.on_click(self._on_back_to_filmstrip)
         self.preview_info = pn.pane.Markdown("")
         self.yaxis_mode = pn.widgets.RadioButtonGroup(
             name="Y-axis", options=["Independent y-axis", "Shared y-axis"],
@@ -74,6 +88,8 @@ class ResultsMixin:
         `_current_span()` returns.
         """
         app = self.app
+        self.result_pane.visible = True
+        self.filmstrip_pane.visible = False
         if app._recording_id is None or app._fs is None:
             self.result_pane.object = None
             self.preview_info.object = "*No recording loaded.*"
@@ -151,6 +167,8 @@ class ResultsMixin:
         shared range for the (rarer) amplitude-preserving transform where
         that's the more informative comparison.
         """
+        self.result_pane.visible = True
+        self.filmstrip_pane.visible = False
         x_full = np.load(recording["npy_path"], mmap_mode="r")
         start = int(round(result_t[0] * recording["fs"]))
         end = start + len(result_x)
@@ -210,6 +228,138 @@ class ResultsMixin:
             )
         else:
             self.scale_note.object = ""
+
+    # ── Filmstrip (T62): chain input + one plot per step ──────────────────
+
+    # ── T64: suffix-only recomputation ───────────────────────────────────
+
+    def _suffix_recompute_plan(self, recipe, changed_index):
+        """What a parameter change on step `changed_index` costs to redraw.
+
+        Returns ``{"indices", "estimate_s", "requires_confirmation"}``:
+
+        - ``indices`` — the steps to recompute. This is the SUFFIX and only
+          the suffix, straight from `Working.execution.invalidated_step_indices`
+          (T63). It is not recomputed here: the step cache is keyed on a
+          recipe-*prefix* hash, so exactly one function gets to say what a
+          prefix hash invalidates, and this is not it.
+        - ``estimate_s`` — the summed runtime estimate for just those steps,
+          via the same `estimate_recipe_seconds` the cluster routing uses.
+          Blocks with no estimator, and estimators uncalibrated on this
+          machine, contribute zero: "counts as free" is that function's
+          documented contract, and second-guessing it here would be a second
+          cost model.
+        - ``requires_confirmation`` — whether the caller must ask first,
+          decided against `MP_INTERACTIVE_BUDGET_S`, the SAME constant the
+          run surface routes on. A separate threshold would drift from it,
+          and the drift would surface as two surfaces disagreeing about
+          whether one chain is expensive.
+
+        The estimate is taken over a recipe holding only the suffix steps,
+        not the whole chain: the prefix is cached and is not going to run,
+        so charging the researcher for it would turn every edit near the end
+        of an expensive chain into a confirmation prompt for work that never
+        happens.
+        """
+        indices = invalidated_step_indices(recipe, changed_index)
+
+        suffix_recipe = dict(recipe)
+        suffix_recipe["steps"] = [
+            step for i, step in enumerate(recipe["steps"]) if i in indices
+        ]
+        n_samples, fs = self._recipe_span_extent(recipe)
+        estimate_s = estimate_recipe_seconds(suffix_recipe, n_samples, fs)
+
+        return {
+            "indices": indices,
+            "estimate_s": estimate_s,
+            "requires_confirmation": estimate_s > MP_INTERACTIVE_BUDGET_S,
+        }
+
+    def _recipe_span_extent(self, recipe):
+        """`(n_samples, fs)` for the span a recipe runs over.
+
+        A recipe with no span runs the whole channel, so the sample count
+        comes off the recording rather than defaulting to zero — a zero would
+        make every estimator report "free" and silently disable the
+        confirmation prompt on exactly the whole-channel runs that most need
+        it.
+        """
+        recording = q.get_recording_by_id(self.conn, recipe["recording_id"])
+        fs = float(recording["fs"]) if recording is not None else 1.0
+        span = recipe.get("span")
+        if span:
+            return int(span[1]) - int(span[0]), fs
+        if recording is not None:
+            return int(recording["n_samples"]), fs
+        return 0, fs
+
+    def _build_filmstrip(self, recipe, step_results, input_value=None, recording=None,
+                         stale_indices=()):
+        """Render the whole transformation as a single stacked scroll.
+
+        The decision of *what* to show is `ChainState.filmstrip_plan`
+        (T61); the decision of *how* to draw each value is
+        `UI.plots.render_value` (T56). This surface does no type switching
+        of its own — every element, including the chain's input, goes
+        through that one render function. Returns a HoloViews `Layout` whose
+        first element is the chain input and whose remaining elements are
+        the steps in execution order.
+
+        `stale_indices` (T64) are the step positions currently being
+        recomputed. Their plots stay on screen — a filmstrip that blanked
+        while a suffix re-ran would read as the silently-blank-pane failure
+        this codebase has hit twice — but their titles say so, because an
+        old picture read as a new result is worse than no picture.
+        """
+        stale = set(stale_indices or ())
+        plan = ChainState.from_recipe(recipe).filmstrip_plan(self.conn)
+        elements = [self._render_filmstrip_input(recipe, input_value, recording)]
+        for entry in plan:
+            result = step_results.get(entry["position"])
+            if result is None:
+                raise ValueError(
+                    f"filmstrip: no result for step {entry['position']} "
+                    f"({entry['label']})"
+                )
+            element = render_value(entry["output_type"], result.value, result.meta)
+            title = f"{entry['label']} — {entry['output_type']}"
+            if entry["position"] in stale:
+                title = f"{title}  ·  stale, recomputing…"
+            element = element.opts(title=title)
+            elements.append(element)
+        return hv.Layout(elements).cols(1).opts(shared_axes=False)
+
+    def _root_signal_value(self, recipe, input_value, recording):
+        """The chain's root input as a typed `Signal`, loading it from the
+        recording's channel file when the caller hasn't supplied it."""
+        if input_value is not None:
+            return input_value
+        if recording is None:
+            raise ValueError("focus/filmstrip: input_value or recording is required")
+        span = recipe.get("span")
+        start, end = (0, recording["n_samples"]) if span is None else span
+        x_full = np.load(recording["npy_path"], mmap_mode="r")
+        return Signal(x=np.asarray(x_full[start:end]), fs=recording["fs"])
+
+    def _render_filmstrip_input(self, recipe, input_value, recording):
+        """The chain's input as a `Signal` value, drawn through the same
+        `render_value` path as every step — never a second renderer."""
+        return render_value(
+            "signal", self._root_signal_value(recipe, input_value, recording),
+        ).opts(title="Chain input — signal")
+
+    def _show_filmstrip(self, recipe, step_results, input_value=None, recording=None):
+        """Put the filmstrip on screen as the post-run surface. The
+        staged-span preview (`result_pane`) and the filmstrip are mutually
+        exclusive — showing one hides the other."""
+        self.result_pane.visible = False
+        self.filmstrip_pane.visible = True
+        self.filmstrip_pane.object = self._build_filmstrip(
+            recipe, step_results, input_value=input_value, recording=recording,
+        )
+        self._last_before_after = None
+        self.scale_note.object = ""
 
     # ── Encoding inspection view (Part 6, Section 3) ─────────────────────
 

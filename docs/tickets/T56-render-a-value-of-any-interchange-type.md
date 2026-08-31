@@ -6,7 +6,7 @@ size: M
 blocked_by: []
 mutex: []
 files: ["UI/plots.py", "tests/test_value_rendering.py"]
-flags: []
+flags: ['done']
 level: 0
 unblocks: 3
 budget_minutes: 60
