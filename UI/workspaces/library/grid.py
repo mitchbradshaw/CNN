@@ -118,19 +118,33 @@ class LibraryGrid:
     def _render_sections(self):
         """Rebuild the section panes for the current `self.groups` in place,
         so the `pn.Column` already embedded by `layout()` picks up the new
-        grouping without needing `layout()` to be called again."""
-        if not self.groups:
-            # An empty grid and a broken grid look identical; say so.
-            self._sections.objects = [pn.pane.Markdown(_NO_MATCH_MESSAGE)]
-            return
-        sections = []
-        for title, entry_ids in self.groups:
-            sections.append(pn.pane.Markdown(f"### {title}"))
-            sections.append(pn.FlexBox(
-                *[self._card_by_entry[eid] for eid in entry_ids],
-                sizing_mode="stretch_width",
-            ))
-        self._sections.objects = sections
+        grouping without needing `layout()` to be called again.
+
+        The `loading` flag is set for the duration. Panel's
+        `loading_indicator` covers panes it can see recomputing, but a
+        wholesale `Column.objects` assignment is invisible to it — from
+        Panel's side a slow rebuild here is indistinguishable from a dead
+        control, and the natural response to a dead control is to click
+        again and queue a second rebuild. Cleared in a `finally`: a
+        rebuild that raises must not leave the surface greyed out forever,
+        which looks exactly like a hang.
+        """
+        self._sections.loading = True
+        try:
+            if not self.groups:
+                # An empty grid and a broken grid look identical; say so.
+                self._sections.objects = [pn.pane.Markdown(_NO_MATCH_MESSAGE)]
+                return
+            sections = []
+            for title, entry_ids in self.groups:
+                sections.append(pn.pane.Markdown(f"### {title}"))
+                sections.append(pn.FlexBox(
+                    *[self._card_by_entry[eid] for eid in entry_ids],
+                    sizing_mode="stretch_width",
+                ))
+            self._sections.objects = sections
+        finally:
+            self._sections.loading = False
 
     def _group_entries(self):
         basis = self.group_by.value
@@ -326,12 +340,22 @@ class LibraryGrid:
         )
 
     def _connect_filter_watches(self):
+        # Discrete controls apply at once: a MultiSelect change is one
+        # event and waiting for anything would just feel broken.
         for widget in (
             self.morphology, self.purity, self.spike_train,
-            self.recording, self.channel, self.depth_range,
-            self.fall_duration_range,
+            self.recording, self.channel,
         ):
             widget.param.watch(self._on_filter_change, "value")
+
+        # Continuous controls apply on RELEASE. `value` fires on every
+        # intermediate position of a drag, and each one re-filters every
+        # entry and rebuilds every card in the grid — dragging a handle
+        # across its track queued dozens of full rebuilds and the surface
+        # went away for seconds. `value_throttled` fires once, when the
+        # handle is dropped. Pinned by tests/test_ui_responsiveness.py.
+        for widget in (self.depth_range, self.fall_duration_range):
+            widget.param.watch(self._on_filter_change, "value_throttled")
 
     def _build_filter_column(self):
         return pn.Column(

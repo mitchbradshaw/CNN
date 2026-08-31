@@ -27,8 +27,10 @@ describes the chain builder as a vertical staged list, which is exactly what Par
 | `Working/database/` | Plain-SQL layer. `schema.py` holds the whole schema and its migrations |
 | `Adapters/` | The analysis block registry. `base.py` is the adapter contract |
 | `UI/` | Panel/HoloViews surfaces. The only place a UI library may be imported |
-| `tests/` | pytest, headless. 486 tests, ~4 min wall-clock |
-| `docs/` | PRD, coding standards, ticket backlog |
+| `tests/` | pytest, headless. The default gate; `pytest.ini` excludes `-m ui` from it |
+| `tests/ui/` | Browser-driven Panel tests (`pytest -m ui`). See `docs/UI_VERIFICATION.md` |
+| `scripts/` | Dev tooling, not imported by the app. `dev_serve.py` serves the UI off a throwaway database |
+| `docs/` | PRD, coding standards, ticket backlog, `UI_VERIFICATION.md` |
 | `DATA/`, `MODELS/`, `MATRICES/`, `Plots/` | Gitignored. Provisioned into your worktree, not committed |
 | `DATA/library_seed/` | The **exception**: tracked on purpose. Irreplaceable inputs to the library importer — its generator was deleted. See its `PROVENANCE.md` |
 
@@ -82,6 +84,10 @@ Windows, PowerShell, conda. The environment is shared across worktrees — **do 
 change dependencies.** A ticket that genuinely needs a new dependency should stop and report it.
 `pytest-xdist` (`pytest -n auto`) was added 2026-08-31 with the user's explicit sign-off for this
 reason — it is now available, not an example to follow silently for the next dependency.
+`pytest-playwright` plus a chromium binary (`python -m playwright install chromium`) was added the
+same day, on the same sign-off, for the browser suite in `tests/ui/`. Both are dev tooling: nothing
+under `UI/`, `Working/`, `Adapters/` or `Pipelines/` may import either, and the headless suite must
+keep passing on a machine where neither is present.
 
 Run tests with `pytest` from your worktree root. Your worktree has its own `DATA/` fixture database;
 it is not the real one and you cannot reach the real one. That is deliberate.
@@ -93,6 +99,24 @@ dynamic map renders as a **silently blank pane**, not an error. Tests pass, revi
 is missing. Your acceptance criteria therefore include a headless construction test asserting the
 surface returns the expected panes with non-`None` objects. Follow the pattern already in
 `tests/test_run_panel.py`, `tests/test_motif_browser.py` and `tests/test_ribbon_panes.py`.
+
+**That is necessary and not sufficient, and since 2026-08-31 it is no longer the whole gate.** A
+construction test catches an *absent* pane. It cannot catch a *present* pane that throws in the
+browser — which is what actually happened both times — and it cannot see layout, overlap, or whether
+the surface is usable. `tests/ui/` drives a real browser against a real Panel server and fails on any
+JS error; `pytest -m ui` runs it. **`pytest` alone does NOT run it** (`pytest.ini` excludes the `ui`
+marker so the fast loop stays fast), so a green `pytest` is not evidence your surface renders.
+
+A ticket that touches `UI/` is done when: the headless suite passes, `pytest -m ui` passes, and your
+report names the screenshots in `runs/ui-screenshots/` a reviewer should look at. **Read
+`docs/UI_VERIFICATION.md` before you start** — it covers the setup, `scripts/dev_serve.py` (a browser
+you can point at the app, backed by a throwaway copy of the database), the two browser MCP servers in
+`.mcp.json`, and three non-obvious findings about what selectors actually work against Panel 1.9
+(Bokeh renders into shadow DOM; Panel checkboxes have no accessible label; how to assert a pane
+actually painted).
+
+If `pytest -m ui` reports "no tests ran", the browser tooling is not installed on this machine — that
+is a missing setup step, not a pass. Stop and report it.
 
 ## When to stop
 

@@ -36,7 +36,16 @@ _READABILITY_CSS = f"""
 }}
 """
 
-pn.extension("tabulator", raw_css=[_READABILITY_CSS])
+# `loading_indicator=True` (2026-08-31): Panel renders NOTHING while a
+# pane recomputes unless this is on. Several surfaces here take a second
+# or more to rebuild — the library grid, the encoding panels, a plot
+# rebuild after a view-transform toggle — and with no acknowledgement a
+# slow control is indistinguishable from a dead one. The observed
+# consequence is a user clicking again, which queues a second rebuild and
+# makes the wait longer. Surfaces that swap `Column.objects` wholesale are
+# invisible to this and set `.loading` themselves; see
+# `UI/workspaces/library/grid.py::_render_sections`.
+pn.extension("tabulator", raw_css=[_READABILITY_CSS], loading_indicator=True)
 hv.extension("bokeh")
 
 # Drives the annotation/reviewed/detection/pending-selection overlay

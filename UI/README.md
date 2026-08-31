@@ -29,62 +29,42 @@ Several bugs in this module (ribbons floating away from the visible axis,
 a sidebar overflowing into the main column, a table pin marker not
 appearing) only showed up when actually rendered — reading the code, or
 even a headless HoloViews/Bokeh model inspection, missed them. For any
-change to layout, overlay geometry, or CSS, verify with a real browser
-screenshot, not code inspection alone.
+change to layout, overlay geometry, or CSS, verify with a real browser,
+not code inspection alone.
 
-**One-time setup** (not a project dependency — a local dev tool, installed
-per-machine):
+**Since 2026-08-31 this is a suite, not a snippet to copy.** The
+hand-rolled `bokeh_save` + Playwright screenshot recipe that used to live
+here has been replaced by `tests/ui/`, which serves the real app and
+drives a real browser, and by `scripts/dev_serve.py`, which gives you a
+browser session against a throwaway copy of the database.
 
 ```bash
-python -m pip install --user playwright
-python -m playwright install chromium
+pytest -m ui                        # the browser suite (NOT run by plain `pytest`)
+pytest -m ui --headed --slowmo 500  # watch it drive
+python scripts/dev_serve.py         # serve on :5006 for exploratory work
 ```
 
-**Pattern for a screenshot check** (adjust the specifics per what you're
-verifying):
+Screenshots land in `runs/ui-screenshots/<test-name>/`.
 
-```python
-import shutil, panel as pn, holoviews as hv
-hv.extension("bokeh")
-import Working.config as config
-config.SESSION_STATE_PATH = "/scratch/path/session.json"  # BEFORE importing UI.app
-import UI.app as appmod
-from bokeh.io import save as bokeh_save
-from bokeh.resources import INLINE
-from playwright.sync_api import sync_playwright
+**Read `docs/UI_VERIFICATION.md`** for the setup, what a UI ticket has to
+produce, and three findings about Panel 1.9 that are not guessable:
+Bokeh renders into shadow DOM (so `document.querySelectorAll` in page JS
+finds nothing), Panel checkboxes carry no accessible label (so
+`get_by_role("checkbox", name=...)` finds nothing), and how to assert
+that a pane actually painted rather than merely exists.
 
-shutil.copyfile("DATA/db/annotations.sqlite", "/scratch/path/copy.sqlite")  # NEVER the real DB
-app = appmod.ViewerApp(db_path="/scratch/path/copy.sqlite")
-app.source_file, app.channel = "M2_aug_concat_fs1.mat", 0
-app._range_stream.event(x_range=(12000, 12600))   # drive state directly, no mouse simulation
-app._refresh_view()
+Two constraints carried over unchanged, and still non-negotiable:
 
-renderer = hv.renderer("bokeh")
-plot = renderer.get_plot(app.plot_pane.object)
-plot.refresh()          # re-evaluate from the CURRENT stream state --
-                         # a `plot` fetched before a state change goes stale otherwise
-bokeh_save(plot.state, filename="/scratch/path/out.html", resources=INLINE)
-
-with sync_playwright() as pw:
-    browser = pw.chromium.launch()
-    page = browser.new_page(viewport={"width": 1100, "height": 500})
-    page.goto("file:///scratch/path/out.html")
-    page.wait_for_timeout(300)
-    page.screenshot(path="/scratch/path/out.png")
-    browser.close()
-```
-
-For verifying the FULL Panel layout (not just one plot — sidebar
-structure, accordions, table), call `app.layout()` and either (a) run a
-real `pn.serve(...)` in the background and point Playwright at
-`http://localhost:PORT/`, or (b) `tabs.save(out_html, resources=INLINE,
-embed=False)` for a quicker static render (`embed=True` is NOT viable
-here — it tries to enumerate every possible widget-state combination and
-runs out of memory on an app with this many interactive widgets).
-
-Never point any of this at `DATA/db/annotations.sqlite` or
-`DATA/db/ui_session.json` — always a scratch copy, per the project's
-never-touch-the-real-DB rule.
+- **Never point any of this at `DATA/db/annotations.sqlite` or
+  `DATA/db/ui_session.json`.** `tests/ui/harness.py` and
+  `scripts/dev_serve.py` both handle it; do not write a third path that
+  does not.
+- **Drive state in Python, assert in the browser.** Bokeh canvas
+  coordinates are not addressable by Playwright, so set the range on the
+  app object or click the app's own controls — do not simulate a mouse
+  drag on the plot. `app._range_stream.event(x_range=...)` followed by
+  `app._refresh_view()` is still the way to put the viewer somewhere
+  specific.
 
 ## Layout
 

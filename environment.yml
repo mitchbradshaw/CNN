@@ -32,4 +32,14 @@ dependencies:
   - tensorflow
   - torchvision
   - python-docx
+  # Dev tooling for the browser-driven UI suite (tests/ui/, `pytest -m ui`).
+  # Added 2026-08-31 with explicit sign-off; see CLAUDE.md > Environment and
+  # docs/UI_VERIFICATION.md. Nothing the application imports depends on these,
+  # and the headless suite must keep passing without them.
+  #
+  # After creating the environment, also run once per machine:
+  #     python -m playwright install chromium
+  - pip:
+      - pytest-xdist
+      - pytest-playwright
 prefix: C:\ProgramData\anaconda3

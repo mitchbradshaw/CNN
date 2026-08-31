@@ -184,6 +184,22 @@ class SignalViewMixin:
         """
         if rec is None:
             rec = q.get_recording(self.conn, self.source_file, self.channel)
+        # Tell the browser something is happening. This method tears down
+        # and rebuilds every DynamicMap and reassigns `plot_pane.object`;
+        # on a full channel that is comfortably long enough for the plot
+        # to look frozen, and a frozen plot invites a second click, which
+        # queues a second rebuild. Cleared in the `finally` at the end —
+        # a rebuild that raises must not leave the pane greyed out
+        # forever, which is indistinguishable from a hang.
+        self.plot_pane.loading = True
+        try:
+            return self._rebuild_plot_inner(rec, preserve_zoom, x_range_override)
+        finally:
+            self.plot_pane.loading = False
+
+    def _rebuild_plot_inner(self, rec, preserve_zoom, x_range_override):
+        """The body of `_rebuild_plot`. Split out only so the loading flag
+        has a `try`/`finally` to live in without re-indenting 90 lines."""
         active_tools = (
             ["xpan", "xwheel_zoom"] if self.drag_mode.value == "Pan"
             else ["xbox_select", "xwheel_zoom"]
