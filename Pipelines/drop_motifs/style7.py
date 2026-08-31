@@ -175,16 +175,94 @@ def seconds_per_mv(depths_mv, falls_s, target=TARGET_MEDIAN_RATIO):
     return float(np.clip(aspect, MIN_SECONDS_PER_MV, MAX_SECONDS_PER_MV))
 
 
-def apply_aspect(ax, aspect):
+# The most extreme proportion a motif panel is allowed to be drawn at,
+# height over width. Beyond this a panel is a sliver: ID 22's motifs
+# genuinely occupy 17:1 in its span plot, and a 17:1 panel shows nothing.
+MAX_PANEL_RATIO = 6.0
+MIN_PANEL_RATIO = 0.4
+
+
+def span_locked_aspect(span_seconds, span_mv, width_in, height_in,
+                       depths_mv, falls_s,
+                       max_ratio=MAX_PANEL_RATIO, min_ratio=MIN_PANEL_RATIO):
+    """The aspect that reproduces the SPAN PLOT's own millivolt-per-second.
+
+    This replaces deriving the scale from an arbitrary target proportion.
+    The operator's test is the right one and it is not "does the panel
+    look well proportioned", it is "does the motif look like it does in
+    the recording" - and measured on catalogue ID 3 the two answers were
+    seven times apart: its median motif occupies 3.83:1 height-to-width in
+    the span panel and was being drawn at 0.55:1 in the overlay, so a
+    spike that is twice as tall as it is wide came out twice as wide as
+    it is tall.
+
+    The span panel's scale is a property of its data extent and its box
+    in inches, both of which are known, so this is a measurement rather
+    than a preference.
+
+    Returns `(aspect, true_ratio, compression)`. `compression` is 1.0 when
+    the panel reproduces the span plot exactly, and >1 when the true ratio
+    was too extreme to draw and has been compressed - which the caller is
+    expected to state on the figure rather than pass off as exact.
+    """
+    depths = np.abs(np.asarray(depths_mv, dtype=float))
+    falls = np.abs(np.asarray(falls_s, dtype=float))
+    good = np.isfinite(depths) & np.isfinite(falls) & (depths > 0) & (falls > 0)
+    if (not good.any() or span_mv <= 0 or span_seconds <= 0
+            or width_in <= 0 or height_in <= 0):
+        return 1.0, float("nan"), 1.0
+
+    seconds_per_inch = float(span_seconds) / float(width_in)
+    mv_per_inch = float(span_mv) / float(height_in)
+    true_aspect = seconds_per_inch / mv_per_inch
+
+    median_depth = float(np.median(depths[good]))
+    median_fall = float(np.median(falls[good]))
+    ratio = true_aspect * median_depth / median_fall
+
+    # The third value is always a MAGNITUDE of adjustment, at least 1,
+    # whichever bound was hit. Returning ratio/min_ratio for the expanded
+    # case gave a number below 1, which reads as "compressed by less than
+    # nothing" and is not what any caller wants to print.
+    if ratio > max_ratio:
+        return (true_aspect * max_ratio / ratio, ratio, ratio / max_ratio)
+    if 0 < ratio < min_ratio:
+        return (true_aspect * min_ratio / ratio, ratio, min_ratio / ratio)
+    return true_aspect, ratio, 1.0
+
+
+def fidelity_caption(true_ratio, adjustment,
+                     max_ratio=MAX_PANEL_RATIO, min_ratio=MIN_PANEL_RATIO):
+    """How honestly a panel reproduces the span plot, in words.
+
+    Compressed and expanded are named separately: both are departures
+    from the recording, but a reader told "compressed" about a panel that
+    was stretched has been told the wrong thing.
+    """
+    if not np.isfinite(true_ratio):
+        return "shape not locked"
+    if adjustment <= 1.001:
+        return (f"shape as in the recording "
+                f"({true_ratio:.1f}:1 height-to-width)")
+    verb = "compressed" if true_ratio > max_ratio else "expanded"
+    return (f"shape {verb} {adjustment:.1f}x to fit "
+            f"(true ratio in the recording is {true_ratio:.3g}:1)")
+
+
+def apply_aspect(ax, aspect, adjustable="box"):
     """Lock one axes to the figure's millivolt-per-second scale.
 
-    `adjustable="box"` so the BOX is reshaped to satisfy the scale and the
-    data limits are left alone. The alternative, `adjustable="datalim"`,
-    would silently widen the view to fit a fixed box - which is the
-    fit-to-axes behaviour being removed.
+    `adjustable="box"` reshapes the BOX to satisfy the scale and leaves
+    the data limits alone. That is right when the panel may be any shape.
+
+    `adjustable="datalim"` keeps the box exactly as given and widens the
+    VIEW instead. That is right when a row of panels must all be the same
+    size - the motif still keeps its true proportion and simply gains
+    margin, where box-adjustment would have made every panel a different
+    size. Both preserve the shape; they differ only in what gives.
     """
     if aspect and np.isfinite(aspect) and aspect > 0:
-        ax.set_aspect(float(aspect), adjustable="box")
+        ax.set_aspect(float(aspect), adjustable=adjustable)
 
 
 def aspect_caption(aspect):
