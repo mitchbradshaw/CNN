@@ -1,0 +1,53 @@
+{
+  "manifest_version": 1,
+  "code_version": "13e80f8",
+  "created_at": "2026-08-31T05:09:10.021225+00:00",
+  "runs": [
+    {
+      "config_hash": "ac2568e8",
+      "recipe": {
+        "recording_id": 1,
+        "span": null,
+        "steps": [
+          {
+            "algorithm": "window_matrix",
+            "params": {
+              "catch22": true,
+              "cnn": false,
+              "cnn_model_dir": "models",
+              "fast_entropy": true,
+              "resume_path": "Results/Preprocessing/window_matrix/wm_v1_M2_aug_concat_fs1_CH0_WIN1min_STEP100pct.npz",
+              "rf": false,
+              "rf_model_path": "",
+              "slow_entropy": true,
+              "step_frac": 1.0,
+              "timeout_s": 1500.0,
+              "window_min": 1.0
+            },
+            "side_inputs": {},
+            "stage": "preprocessing"
+          }
+        ]
+      },
+      "recording": {
+        "source_file": "M2_aug_concat_fs1.mat",
+        "channel": 0,
+        "fs": 1.0,
+        "n_samples": 2595600,
+        "global_offset": 0,
+        "npy_path": "DATA/derived/channels/M2_aug_concat_fs1/CH0.npy"
+      },
+      "span_start": 0,
+      "span_end": 2595600,
+      "status": "failed",
+      "started_at": "2026-08-31T05:09:09.931679+00:00",
+      "finished_at": "2026-08-31T05:09:09.956817+00:00",
+      "duration_s": null,
+      "error_text": "Traceback (most recent call last):\n  File \"C:\\Users\\mmebr\\Documents\\CNN\\Working\\execution.py\", line 345, in _execute_recipe_with_conn\n    raise ValueError(\n    ...<5 lines>...\n    )\nValueError: Step 0 ('preprocessing.window_matrix'): span is 2595600 samples, which exceeds this adapter's max_span_samples=1562600. Choose a smaller span \u2014 this is an O(n^2)-or-worse encoding and a larger span would attempt to allocate a matrix whose size scales with the square of the span length.\n",
+      "current_step": 0,
+      "step_timings": {},
+      "detections": [],
+      "artifacts": []
+    }
+  ]
+}

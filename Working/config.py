@@ -283,6 +283,62 @@ CLUSTER_ROUTING_CEILING_S = 900
 # against the real SLURM account before the first generated job is submitted.
 HPC_REMOTE_REPO_ROOT = "/home/Student/s4699158/CNN"
 
+# This account's SLURM QOS (rangpur, s4699158) rejects submission outright
+# above this wall-clock, on whichever partition a job lands in when it
+# requests no `--partition` (confirmed 2026-08-31: sbatch error
+# "QOSMaxWallDurationPerJobLimit... wall clock limit cannot be more than 20
+# minutes"). `_slurm_time_from_estimate` clamps every generated `--time` to
+# this, so a job that "should" get a longer estimate-derived slot still gets
+# something submittable -- it just chains through more resubmits instead.
+# This is exactly why the hand-written `wm_job.sh` was already hardcoded to
+# `--time=00:20:00` rather than following this same estimate-scaling logic.
+# NOTE (2026-08-31, after `sinfo`/`scontrol show partition a100-test`): this
+# was measured while landing on `a100-test` specifically, whose `QoS=test`
+# is almost certainly where the 20-minute ceiling actually lives (partition
+# itself reports `MaxTime=UNLIMITED`). `HPC_CPU_PARTITION` below routes
+# CPU-only work off this partition entirely, so its real wall-time ceiling
+# is UNVERIFIED -- this constant is kept as the conservative floor rather
+# than assumed lifted; raise it only after confirming the `cpu` partition's
+# own QOS via `sacctmgr show qos` or an actual longer job that succeeds.
+HPC_MAX_WALLTIME_MINUTES = 20
+
+# `sinfo -o "%P %a %l %D %G %f"` on the real account (2026-08-31) is the
+# source of truth here, not a guess: the hand-written scripts' hardcoded
+# `--partition=gpu` does not exist on this cluster at all (`sbatch: error:
+# invalid partition specified: gpu`) -- almost certainly stale from before
+# the reconfiguration the login banner mentions. Real partitions include
+# `cpu`/`largecpu`/`cpu-grind`/`largecpu-grind` (GRES=(null), no GPU, not
+# course-coded like `cosc3500`/`comp3710`) and `p100`/`a100`/`a100-grind`/
+# `a100-test` (GPU-bearing). `a100-test` (2 nodes, 2 total A100s, `QoS=test`,
+# the account's *default* partition) is what a job lands on when no
+# `--partition` is given at all -- shared department-wide and clearly not
+# meant for a stat-only build that needs no GPU. `a100` (10 nodes) is the
+# general-purpose GPU partition for when a CNN stage genuinely needs one.
+HPC_CPU_PARTITION = "cpu"
+HPC_GPU_PARTITION = "a100"
+
+# No `HPC_WM_..._MEM_GB` constant here on purpose: `wm_job.sh`'s hardcoded
+# `--mem=16G`, then a measurement-informed `4G` reduction, were BOTH
+# rejected outright on `HPC_CPU_PARTITION` ("Memory specification can not
+# be satisfied", 2026-08-31) -- two attempts at picking a number, both
+# wrong. Per the user's own prior experience with this exact error, and
+# matching the official Rangpur guide's own working example (which never
+# sets `--mem` either), the generated WM template now omits `--mem`
+# entirely and lets the scheduler assign its default. See `HPC/README.md`
+# for the full account.
+
+# `wm_job.sh`'s hardcoded `conda activate torch_env` is a GPU/CNN
+# environment (torch + CUDA) that does not have `aeon` installed --
+# confirmed 2026-08-31 by an actual run on `HPC_CPU_PARTITION` failing with
+# "No module named 'aeon'" after every other fix (partition, mem, line
+# endings) had already gotten it running. The account has a separate
+# `aeon-env` for exactly the catch22/entropy stack a stat-only build
+# needs. A CNN-stage build still needs `torch_env` (for torch/CUDA); a
+# stat-only one needs `aeon-env` instead -- the same `uses_gpu` split as
+# `HPC_CPU_PARTITION`/`HPC_GPU_PARTITION` above, not a new axis.
+HPC_CONDA_ENV_GPU = "torch_env"
+HPC_CONDA_ENV_CPU = "aeon-env"
+
 # ── Motif browser (UI/motif_browser.py) ─────────────────────────────────────
 #
 # Top pane (full channel + occurrence markers) is taller than the bottom

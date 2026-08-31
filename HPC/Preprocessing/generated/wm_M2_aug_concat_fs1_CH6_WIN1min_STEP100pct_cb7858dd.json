@@ -1,0 +1,24 @@
+{
+  "recording_id": 7,
+  "span": null,
+  "steps": [
+    {
+      "stage": "preprocessing",
+      "algorithm": "window_matrix",
+      "params": {
+        "window_min": 1.0,
+        "step_frac": 1.0,
+        "catch22": true,
+        "fast_entropy": true,
+        "slow_entropy": true,
+        "cnn": false,
+        "rf": false,
+        "timeout_s": 900.0,
+        "resume_path": "Results/Preprocessing/window_matrix/wm_v1_M2_aug_concat_fs1_CH6_WIN1min_STEP100pct.npz",
+        "cnn_model_dir": "models",
+        "rf_model_path": ""
+      },
+      "side_inputs": {}
+    }
+  ]
+}
