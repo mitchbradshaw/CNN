@@ -131,16 +131,31 @@ MIN_BAND_MEMBERS = 3
 # identity
 # ---------------------------------------------------------------------------
 
-def motif_key(catalogue_id, recording_id, pass_key, absolute_onset):
-    """The library key. Stable, and unique across passes.
+def motif_key(catalogue_id, recording_id, pass_key, absolute_onset,
+              window_index=None):
+    """The library key. Stable, and unique across passes AND windows.
 
     See the module docstring: the pass sits between the recording and the
     onset so that keys sort into pass-major order within a span, and so
     that the same onset found by two passes yields two distinguishable
     rows rather than one row that depends on load order.
+
+    `window_index` exists for the same reason one step out, and it is not
+    optional decoration. Under `passes9.detect_sliding` the same drop is
+    inside two overlapping windows, each of which detrends it against its
+    own baseline and frames it with its own bounds. Without the window in
+    the key the two are ONE key: `detect_sliding`'s `all_arrays.update`
+    keeps the last window's snippet while its dedup keeps the best-CENTRED
+    row, so the surviving row's `snippet_start_idx`/`snippet_end_idx` and
+    the surviving array come from different windows. That is how 208 of
+    the 1736 drop_motifs9 rows ended up with a `detrended_mv` whose length
+    disagrees with its own bounds, and how 22 refined motifs reached the
+    shipped Ward tree as all-zero feature vectors. Left None for a
+    whole-span run, where there is only one window and no collision.
     """
+    tail = "" if window_index is None else f"_w{int(window_index)}"
     return (f"id{int(catalogue_id):03d}_r{int(recording_id)}"
-            f"_{pass_key}_{int(absolute_onset)}")
+            f"_{pass_key}_{int(absolute_onset)}{tail}")
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +274,24 @@ def run_inverted(x, fs, max_passes=3, **overrides):
 # merging
 # ---------------------------------------------------------------------------
 
-def deduplicate(candidates, *, onset_frac=DEDUP_ONSET_FRAC):
+def _fs_of(payload, default=1.0):
+    """The sampling rate carried alongside a candidate, if there is one.
+
+    Lives here rather than in `passes8` because `passes8` imports from
+    this module and the dependency cannot run both ways. `passes8._fs_of`
+    is this function.
+    """
+    if isinstance(payload, dict):
+        return float(payload.get("fs", default) or default)
+    if isinstance(payload, (tuple, list)) and payload:
+        row = payload[0]
+        if isinstance(row, dict) and "fs" in row:
+            return float(row["fs"] or default)
+    return float(default)
+
+
+def deduplicate(candidates, *, onset_frac=DEDUP_ONSET_FRAC,
+                scale_by_fs=True):
     """Drop later-pass detections of an event an earlier pass already has.
 
     `candidates` is `[(pass_key, sign, onset_idx, trough_idx,
@@ -290,15 +322,32 @@ def deduplicate(candidates, *, onset_frac=DEDUP_ONSET_FRAC):
     supervisor asked for. Peak-meets-onset separates the two because it
     describes what actually makes them one excursion rather than merely
     where they happen to fall.
+
+    THE TOLERANCE IS IN SAMPLES, and until drop_motifs10 it was not.
+    `onset_frac * fall_s` is a DURATION; `onset - kept_onset` is a
+    difference of SAMPLE INDICES. The two are numerically equal at 1 Hz,
+    which is every recording drop_motifs5-8 was validated on, so the
+    defect was invisible for four runs. On Fig2A at 10 Hz the tolerance
+    came out ten times too small and 61 pairs sharing a channel AND a
+    trough sample reached the shipped store. `passes8.deduplicate` fixed
+    it in its own copy; `passes9` only calls that for the CROSS-WINDOW
+    merge, so within a window the unfixed rule still ran. It is fixed
+    here now, at source. Multiplying by fs = 1 is the identity, so no
+    catalogue span moves; see `Plots/drop_motifs10/REBASELINE.md`.
+
+    `scale_by_fs=False` restores the defect exactly. It exists so the
+    re-baseline audit can attribute a moved count to THIS fix rather than
+    to "the new detector", and for no other purpose.
     """
     kept = []
     for entry in candidates:
-        _, sign, onset, trough, fall_s, _, _, _ = entry
+        _, sign, onset, trough, fall_s, _, _, payload = entry
         onset, trough, sign = float(onset), float(trough), int(sign)
+        fs = _fs_of(payload) if scale_by_fs else 1.0
         duplicate = False
 
         for _, kept_sign, kept_onset, _, kept_fall, _, _, _ in kept:
-            tolerance = onset_frac * max(float(fall_s), float(kept_fall))
+            tolerance = onset_frac * max(float(fall_s), float(kept_fall)) * fs
             if int(kept_sign) == sign:
                 if abs(onset - float(kept_onset)) <= tolerance:
                     duplicate = True

@@ -169,7 +169,8 @@ def detect_multiscale(x, fs, *, catalogue_id, recording_id, source_file,
                       max_passes=3, fine=True, sensitive=True, inverted=True,
                       micro=True, base_overrides=None, fine_overrides=None,
                       sens_overrides=None, inv_overrides=None,
-                      micro_overrides=None):
+                      micro_overrides=None, window_index=None,
+                      dedup_scale_by_fs=True):
     """`passes6.detect_multiscale` plus the micro pass, and with a lone
     inverted detection discarded.
 
@@ -244,7 +245,7 @@ def detect_multiscale(x, fs, *, catalogue_id, recording_id, source_file,
                                row["snippet_end_idx"],
                                (row, arrays, sign)))
 
-    kept = deduplicate(candidates)
+    kept = deduplicate(candidates, scale_by_fs=dedup_scale_by_fs)
 
     # A lone surviving inverted detection is dropped rather than drawn:
     # the pass is there to find a population going the other way, and one
@@ -264,7 +265,7 @@ def detect_multiscale(x, fs, *, catalogue_id, recording_id, source_file,
     for pass_key, _, _, _, _, _, _, (row, arrays, sign) in kept:
         old_key = row["event_id"]
         new_key = motif_key(catalogue_id, recording_id, pass_key,
-                            row["onset_idx"])
+                            row["onset_idx"], window_index=window_index)
         row = dict(row)
         row["event_id"] = new_key
         row["snippet_key"] = new_key

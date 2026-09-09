@@ -59,28 +59,56 @@ COPHENETIC_FLOOR = 0.70
 THUMBNAIL_LIMIT = 70
 
 
-def _waveform_of(row, snippets, field="detrended_mv"):
-    """The drop itself, onset to trough, oriented as a fall."""
+def _waveform_of(row, snippets, field="detrended_mv",
+                 orient_rises_as_drops=True):
+    """The event itself, onset to trough.
+
+    With `orient_rises_as_drops` a rise is negated so it is compared as a
+    fall - how drop_motifs6 to 7.3 clustered. From drop_motifs8 it is
+    False, so a rise clusters as the rise it is.
+
+    Raises `ValueError` if the stored array is not as long as the row's own
+    bounds say it is. It used to clip instead, and the clip is how a store
+    defect reached a shipped figure: when `snippet_start_idx` belongs to a
+    different window from the array, `onset` clips to somewhere inside it,
+    `trough` clips to `onset + 1`, and the returned "fall" is one sample
+    long. `cluster.feature_matrix` z-normalises that constant to all
+    zeros, so 22 of the 1058 refined motifs entered the Ward tree as
+    identical zero vectors sitting on top of each other at distance zero,
+    inflating the cophenetic correlation from 0.408 to the reported 0.681.
+    Nothing anywhere raised. The clip is therefore gone: a store that
+    disagrees with itself is a bug to be fixed at the writer, not a shape
+    to be clustered.
+    """
     arrays = snippets.get(row["event_id"])
     if arrays is None:
         return None
     values = np.asarray(arrays[field], dtype=float)
-    if int(row.get("signal_sign", 1)) < 0:
-        values = -values
     start = int(row["snippet_start_idx"])
+    expected = int(row["snippet_end_idx"]) - start
+    if values.size != expected:
+        raise ValueError(
+            f"{row['event_id']}: snippet {field} is {values.size} samples "
+            f"but the row's bounds "
+            f"[{start}, {int(row['snippet_end_idx'])}) claim {expected}. "
+            "The row and the array came from different windows; see "
+            "passes6.motif_key.")
+    if orient_rises_as_drops and int(row.get("signal_sign", 1)) < 0:
+        values = -values
     onset = int(np.clip(int(row["onset_idx"]) - start, 0, values.size - 1))
     trough = int(np.clip(int(row["trough_idx"]) - start, onset + 1, values.size))
     drop = values[onset:trough]
     return drop if drop.size >= 2 else values[onset:onset + 2]
 
 
-def _aligned(row, snippets, field="detrended_mv"):
+def _aligned(row, snippets, field="detrended_mv",
+             orient_rises_as_drops=True):
     """`(t_s, mV)` - real seconds, baseline removed, never scaled."""
     arrays = snippets.get(row["event_id"])
     if arrays is None:
         return None, None
     values = np.asarray(arrays[field], dtype=float)
-    if int(row.get("signal_sign", 1)) < 0:
+    if orient_rises_as_drops and int(row.get("signal_sign", 1)) < 0:
         values = -values
     onset = int(np.clip(int(row["onset_idx"]) - int(row["snippet_start_idx"]),
                         0, values.size - 1))

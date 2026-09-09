@@ -60,12 +60,19 @@ REFERENCE_SPAN_WIDTH_IN = FIGURE_WIDTH_IN * 0.90
 REFERENCE_SPAN_HEIGHT_IN = 2.6
 
 
-def span_aspect(x, fs, rows):
-    """`(aspect, true_ratio, compression)` from the span panel's geometry."""
+def span_aspect(x, fs, rows, locker=None):
+    """`(aspect, true_ratio, compression)` from the span panel's geometry.
+
+    `locker` is the rule that turns a measured ratio into a drawable one.
+    The default caps at `style7.MAX_PANEL_RATIO`; drop_motifs8 passes
+    `style8.span_locked_aspect`, which lets the cap fall as the true ratio
+    gets further out of reach.
+    """
+    locker = locker or style7.span_locked_aspect
     x = np.asarray(x, dtype=float)
     span_seconds = len(x) / float(fs)
     span_mv = float(np.ptp(x)) * 1000.0
-    return style7.span_locked_aspect(
+    return locker(
         span_seconds, span_mv,
         REFERENCE_SPAN_WIDTH_IN, REFERENCE_SPAN_HEIGHT_IN,
         [abs(float(r.get("drop_depth_mv", 0.0))) for r in rows],

@@ -140,9 +140,21 @@ def write_store(out_dir, rows, arrays, manifest_extra=None):
 
     events_path = os.path.join(out_dir, EVENTS_CSV)
     if rows:
-        fieldnames = list(rows[0])
+        # The UNION of every row's keys, in first-seen order - not
+        # `list(rows[0])`. A pooled store is built from several corpora
+        # and several passes, and a column that only some rows carry (a
+        # re-measured onset, a per-corpus floor) either raised here or,
+        # with `extrasaction="ignore"`, would have been dropped from every
+        # row silently. Neither is acceptable in a store other runs read.
+        fieldnames = []
+        seen = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    seen.add(key)
+                    fieldnames.append(key)
         with open(events_path, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer = csv.DictWriter(handle, fieldnames=fieldnames, restval="")
             writer.writeheader()
             writer.writerows(rows)
     else:

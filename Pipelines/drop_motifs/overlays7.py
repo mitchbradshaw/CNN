@@ -80,8 +80,15 @@ def group_title(sign, band, labels, n, n_out, hue_name):
 
 
 def prepare_group(rows, snippets, hue_index, *, baseline_removed,
-                  field=SHAPE_FIELD, inverted=False):
-    """One family, cut to a common window and coloured in its own hue."""
+                  field=SHAPE_FIELD, inverted=False,
+                  orient_rises_as_drops=True):
+    """One family, cut to a common window and coloured in its own hue.
+
+    `orient_rises_as_drops` negates the inverted pass's motifs so a rise is
+    drawn as a fall, which is how drop_motifs6 through 7.3 drew them. From
+    drop_motifs8 it is False: inverting is what the DETECTOR does, and a
+    figure that inverts as well shows a rise upside down.
+    """
     traces, onsets, depths, keep = [], [], [], []
     for row in rows:
         arrays = snippets.get(row["event_id"])
@@ -90,7 +97,7 @@ def prepare_group(rows, snippets, hue_index, *, baseline_removed,
         values = np.asarray(arrays[field], dtype=float)
         if values.size < 3:
             continue
-        if int(row.get("signal_sign", 1)) < 0:
+        if orient_rises_as_drops and int(row.get("signal_sign", 1)) < 0:
             values = -values
         onset = int(np.clip(int(row["onset_idx"]) - int(row["snippet_start_idx"]),
                             0, values.size - 1))

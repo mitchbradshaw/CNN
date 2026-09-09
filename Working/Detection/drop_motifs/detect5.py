@@ -155,6 +155,13 @@ class Detect5Params:
     # The fix. False restores the old fall-multiple behaviour, which is
     # kept only so a test can demonstrate the failure it replaces.
 
+    bracket_on_fall_runs: bool = True
+    # drop_motifs10 defects 3 and 4. A neighbouring FALL bounds both the
+    # trough search and the window, for the same reason a neighbouring
+    # rise does. False reproduces drop_motifs5-9, and exists so the
+    # re-baseline audit can attribute each moved count to one fix rather
+    # than to "the new detector". See `_fall_limit` and `window_bounds`.
+
     window_cap_mult: float = 6.0
     # Cap on each side, in multiples of the fall duration, for an event
     # with no bounding UP run. This is the old rule demoted from
@@ -164,6 +171,22 @@ class Detect5Params:
     window_pad_frac: float = 0.25
     # A little air either side of the bracket, in fall durations, so the
     # drop is not flush against the frame.
+
+    bracket_rise_on_separation: bool = False
+    # `_fall_limit` bounds the trough search at the next UP run. A very
+    # narrow spike whose fall flattens for a single segment encodes an UP
+    # run INSIDE its own fall, and the bound then lands a sample or two
+    # past the onset: the depth is measured across a fraction of the fall
+    # and Gate B rejects a real event.
+    #
+    # True applies `min_separation_s` to that bound. That is the guard the
+    # `falls` branch of `_fall_limit` already carries, for the same reason
+    # and with no new parameter - a run closer than the detector's own
+    # two-events distance is the event's own jitter, not the next event's
+    # recovery. See `_fall_limit`.
+    #
+    # Default False, which is drop_motifs5-12 behaviour: every shipped
+    # store reproduces under it, and this option must be asked for.
 
     # -- the gates --------------------------------------------------------
     min_rise_frac: float = 0.5
@@ -189,6 +212,13 @@ class Detect5Params:
     # "auto" decides per span by which trigger fires more; the explicit
     # values force it. Decided ONCE per span so every window in a span
     # shares its geometry.
+
+    walk_onset_back: bool = True
+    # Move a candidate's onset back onto the local maximum the fall
+    # departs from, BEFORE the depth and rise gates read it. Off
+    # reproduces drop_motifs5-9, where the onset was wherever the slope
+    # gate first fired and the measured depth was therefore a lower bound.
+    # See `walk_back_to_shoulder` and drop_motifs10 defect 4.
 
     # -- dSAX ------------------------------------------------------------
     threshold_mode: str = THRESHOLD_MODE
@@ -459,7 +489,7 @@ def significant_rises(rises, x_detrended, segment_samples, min_climb):
 
 
 def window_bounds(onset, trough, rises, segment_samples, morphology, params,
-                  x_detrended, depth):
+                  x_detrended, depth, falls=None):
     """The stored extent for one event. See the table in the module docstring.
 
     `rises` is `up_runs`' output in SEGMENT indices; everything returned is
@@ -477,6 +507,26 @@ def window_bounds(onset, trough, rises, segment_samples, morphology, params,
 
     So: pad where the boundary belongs to this event, clamp where it
     belongs to a neighbour.
+
+    A NEIGHBOURING FALL IS ALSO A BOUNDARY, and until drop_motifs10 it was
+    not. Bracketing on rises alone assumes every event is separated from
+    the next by an encoded rise; where two drops are separated by a run
+    the encoding calls `SAME`, no value of `min_rise_frac` produces a
+    boundary between them and `tighten_window` cannot shrink the window
+    however far it lowers the bar - it only ever admits smaller RISES.
+    The window then holds two falls, and Gate B (`min_fall_dominance`)
+    rejects the shallower of the pair for not dominating a window that
+    contains its deeper neighbour.
+
+    Measured, and it is the last link in drop_motifs10 defect 4: Fig2A CH1,
+    the 0.166 mV drop at sample 9051 gets the window [9050, 9076), which
+    reaches the 0.34 mV drop at 9063. Peak-to-peak 0.423 mV, dominance
+    0.202, rejected. Bounded at the next fall run instead the window is
+    [9050, 9064), peak-to-peak 0.172 mV, dominance 0.965, kept.
+
+    `falls` is `fall_runs`' output in SEGMENT indices, like `rises`. Runs
+    overlapping this event's own `[onset, trough]` are excluded, so an
+    event is never bounded by itself.
     """
     n_samples = len(x_detrended)
     fall = max(trough - onset, segment_samples)
@@ -506,6 +556,18 @@ def window_bounds(onset, trough, rises, segment_samples, morphology, params,
             after = [e for _, e in real if e > trough]
             if after:
                 end = min(min(after) + pad, trough + cap)       # own; padded
+
+    if falls:
+        # A neighbouring fall clamps HARD on both sides under both
+        # morphologies: it belongs to the neighbour, never to this event.
+        before = [e * segment_samples for _, e in falls
+                  if e * segment_samples <= onset]
+        if before:
+            start = max(start, max(before))
+        after = [s * segment_samples for s, _ in falls
+                 if s * segment_samples > trough]
+        if after:
+            end = min(end, min(after))
 
     return max(0, int(start)), min(int(n_samples), int(end))
 
@@ -611,10 +673,18 @@ def detect_drops5(x, fs, params):
 
     # -- measure and gate --------------------------------------------------
     kept = []
+    previous_trough = 0
     for candidate in proposals:
         onset = candidate["onset"]
         trough = find_trough(derivative, onset,
-                             _fall_limit(onset, rises, sps, len(derivative)),
+                             _fall_limit(onset, rises, sps, len(derivative),
+                                         falls=(falls if
+                                                params.bracket_on_fall_runs
+                                                else None),
+                                         min_separation_samples=(
+                                             params.min_separation_s * fs),
+                                         rise_separation=(
+                                             params.bracket_rise_on_separation)),
                              knee_frac=params.trough_knee_frac)
         if trough <= onset:
             continue
@@ -624,6 +694,16 @@ def detect_drops5(x, fs, params):
         # the refinement walks back from.
         onset = refine_onset(derivative, onset, trough,
                              knee_frac=params.trough_knee_frac)
+        # ...and then back onto the shoulder the fall departs from, which
+        # `refine_onset` cannot reach because it only searches forward.
+        # See `walk_back_to_shoulder`: without this the depth the gates
+        # below read is measured from part-way down the fall.
+        if params.walk_onset_back:
+            onset = walk_back_to_shoulder(
+                x_detrended, onset,
+                backstop=max(previous_trough,
+                             onset - int(round(params.window_cap_mult
+                                               * max(trough - onset, sps)))))
         candidate["onset"] = onset
         if trough <= onset:
             continue
@@ -644,6 +724,7 @@ def detect_drops5(x, fs, params):
 
         candidate.update(trough=trough, depth=depth, rise_height=rise_height)
         kept.append(candidate)
+        previous_trough = int(trough)
 
     # Gate: shallow relative to the deepest fall in the span. Unchanged
     # from `detect.py` - relative rather than absolute so one number works
@@ -674,11 +755,14 @@ def detect_drops5(x, fs, params):
             start, end, rise_frac_used, _ = tighten_window(
                 candidate["onset"], candidate["trough"], rises, sps,
                 morphology, params, x_detrended, candidate["depth"],
-                derivative, slope_threshold)
+                derivative, slope_threshold,
+                fall_runs_segments=(falls if params.bracket_on_fall_runs
+                                    else None))
         else:
             start, end = window_bounds(
                 candidate["onset"], candidate["trough"], rises, sps,
-                morphology, params, x_detrended, candidate["depth"])
+                morphology, params, x_detrended, candidate["depth"],
+                falls=(falls if params.bracket_on_fall_runs else None))
             rise_frac_used = params.min_rise_frac
 
         window = x_detrended[start:end]
@@ -781,8 +865,45 @@ def refine_onset(derivative, onset, trough, knee_frac=0.05, hysteresis=2):
     return onset
 
 
-def _fall_limit(onset, rises, sps, n_samples):
-    """How far `find_trough` may search: up to the next rise, and no further.
+def walk_back_to_shoulder(x_detrended, onset, backstop):
+    """The local maximum the fall departs from, at or before `onset`.
+
+    `refine_onset` searches `[onset, trough]` and so can only ever move an
+    onset FORWARD. `_first_crossing` returns the first sample past the
+    slope threshold, which on a rounded shoulder is already part-way down,
+    and every quantity the gates then read - depth, and the rise height
+    Gate A compares against it - is measured from part-way down.
+
+    That is drop_motifs10 defect 4, measured. Fig2A CH1, the operator's
+    miss at ~904.6 s: the proposal lands at sample 9055 (+0.002 mV), the
+    trough at 9058 (-0.120 mV), so the detector sees a 0.086 mV fall and
+    `min_depth_frac` rejects it as shallow. The fall actually departs from
+    the local maximum at 9051 (+0.046 mV) and is 0.166 mV deep - above the
+    0.1 mV instrument floor, which is why the gate does not excuse it.
+
+    This is the same rule `refine9.move_onset` applies to a finished
+    store, moved to where it can affect the gates instead of only the
+    stored measurement. `refine9` post-processes and can merge, move and
+    reject but never ADD, so it could not recover an event the gates had
+    already thrown away.
+
+    `backstop` is the earliest sample the walk may reach - the previous
+    event's territory. Bounded rather than open-ended because an
+    unbounded walk back along a slowly-rising baseline lands on the
+    previous cycle's peak, which is the mirror of the runaway
+    `find_trough` documents.
+    """
+    onset = int(onset)
+    stop = max(0, int(backstop))
+    i = onset
+    while i > stop and float(x_detrended[i - 1]) >= float(x_detrended[i]):
+        i -= 1
+    return i
+
+
+def _fall_limit(onset, rises, sps, n_samples, falls=None,
+                min_separation_samples=0.0, rise_separation=False):
+    """How far `find_trough` may search: to the next rise OR the next fall.
 
     `find_trough` takes the STEEPEST sample in its search window as the
     reference for its knee, so the window must not be able to contain a
@@ -793,12 +914,68 @@ def _fall_limit(onset, rises, sps, n_samples):
     bottom. The fall duration is then wrong by 10x and every window sized
     from it is wrong with it.
 
-    The next rise is the right bound for BOTH morphologies and needs no new
-    parameter: a sharkfin's fall ends before the next cycle's rise, and a
-    trough's fall ends before its own recovery, which is also a rise.
+    THE NEXT RISE IS NOT ENOUGH, and that is defects 3 and 4 of the
+    drop_motifs10 list - one bug, two named cases. The bound above assumes
+    every fall is followed by an encoded recovery, so that bracketing on
+    the next rise also brackets before the next fall. On live data it is
+    not: a drop whose recovery stays inside the `SAME` band encodes no
+    rise at all, the limit then runs past the FOLLOWING drop, and exactly
+    the failure this function's own docstring describes happens anyway.
+
+    Measured, Fig2A CH4 window 05 (samples 1250-1750), base pass:
+
+        proposal 1296 -> limit 1340 (the next RISE, 4.4 s away)
+                      -> trough 1339, the NEXT drop's foot
+                      -> refine_onset walks the onset 36 samples forward
+                         to 1332, which IS the next drop
+                      -> min_separation then deletes the next drop's own
+                         detection as a duplicate of the relocated one.
+
+    Two visible drops became one, four times in that window alone
+    (129.6 s, 135.4 s, 140.8 s, 156.2 s), and the same mechanism at CH1
+    sample 9055 is the operator's 0.172 mV miss at ~904.6 s.
+
+    So the next FALL bounds the search as well. The bound is gated on
+    `min_separation_samples` - the detector's own statement of how far
+    apart two detections must be to be two events - because the encoding
+    splits one long fall into two runs whenever a single segment lands in
+    the `SAME` band (`ddSdd`), and a run that starts within that distance
+    is the same event, not the next one. No new parameter.
+
+    THE SAME ACCIDENT HAPPENS UPWARDS, and `rise_separation` is the option
+    for it. A very narrow spike whose fall flattens for a single segment
+    encodes an UP run inside its own fall; the rises branch then bounds the
+    trough search a sample or two past the onset, the depth is measured
+    across a fraction of the fall, and Gate B rejects a real event.
+
+    Measured, Mushroom_260720 sample 2661 - a 9 mV spike five samples wide:
+
+        onset 2661 -> limit 2664 (an UP run 2 samples into the fall)
+                   -> trough 2662, one sample in
+                   -> depth 1.76 mV instead of 8.99
+                   -> dominance 0.19 against a 0.5 gate, rejected
+
+    Its inter-onset intervals are what say it is real: the span's drops run
+    in a repeating five-step cycle everywhere else, and this one group had
+    four steps with a 1214 s gap that the recovered event splits into
+    287 + 927 - the cycle every other group has.
+
+    `rise_separation` is OFF by default, because turning it on
+    unconditionally would move every store drop_motifs5-12 shipped. See
+    `Detect5Params.bracket_rise_on_separation`.
     """
-    following = [start * sps for start, _ in rises if start * sps > onset]
-    return min(following) if following else int(n_samples)
+    cut = float(min_separation_samples)
+    # The rises branch takes the same guard only when asked for, because
+    # applying it unconditionally would move every shipped store. See
+    # `Detect5Params.bracket_rise_on_separation`; `rise_separation=False`
+    # leaves the condition as `start * sps > onset`, unchanged.
+    rise_cut = cut if rise_separation else 0.0
+    limits = [start * sps for start, _ in rises
+              if start * sps - onset > rise_cut]
+    if falls:
+        limits += [start * sps for start, _ in falls
+                   if start * sps - onset > cut]
+    return min(limits) if limits else int(n_samples)
 
 
 def _first_crossing(derivative, from_idx, slope_threshold, lookahead):
@@ -842,7 +1019,7 @@ def count_falls(derivative, start, end, slope_threshold, gap):
 
 def tighten_window(onset, trough, rises, sps, morphology, params,
                    x_detrended, depth, derivative, slope_threshold,
-                   steps=TIGHTEN_STEPS):
+                   steps=TIGHTEN_STEPS, fall_runs_segments=None):
     """Shrink a window until it holds one fall, by admitting smaller rises.
 
     The operator's suggestion, and it maps onto a parameter that already
@@ -866,7 +1043,8 @@ def tighten_window(onset, trough, rises, sps, morphology, params,
     for factor in steps:
         trial = replace(params, min_rise_frac=params.min_rise_frac * factor)
         start, end = window_bounds(onset, trough, rises, sps, morphology,
-                                   trial, x_detrended, depth)
+                                   trial, x_detrended, depth,
+                                   falls=fall_runs_segments)
         falls = count_falls(derivative, start, end, slope_threshold,
                             max(1, sps))
         if best is None:

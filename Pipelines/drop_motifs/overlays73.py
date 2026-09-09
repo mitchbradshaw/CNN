@@ -122,7 +122,8 @@ SHEET_MAX_HEIGHT_IN = 5.2
 
 def _solve_panels(groups, snippets, hues, aspect, *, height_in,
                   max_height_in=style73.PANEL_MAX_HEIGHT_IN,
-                  baseline_removed=True, pure_only=False):
+                  baseline_removed=True, pure_only=False,
+                  orient_rises_as_drops=True):
     """One prepared group plus its box, per family, in draw order."""
     solved = []
     for (sign, band), members in groups:
@@ -130,7 +131,8 @@ def _solve_panels(groups, snippets, hues, aspect, *, height_in,
             if pure_only else members
         group = prepare_group(rows, snippets, hues[(sign, band)],
                               baseline_removed=baseline_removed,
-                              inverted=sign < 0)
+                              inverted=sign < 0,
+                              orient_rises_as_drops=orient_rises_as_drops)
         if group is None:
             continue
         x_range, y_range = _panel_ranges(group)
@@ -152,7 +154,8 @@ def _worst_distortion(solved):
 
 
 def plot_family_overlay(x, fs, rows, snippets, summary, out_path,
-                        band_labels=()):
+                        band_labels=(), locker=None,
+                        orient_rises_as_drops=True):
     """The family overlays alone: every panel at the span's own scale,
     every row centred, the sheet no wider than the panels need."""
     if not rows:
@@ -163,10 +166,11 @@ def plot_family_overlay(x, fs, rows, snippets, summary, out_path,
     pure = [r for r in rows if int(r.get("is_pure", 1))] or rows
     groups, dropped = drawable_groups(pure)
     hues = assign_hues([k for k, _ in groups])
-    aspect, true_ratio, compression = span_aspect(x, fs, pure)
+    aspect, true_ratio, compression = span_aspect(x, fs, pure, locker=locker)
 
     solved = _solve_panels(groups, snippets, hues, aspect,
-                           height_in=style73.PANEL_HEIGHT_IN)
+                           height_in=style73.PANEL_HEIGHT_IN,
+                           orient_rises_as_drops=orient_rises_as_drops)
     if not solved:
         return None
 
@@ -223,7 +227,8 @@ CONTEXT_MAX_W_IN = 6.6
 
 
 def plot_span_and_overlays(x, fs, span_offset, rows, snippets, summary,
-                           out_path, band_labels=()):
+                           out_path, band_labels=(), locker=None,
+                           orient_rises_as_drops=True):
     """The span on top at exactly the reference box, then one centred row
     per family: shape on the left, as recorded on the right."""
     if not rows:
@@ -233,11 +238,12 @@ def plot_span_and_overlays(x, fs, span_offset, rows, snippets, summary,
     rows = sorted(rows, key=lambda r: r["onset_h"])
     groups, dropped = drawable_groups(rows)
     hues = assign_hues([k for k, _ in groups])
-    aspect, true_ratio, compression = span_aspect(x, fs, rows)
+    aspect, true_ratio, compression = span_aspect(x, fs, rows, locker=locker)
 
     solved = _solve_panels(groups, snippets, hues, aspect,
                            height_in=SHEET_HEIGHT_IN,
-                           max_height_in=SHEET_MAX_HEIGHT_IN, pure_only=True)
+                           max_height_in=SHEET_MAX_HEIGHT_IN, pure_only=True,
+                           orient_rises_as_drops=orient_rises_as_drops)
     if not solved:
         return None
 
@@ -289,7 +295,8 @@ def plot_span_and_overlays(x, fs, span_offset, rows, snippets, summary,
                                    panel["h"]))
         kept = prepare_group(panel["members"], snippets, hues[panel["key"]],
                              baseline_removed=False, field=RECORDED_FIELD,
-                             inverted=sign < 0)
+                             inverted=sign < 0,
+                             orient_rises_as_drops=orient_rises_as_drops)
         draw_group(right, kept, None, show_zero=False)
         right.set_ylabel("mV, as recorded")
         right.set_xlabel("time from onset (s)")

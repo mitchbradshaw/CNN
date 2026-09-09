@@ -84,7 +84,8 @@ def _ranked_axis(ax, heights):
 
 def plot_dendrogram_page(rows, snippets, out_path, *, title, excluded=0,
                          max_families=MAX_FAMILIES, span_aspect=None,
-                         true_ratio=float("nan"), compression=1.0):
+                         true_ratio=float("nan"), compression=1.0,
+                         orient_rises_as_drops=True):
     """The A4 page, with the tree spread over a ranked distance axis."""
     if len(rows) < 3:
         return None, {"reason": f"only {len(rows)} motifs; a tree needs 3"}
@@ -92,7 +93,8 @@ def plot_dendrogram_page(rows, snippets, out_path, *, title, excluded=0,
 
     waveforms, keep = [], []
     for row in rows:
-        wave = _waveform_of(row, snippets)
+        wave = _waveform_of(row, snippets,
+                            orient_rises_as_drops=orient_rises_as_drops)
         if wave is not None:
             waveforms.append(wave)
             keep.append(row)
@@ -180,7 +182,8 @@ def plot_dendrogram_page(rows, snippets, out_path, *, title, excluded=0,
             _, cmap = style7.family_ramp(int(high_labels[leaf]) - 1)
             ax = fig.add_axes([leaf_fraction(position) - cell / 2.0,
                                motif_bottom, cell, motif_top - motif_bottom])
-            t, values = _aligned(row, snippets)
+            t, values = _aligned(
+                row, snippets, orient_rises_as_drops=orient_rises_as_drops)
             if t is not None:
                 ax.plot(t, values, color=cmap(0.62), lw=style7.LW_TRACE)
             ax.axvline(0.0, color=style7.RULE_COLOUR,
@@ -228,7 +231,7 @@ def plot_dendrogram_page(rows, snippets, out_path, *, title, excluded=0,
             if arrays is None:
                 continue
             values = np.asarray(arrays["detrended_mv"], dtype=float)
-            if int(row.get("signal_sign", 1)) < 0:
+            if orient_rises_as_drops and int(row.get("signal_sign", 1)) < 0:
                 values = -values
             onset = int(np.clip(int(row["onset_idx"])
                                 - int(row["snippet_start_idx"]),

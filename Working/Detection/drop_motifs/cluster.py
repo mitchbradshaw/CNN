@@ -122,10 +122,27 @@ def feature_matrix(waveforms, n_samples=DEFAULT_RESAMPLE_LENGTH):
 
     THE only place normalisation happens in this pipeline. Everything
     downstream of a linkage is shape; everything drawn is millivolts.
+
+    Raises `ValueError` on a CONSTANT waveform. z-normalising a constant
+    gives an all-zero vector, and every all-zero vector sits on top of
+    every other at distance zero. 22 of the 1058 shipped drop_motifs9
+    refined motifs did exactly that - a store defect handed them in as
+    one-sample "falls" - and the block of coincident points took the
+    cophenetic correlation of that tree from 0.408 to the reported 0.681.
+    A zero-variance row is never a shape; it is always something upstream
+    having gone wrong, and it must say so here rather than be clustered.
     """
-    return np.vstack([
+    features = np.vstack([
         z_normalize(resample_to_length(w, n_samples)) for w in waveforms
     ])
+    flat = np.flatnonzero(features.std(axis=1) <= 0.0)
+    if flat.size:
+        raise ValueError(
+            f"{flat.size} of {len(features)} waveforms are constant and "
+            f"z-normalise to all-zero feature vectors (rows {flat[:8].tolist()}"
+            f"{'...' if flat.size > 8 else ''}). A constant is not a shape - "
+            "fix the waveform source rather than clustering it.")
+    return features
 
 
 def distance_matrix(waveforms, metric=DISTANCE_SCALE_INVARIANT):

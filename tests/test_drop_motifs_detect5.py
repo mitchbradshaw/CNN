@@ -84,6 +84,7 @@ from Working.Detection.drop_motifs.detect5 import (
     MORPHOLOGY_SHARKFIN,
     MORPHOLOGY_TROUGH,
     Detect5Params,
+    _fall_limit,
     choose_morphology,
     detect_drops5,
     refine_onset,
@@ -703,7 +704,19 @@ def test_autotune_converges_and_reports_every_pass():
         assert {"phase", "feature_width_s", "n_events",
                 "measured_interval_s", "admissible"} <= set(pass_info)
     assert abs(result.period_s - 400.0) < 60.0
-    assert [e.onset_idx for e in result.events] == [o + 1 for o in onsets], (
+    # Exactly the fixture's own onsets, not one sample past them.
+    #
+    # This assertion read `[o + 1 for o in onsets]` until drop_motifs10,
+    # and the +1 was the defect rather than the fixture: `_first_crossing`
+    # returns the first sample PAST the slope threshold, and
+    # `refine_onset` searches only [onset, trough] so it could never move
+    # an onset back onto the sample the fall departs from. On this clean
+    # train the cost is one sample; on Fig2A CH1 at 905.2 s it was the
+    # difference between a 0.086 mV fall and a 0.166 mV one, and the
+    # shallow gate then deleted the event (drop_motifs10 defect 4).
+    # `detect5.walk_back_to_shoulder` is the fix and this is the
+    # behaviour it deliberately changes.
+    assert [e.onset_idx for e in result.events] == list(onsets), (
         "on a clean train the refined pass should land on every onset")
 
 
@@ -738,6 +751,77 @@ def test_autotune_beats_its_own_acf_seed_on_a_frequency_modulated_train():
         f"{seed_pass['n_events']} -> {selected['n_events']} of "
         f"{len(periods)} modulated cycles")
     assert selected["admissible"], "the selected pass has overlapping events"
+
+
+# ===========================================================================
+# the trough search bound
+# ===========================================================================
+
+def test_fall_limit_stops_at_the_next_up_run_by_default():
+    """The shipped rule, pinned so the option below cannot change it by
+    accident. Every drop_motifs5-12 store reproduces under this."""
+    rises = [(10, 12), (40, 44)]        # segments; sps 2 -> samples 20, 80
+    assert _fall_limit(18, rises, sps=2, n_samples=1000) == 20
+    assert _fall_limit(18, rises, sps=2, n_samples=1000,
+                       min_separation_samples=60.0) == 20, (
+        "min_separation must not reach the rises branch unless asked")
+
+
+def test_fall_limit_can_ignore_an_up_run_inside_the_event():
+    """A very narrow spike whose fall flattens for a single segment encodes
+    an UP run INSIDE its own fall, and the bound then lands a sample or two
+    past the onset: the depth is measured across a fraction of the fall and
+    Gate B rejects a real event.
+
+    `min_separation_s` is the detector's own statement of how far apart two
+    detections must be to be two events, and the `falls` branch of
+    `_fall_limit` already carries exactly this guard for exactly this
+    reason - the encoding splits one fall whenever a single segment lands in
+    the wrong band. `bracket_rise_on_separation` gives the `rises` branch
+    the same guard, so a run closer than that distance is read as the
+    event's own jitter rather than as the next event's recovery.
+
+    Measured case: Mushroom_260720 sample 2661, a 9 mV spike five samples
+    wide. Its recovery encodes as an UP run two samples into the fall, the
+    trough is found one sample past the onset, the depth measures 1.76 mV
+    instead of 8.99, and dominance 0.19 fails a 0.5 gate.
+    """
+    rises = [(10, 12), (40, 44)]        # samples 20 and 80 at sps 2
+    assert _fall_limit(18, rises, sps=2, n_samples=1000,
+                       min_separation_samples=60.0,
+                       rise_separation=True) == 80, (
+        "an UP run 2 samples past the onset bounded the trough search even "
+        "though the detector's own two-events distance is 60 samples")
+
+
+def test_bracket_rise_on_separation_defaults_off():
+    """The parameter exists and is off, so no shipped store moves."""
+    assert Detect5Params(detrend_window_s=100.0,
+                         segment_seconds=2.0).bracket_rise_on_separation         is False
+
+
+def test_a_narrow_spike_whose_fall_flickers_up_is_recovered():
+    """End to end: the same signal, rejected by default and found with the
+    option on, and the neighbours it sits between are unmoved either way."""
+    x, onsets = trough_train(n_cycles=4)
+    # A fifth spike, one third as wide as the others and with a single flat
+    # sample in the middle of its fall - the encoding accident above.
+    narrow = np.concatenate([
+        np.zeros(200),
+        np.array([0.0, -3.0, -7.0, -9.0, -8.9, -9.4, -7.0, -3.0, -1.0]),
+        np.zeros(200),
+    ])
+    x = np.concatenate([x, narrow])
+    p = params5(morphology=MORPHOLOGY_TROUGH, min_separation_s=60.0)
+    before = detect_drops5(noisy(x), FS, p)
+    after = detect_drops5(noisy(x), FS,
+                          params5(morphology=MORPHOLOGY_TROUGH,
+                                  min_separation_s=60.0,
+                                  bracket_rise_on_separation=True))
+    assert len(after.events) >= len(before.events), (
+        "relaxing the trough-search bound lost an event")
+    assert [e.onset_idx for e in after.events][:len(onsets)] ==            [e.onset_idx for e in before.events][:len(onsets)], (
+        "the option moved an onset the default already had right")
 
 
 # ===========================================================================
