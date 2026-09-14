@@ -291,7 +291,7 @@
               "id": "fG5av",
               "name": "nav-jobs-label",
               "fill": "#8E8E93",
-              "content": "Jobs · 2",
+              "content": "Jobs · 3",
               "fontFamily": "Inter",
               "fontSize": 9,
               "fontWeight": "500"
@@ -491,7 +491,7 @@
               "id": "kJlx0",
               "name": "t",
               "fill": "#007AFF",
-              "content": "2 running · 1 on cluster",
+              "content": "3 need you",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -1254,7 +1254,7 @@
               "y": 88,
               "name": "t",
               "fill": "#636366",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -1470,7 +1470,7 @@
               "y": 132,
               "name": "t",
               "fill": "#636366",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -1542,7 +1542,7 @@
               "y": 132,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "no reviewed overlap",
+              "content": "6 h · too few",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -1809,7 +1809,7 @@
               "y": 212,
               "name": "t",
               "fill": "#000000",
-              "content": "seed_E014_bank",
+              "content": "seed_E0102_bank",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "600"
@@ -1821,7 +1821,7 @@
               "y": 212,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "queued · local",
+              "content": "new · local",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -2009,7 +2009,7 @@
                       "id": "s7XDFU",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "12 / 160",
+                      "content": "12 / 72",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -2161,7 +2161,7 @@
                       "id": "hGXSE",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "seed_F03",
+                      "content": "seed_F03_native",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -2177,9 +2177,11 @@
               "x": 232,
               "y": 48,
               "name": "plot",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 768,
-              "height": 100
+              "height": 100,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "rectangle",
@@ -2206,7 +2208,7 @@
               ],
               "width": 768,
               "height": 92,
-              "stroke": "#F2F2F7",
+              "stroke": "#3A3A3C",
               "strokeWidth": 1.1
             },
             {
@@ -2394,7 +2396,7 @@
                   "id": "KlH5a",
                   "name": "t",
                   "fill": "#FFFFFF",
-                  "content": "Send 152 unjudged to Review",
+                  "content": "Send 110 unjudged to Review",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -2516,7 +2518,7 @@
                       "id": "T7cwhY",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -2592,7 +2594,7 @@
                       "id": "MUYKI",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -2746,7 +2748,7 @@
               "y": 57,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2758,9 +2760,11 @@
               "x": 80,
               "y": 46,
               "name": "strip-CH2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -2777,7 +2781,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -2799,9 +2803,11 @@
               "x": 80,
               "y": 82,
               "name": "strip-CH4_A2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -2818,7 +2824,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -2828,7 +2834,7 @@
               "y": 129,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2840,9 +2846,11 @@
               "x": 80,
               "y": 118,
               "name": "strip-CH7",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -2859,7 +2867,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -2868,7 +2876,7 @@
               "x": 259.2,
               "y": 44,
               "name": "brush",
-              "fill": "#007AFF33",
+              "fill": "#007AFF1F",
               "width": 278.4,
               "height": 108,
               "stroke": "#007AFF",
@@ -3024,7 +3032,7 @@
                   "id": "Bh7qo",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "4 in this session",
+                  "content": "5 in this session",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -3584,7 +3592,7 @@
                       "id": "M8Ov0u",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "v2 · 5 stages",
+                      "content": "v2 · 4 stages",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -3925,7 +3933,7 @@
                   "y": 9,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_E014_bank",
+                  "content": "seed_E0102_bank",
                   "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -3970,7 +3978,7 @@
                       "id": "lSdQ3",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "E-014 · 3 lengths",
+                      "content": "E-0102 · 3 lengths",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -3984,7 +3992,7 @@
                   "y": 47,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "queued · local",
+                  "content": "new · local",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -4081,6 +4089,206 @@
                       "fontWeight": "normal"
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "k9yWn",
+              "x": 10,
+              "y": 426,
+              "name": "run-mp_drops_v3-paused",
+              "width": 280,
+              "height": 66,
+              "fill": "#FFF8EC",
+              "cornerRadius": 8,
+              "stroke": "#FFCC80",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "B5gF93",
+                  "x": 0,
+                  "y": 8,
+                  "name": "colour",
+                  "fill": "#FF9500",
+                  "width": 3,
+                  "height": 50
+                },
+                {
+                  "type": "frame",
+                  "id": "r4E9C",
+                  "x": 12,
+                  "y": 10,
+                  "name": "glyph-Symbolic encoding",
+                  "clip": true,
+                  "width": 44,
+                  "height": 26,
+                  "fill": "#F4F4F6",
+                  "cornerRadius": 4,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "M7GeE",
+                      "x": 0,
+                      "y": 0,
+                      "name": "g",
+                      "opacity": 0.6,
+                      "geometry": "M2 12h40m-40 5h40",
+                      "viewBox": [
+                        0,
+                        0,
+                        44,
+                        26
+                      ],
+                      "width": 44,
+                      "height": 26,
+                      "stroke": "#AEAEB2",
+                      "strokeWidth": 0.8
+                    },
+                    {
+                      "type": "path",
+                      "id": "P2YlMd",
+                      "x": 0,
+                      "y": 0,
+                      "name": "g",
+                      "geometry": "M2 20h8v-11h8v5h8v-9h8v13h8",
+                      "viewBox": [
+                        0,
+                        0,
+                        44,
+                        26
+                      ],
+                      "width": 44,
+                      "height": 26,
+                      "stroke": "#007AFF",
+                      "strokeWidth": 1.5
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "Kmigl",
+                  "x": 64,
+                  "y": 9,
+                  "name": "t",
+                  "fill": "#000000",
+                  "content": "mp_drops_v3 · r-0431",
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "eDG4g",
+                  "x": 64,
+                  "y": 27,
+                  "name": "badges",
+                  "height": 16,
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "p3nDT7",
+                      "name": "badge-template",
+                      "height": 16,
+                      "fill": "#007AFF1F",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "y3f0nS",
+                          "name": "t",
+                          "fill": "#0062CC",
+                          "content": "template",
+                          "fontFamily": "Geist Mono",
+                          "fontSize": 9,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "uLqRu",
+                      "name": "t",
+                      "fill": "#8E8E93",
+                      "content": "v3 · 4 stages",
+                      "fontFamily": "Geist Mono",
+                      "fontSize": 9,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "ZibPw",
+                  "x": 64,
+                  "y": 50,
+                  "name": "pbar-bg",
+                  "fill": "#E5E5EA",
+                  "width": 120,
+                  "height": 4
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "Y1Rxs",
+                  "x": 64,
+                  "y": 50,
+                  "name": "pbar",
+                  "fill": "#FF9500",
+                  "width": 90,
+                  "height": 4
+                },
+                {
+                  "type": "text",
+                  "id": "DvefQ",
+                  "x": 190,
+                  "y": 46,
+                  "name": "t",
+                  "fill": "#C77700",
+                  "content": "paused 3/4",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 9,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "A2n5h",
+                  "x": 250,
+                  "y": 10,
+                  "name": "compare",
+                  "enabled": false,
+                  "width": 20,
+                  "height": 20,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 5,
+                  "stroke": "#C7C7CC",
+                  "strokeWidth": 1,
+                  "justifyContent": "center",
+                  "alignItems": "center"
+                },
+                {
+                  "type": "text",
+                  "id": "lypiR",
+                  "x": 200,
+                  "y": 29,
+                  "name": "open-in-jobs",
+                  "fill": "#007AFF",
+                  "content": "Open in Jobs ↗",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -4332,7 +4540,7 @@
               "y": 46,
               "name": "t",
               "fill": "#000000",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "600"
@@ -4569,7 +4777,7 @@
               "y": 72,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"
@@ -4941,7 +5149,7 @@
               "y": 132,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"
@@ -5020,7 +5228,7 @@
               "y": 166,
               "name": "t",
               "fill": "#000000",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "600"
@@ -5296,7 +5504,7 @@
               "y": 192,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"
@@ -6040,7 +6248,7 @@
                       "id": "Aax5m",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -6116,7 +6324,7 @@
                       "id": "SHIN3",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -6270,7 +6478,7 @@
               "y": 57,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6282,9 +6490,11 @@
               "x": 80,
               "y": 46,
               "name": "strip-CH2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -6301,7 +6511,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -6323,9 +6533,11 @@
               "x": 80,
               "y": 82,
               "name": "strip-CH4_A2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -6342,7 +6554,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -6352,7 +6564,7 @@
               "y": 129,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6364,9 +6576,11 @@
               "x": 80,
               "y": 118,
               "name": "strip-CH7",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -6383,7 +6597,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -6392,7 +6606,7 @@
               "x": 259.2,
               "y": 44,
               "name": "brush",
-              "fill": "#007AFF33",
+              "fill": "#007AFF1F",
               "width": 278.4,
               "height": 108,
               "stroke": "#007AFF",
@@ -7108,7 +7322,7 @@
                       "id": "i5g1wL",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "v2 · 5 stages",
+                      "content": "v2 · 4 stages",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -7449,7 +7663,7 @@
                   "y": 9,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_E014_bank",
+                  "content": "seed_E0102_bank",
                   "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -7494,7 +7708,7 @@
                       "id": "nDLdj",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "E-014 · 3 lengths",
+                      "content": "E-0102 · 3 lengths",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -7508,7 +7722,7 @@
                   "y": 47,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "queued · local",
+                  "content": "new · local",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -7616,9 +7830,11 @@
           "x": 0,
           "y": 0,
           "name": "dim",
-          "fill": "#1C1C1E66",
+          "fill": "#F7F7F9",
           "width": 1440,
-          "height": 958
+          "height": 958,
+          "stroke": "#E5E5EA",
+          "strokeWidth": 1
         },
         {
           "type": "frame",
@@ -9453,6 +9669,7 @@
               "x": 20,
               "y": 472,
               "name": "tpl-seed_F03_native",
+              "opacity": 0.45,
               "width": 600,
               "height": 72,
               "fill": "#FFFFFF",
@@ -9542,7 +9759,7 @@
                   "y": 52,
                   "name": "t",
                   "fill": "#636366",
-                  "content": "carries exemplar E-014 · precision 18 %",
+                  "content": "already in this session · runs from medoid m-1846",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -10731,7 +10948,7 @@
                       "id": "LG0DG",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -10897,7 +11114,7 @@
                       "id": "hJqhp",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -11178,7 +11395,7 @@
                   "id": "Tvzsi",
                   "name": "t",
                   "fill": "#3A3A3C",
-                  "content": "11 spans in 4 h · null gives 2 → ≈ 480 over 522 h",
+                  "content": "11 spans in 4 h · null gives 2 → ≈ 1,435 over 522 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -11840,7 +12057,7 @@
                       "id": "tjUst",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -11916,7 +12133,7 @@
                       "id": "BLae4",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -12070,7 +12287,7 @@
               "y": 57,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -12082,9 +12299,11 @@
               "x": 80,
               "y": 46,
               "name": "strip-CH2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -12101,7 +12320,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -12123,9 +12342,11 @@
               "x": 80,
               "y": 82,
               "name": "strip-CH4_A2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -12142,7 +12363,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -12152,7 +12373,7 @@
               "y": 129,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -12164,9 +12385,11 @@
               "x": 80,
               "y": 118,
               "name": "strip-CH7",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -12183,7 +12406,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -12192,7 +12415,7 @@
               "x": 259.2,
               "y": 44,
               "name": "brush",
-              "fill": "#007AFF33",
+              "fill": "#007AFF1F",
               "width": 278.4,
               "height": 108,
               "stroke": "#007AFF",
@@ -12898,7 +13121,7 @@
                       "id": "el3ak",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "v2 · 5 stages",
+                      "content": "v2 · 4 stages",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -13057,7 +13280,7 @@
                   "y": 9,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_F03_native",
+                  "content": "seed_F03_native_2",
                   "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -13102,7 +13325,7 @@
                       "id": "wwfXT",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "F-03 medoid · MASS",
+                      "content": "E-0102 exemplar · MASS",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -13224,7 +13447,7 @@
                   "y": 9,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_E014_bank",
+                  "content": "seed_E0102_bank",
                   "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -13269,7 +13492,7 @@
                       "id": "dx7Cs",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "E-014 · 3 lengths",
+                      "content": "E-0102 · 3 lengths",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -13283,7 +13506,7 @@
                   "y": 47,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "queued · local",
+                  "content": "new · local",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -13547,9 +13770,11 @@
               "x": 16,
               "y": 84,
               "name": "seed-plot",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 150,
-              "height": 100
+              "height": 100,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -13596,7 +13821,7 @@
                   "id": "uXUir",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "E-014 · medoid of F-03",
+                  "content": "E-0102 · exemplar of F-03",
                   "fontFamily": "Geist Mono",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -13606,7 +13831,7 @@
                   "id": "LYYBD",
                   "name": "t",
                   "fill": "#636366",
-                  "content": "sharkfin family · 37 members",
+                  "content": "sharkfin family · 112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -15868,7 +16093,7 @@
                   "y": 54,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH7 · 140.2 h",
+                  "content": "CH7_B2 · 140.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 8,
                   "fontWeight": "normal"
@@ -16054,7 +16279,7 @@
                   "y": 54,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH2 · 231.7 h",
+                  "content": "CH2_A1 · 231.7 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 8,
                   "fontWeight": "normal"
@@ -16240,7 +16465,7 @@
                   "y": 54,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH7 · 118.9 h",
+                  "content": "CH7_B2 · 118.9 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 8,
                   "fontWeight": "normal"
@@ -16328,7 +16553,7 @@
                   "y": 54,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH2 · 266.0 h",
+                  "content": "CH2_A1 · 266.0 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 8,
                   "fontWeight": "normal"
@@ -17025,7 +17250,7 @@
                       "id": "xNopL",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -17101,7 +17326,7 @@
                       "id": "t0SZXE",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -17255,7 +17480,7 @@
               "y": 57,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -17267,9 +17492,11 @@
               "x": 80,
               "y": 46,
               "name": "strip-CH2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -17286,7 +17513,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -17308,9 +17535,11 @@
               "x": 80,
               "y": 82,
               "name": "strip-CH4_A2",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -17327,7 +17556,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -17337,7 +17566,7 @@
               "y": 129,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -17349,9 +17578,11 @@
               "x": 80,
               "y": 118,
               "name": "strip-CH7",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -17368,7 +17599,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -17377,7 +17608,7 @@
               "x": 259.2,
               "y": 44,
               "name": "brush",
-              "fill": "#007AFF33",
+              "fill": "#007AFF1F",
               "width": 278.4,
               "height": 108,
               "stroke": "#007AFF",
@@ -18093,7 +18324,7 @@
                       "id": "Gyzl5",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "v2 · 5 stages",
+                      "content": "v2 · 4 stages",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -18444,7 +18675,7 @@
                   "y": 9,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_E014_bank",
+                  "content": "seed_E0102_bank",
                   "fontFamily": "Inter",
                   "fontSize": 12,
                   "fontWeight": "600"
@@ -18489,7 +18720,7 @@
                       "id": "BQBRZ",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "E-014 · 3 lengths",
+                      "content": "E-0102 · 3 lengths",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -18503,7 +18734,7 @@
                   "y": 47,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "queued · local",
+                  "content": "new · local",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -18734,7 +18965,7 @@
               "y": 44,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "Encode",
+              "content": "Score / estimate",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -18746,7 +18977,7 @@
               "y": 44,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "Score / estimate",
+              "content": "Encode",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -18871,7 +19102,7 @@
                       "id": "RVRSb",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "CH4_A2 · CH2 · CH7",
+                      "content": "CH4_A2 · CH2_A1 · CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 8,
                       "fontWeight": "normal"
@@ -19000,7 +19231,7 @@
             {
               "type": "frame",
               "id": "x08RI",
-              "x": 476,
+              "x": 648,
               "y": 62,
               "name": "stage-2",
               "width": 162,
@@ -19077,7 +19308,7 @@
                       "id": "qcPaY",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "Symbolic encodi…",
+                      "content": "Symbolic enc.",
                       "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -19099,7 +19330,7 @@
             {
               "type": "frame",
               "id": "Yf0rp",
-              "x": 648,
+              "x": 476,
               "y": 62,
               "name": "stage-3",
               "width": 162,
@@ -19345,7 +19576,7 @@
                   "id": "Oh9Q7",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "seed_F03_na…",
+                  "content": "seed_F03_nat.",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -19415,7 +19646,7 @@
                       "id": "J5NYoV",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "CH4_A2 · CH2 · CH7",
+                      "content": "CH4_A2 · CH2_A1 · CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 8,
                       "fontWeight": "normal"
@@ -19544,7 +19775,7 @@
             {
               "type": "frame",
               "id": "gBwqp",
-              "x": 476,
+              "x": 648,
               "y": 104,
               "name": "stage-2",
               "opacity": 0.7,
@@ -19618,7 +19849,7 @@
             {
               "type": "frame",
               "id": "MVHde",
-              "x": 648,
+              "x": 476,
               "y": 104,
               "name": "stage-3",
               "width": 162,
@@ -19722,7 +19953,7 @@
                       "id": "oR9nU",
                       "name": "t",
                       "fill": "#C77700",
-                      "content": "E-014 · MASS",
+                      "content": "E-0102 · MASS",
                       "fontFamily": "Geist Mono",
                       "fontSize": 8,
                       "fontWeight": "normal"
@@ -19828,7 +20059,7 @@
                       "id": "UFnjI",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "Threshold to sp…",
+                      "content": "Threshold",
                       "fontFamily": "Inter",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -20667,7 +20898,7 @@
               "y": 62,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH2",
+              "content": "CH2_A1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -20829,7 +21060,7 @@
               "y": 100,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH7",
+              "content": "CH7_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -22028,7 +22259,7 @@
                   "id": "VPNJx",
                   "name": "t",
                   "fill": "#C77700",
-                  "content": "first stage whose output differs · Encode",
+                  "content": "first stage whose output differs · Score / estimate",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -22194,7 +22425,7 @@
               "id": "FAPwS",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "seed · E-014",
+              "content": "seed · E-0102",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -22927,7 +23158,7 @@
           "type": "frame",
           "id": "ydU7H",
           "x": 88,
-          "y": 400,
+          "y": 548,
           "name": "stage-Encode-A",
           "clip": true,
           "width": 652,
@@ -22964,7 +23195,7 @@
                   "id": "J6ceJ",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "02",
+                  "content": "03",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -23193,7 +23424,7 @@
           "type": "frame",
           "id": "w3rUj",
           "x": 764,
-          "y": 400,
+          "y": 548,
           "name": "stage-Encode-B",
           "clip": true,
           "width": 652,
@@ -23324,7 +23555,7 @@
           "type": "frame",
           "id": "p3pgre",
           "x": 88,
-          "y": 500,
+          "y": 400,
           "name": "stage-Score / estimate-A",
           "clip": true,
           "width": 652,
@@ -23361,7 +23592,7 @@
                   "id": "SmD8j",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "03",
+                  "content": "02",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -23596,7 +23827,7 @@
           "type": "frame",
           "id": "Bxc5t",
           "x": 764,
-          "y": 500,
+          "y": 400,
           "name": "stage-Score / estimate-B",
           "clip": true,
           "width": 652,
@@ -24413,7 +24644,7 @@
               "y": 98,
               "name": "t",
               "fill": "#000000",
-              "content": "Encode",
+              "content": "Score / estimate",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "600"
@@ -24425,7 +24656,7 @@
               "y": 98,
               "name": "t",
               "fill": "#3A3A3C",
-              "content": "one long low run at the fall",
+              "content": "2 segments beyond ±0.077",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -24437,7 +24668,7 @@
               "y": 98,
               "name": "t",
               "fill": "#3A3A3C",
-              "content": "— no stage",
+              "content": "nearest d 3.6 · threshold 3.1",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -24460,7 +24691,7 @@
               "y": 126,
               "name": "t",
               "fill": "#000000",
-              "content": "Score / estimate",
+              "content": "Encode",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "600"
@@ -24472,7 +24703,7 @@
               "y": 126,
               "name": "t",
               "fill": "#3A3A3C",
-              "content": "2 segments beyond ±0.077",
+              "content": "one long low run at the fall",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -24484,7 +24715,7 @@
               "y": 126,
               "name": "t",
               "fill": "#3A3A3C",
-              "content": "nearest d 3.6 · threshold 3.1",
+              "content": "— no stage",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -24667,7 +24898,7 @@
                       "id": "KBGK7",
                       "name": "t",
                       "fill": "#636366",
-                      "content": "CH2",
+                      "content": "CH2_A1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -24743,7 +24974,7 @@
                       "id": "fQajw",
                       "name": "t",
                       "fill": "#636366",
-                      "content": "CH7",
+                      "content": "CH7_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -24781,7 +25012,7 @@
                       "id": "EeTF3",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH8",
+                      "content": "CH8_B2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -24819,7 +25050,7 @@
                       "id": "d9G3AX",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH9",
+                      "content": "CH9_C1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -24857,7 +25088,7 @@
                       "id": "Ko6Ni",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "CH11",
+                      "content": "CH11_C2",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -24926,7 +25157,7 @@
               "y": 57,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH8",
+              "content": "CH8_B2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24938,9 +25169,11 @@
               "x": 80,
               "y": 46,
               "name": "strip-CH8",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -24957,7 +25190,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -24967,7 +25200,7 @@
               "y": 93,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH9",
+              "content": "CH9_C1",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24979,9 +25212,11 @@
               "x": 80,
               "y": 82,
               "name": "strip-CH9",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -24998,7 +25233,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -25008,7 +25243,7 @@
               "y": 129,
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CH11",
+              "content": "CH11_C2",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -25020,9 +25255,11 @@
               "x": 80,
               "y": 118,
               "name": "strip-CH11",
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "width": 1152,
-              "height": 32
+              "height": 32,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1
             },
             {
               "type": "path",
@@ -25039,7 +25276,7 @@
               ],
               "width": 1144,
               "height": 28,
-              "stroke": "#D1D1D6",
+              "stroke": "#3A3A3C",
               "strokeWidth": 0.9
             },
             {
@@ -25048,7 +25285,7 @@
               "x": 259.2,
               "y": 44,
               "name": "brush",
-              "fill": "#007AFF33",
+              "fill": "#007AFF1F",
               "width": 278.4,
               "height": 108,
               "stroke": "#007AFF",
@@ -25219,7 +25456,10 @@
                 {
                   "type": "frame",
                   "id": "SVuey",
+                  "x": 1242,
+                  "y": 1,
                   "name": "pager",
+                  "enabled": false,
                   "gap": 6,
                   "alignItems": "center",
                   "children": [
@@ -25284,7 +25524,7 @@
               "y": 50,
               "name": "t",
               "fill": "#000000",
-              "content": "CH8",
+              "content": "CH8_B2",
               "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "600"
@@ -25521,7 +25761,7 @@
               "y": 81,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"
@@ -25617,7 +25857,7 @@
               "y": 122,
               "name": "t",
               "fill": "#000000",
-              "content": "CH9",
+              "content": "CH9_C1",
               "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "600"
@@ -25871,7 +26111,7 @@
               "y": 153,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"
@@ -25950,7 +26190,7 @@
               "y": 194,
               "name": "t",
               "fill": "#000000",
-              "content": "CH11",
+              "content": "CH11_C2",
               "fontFamily": "Inter",
               "fontSize": 11,
               "fontWeight": "600"
@@ -26221,7 +26461,7 @@
               "y": 225,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "running · 64 %",
+              "content": "on cluster · 64 %",
               "fontFamily": "Geist Mono",
               "fontSize": 8,
               "fontWeight": "normal"

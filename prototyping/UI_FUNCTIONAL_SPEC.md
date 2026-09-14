@@ -20,6 +20,33 @@ decision below is explicitly marked as superseding it.
 
 ---
 
+## 0. Placeholder canon (B23)
+
+Every `.pen` page draws from this one set of placeholder facts, so an implementation agent can
+read the pages as a spec without meeting three versions of the same thing. The traces are still
+synthetic (§1). When a page and this table disagree, the page is wrong.
+
+| Entity | Canonical value |
+|---|---|
+| Recordings (Settings › Datasets) | `M2_aug fs1` = `M2_aug_concat_fs1.mat`, 1 Hz, 16 ch, **721 h**, start 2025-08-02 14:00 · `M2_aug fs2` = same recording at 2 Hz, 721 h · `M3_jul` 1 Hz, 8 ch, 280 h · `L_LM_Jul26_J` 10 Hz inferred, 5 ch, 22.4 h · `M4_aug` 1 Hz, 16 ch, 300 h, **held out and locked** (D6). Five recordings, 61 channels. No other recording names. |
+| Channel names | M2_aug and M4_aug: `CH1_A1 CH2_A1 CH3_A2 CH4_A2 CH5_B1 CH6_B1 CH7_B2 CH8_B2 CH9_C1 CH10_C1 CH11_C2 CH12_C2 CH13_D1 CH14_D1 CH15_D2 CH16_D2`. M3_jul and L_LM: `CH1`…`CHn`. |
+| Time display | hours since recording start, e.g. `192.40 h` (Settings › Display default). Durations of events in s. |
+| Classes | key 1 `spike-train` · 2 `burst` · 3 `slow-drift` · 4 `plateau` (informative) · 9 `electrode artifact` (non-informative). Morphology tags are separate (sharkfin, biphasic, …). |
+| Family F-03 | `sharkfin` · 112 members · 3 recordings (M2_aug fs1, M3_jul, L_LM_Jul26_J) · exemplar `E-0102` (human seed) · medoid `m-1846` · ~21 s long. |
+| Other families | F-04 `spike train`, F-07 `slow drift` (212 members), F-11 `burst`. |
+| Family colours (D8) | F-01 #5856D6 · F-02 #E85AAD · F-03 **#30B0C7** · F-04 #A2845E · F-05 #8E9C3A · F-06 #64D2FF · F-07 #7A8FA6 · F-08 #6D4C41 · F-09 #F4A6C8 · F-10 #1E6F7A · F-11 #C97B63. Class colours: spike-train #5856D6 · burst #E85AAD · slow-drift #30B0C7 · plateau #A2845E · electrode artifact red. |
+| Chain (detection) | `Source › 01 Baseline (Signal→Signal) › 02 Noise floor (Signal→Signal + estimate) › 03 Encoding (Signal→Encoding; cutlines use the floor) › 04 Detection (Encoding→SpanSet)` (B24). |
+| Analyse runs | `#128 drop_motifs9` · `#131 drop_motifs9 · 6σ floor` · `#97 banded_sax_lp` · `#140 F-03 slope interrogation`. |
+| Jobs | ids `j-NNNN` for cluster jobs, `a-`/`r-`/`l-`/`q-` for Analyse runs, Discovery runs, Library regroups and Review queues. `j-0212` cnn_windows_v3 paired arms — **finished**, imported 13 Sep 21:40. `j-0214` cnn_windows_v3 seed repeats — running on hpc-1 since 11:05, 3.3× its 1 h estimate. `j-0217` matrix profile, 3 channels — running since 11:40 for Discovery run `r-0431` (mp_drops_v3, paused at stage 3 of 4). `a-0098` sax_vs_mp — paused at stage 2 of 5, result found in place. `j-0209` failed. Review queues `q-12` r-0412 mp_drops_v3 · `q-15` seed search r-0415 · `q-18` training windows · `q-19` model verification (7 left of 40). |
+| Window set | `ws_M2aug_3ch_600s` v1: M2_aug fs1 · CH2_A1, CH4_A2, CH7_B2 · 600 s · 15,660 windows · 2,140 labelled in every arm · train-safe. A new launch saves `v2`. |
+| Models | registered: `cnn_windows_v2 · manual` v2 (used by templates `drop_cnn_v1`, `sharkfin_cnn_v2`), `rf_windows_v1 · manual`, `cnn_cluster_v1` v1 (14 Sep, used by template `cnn_detect_cluster_v1`). Candidates from `j-0212`: `cnn_windows_v3 · manual` (registering as `cnn_windows_v3_manual`) and `· cluster`. Verification sample **33 of 40** judged, 28 agree. Test block **432** windows. Classes as above. |
+| Templates | 14 saved, including `drop_motifs9`, `sharkfin_v2`, `mp_discord_v3`, `spike_shape_v1`, `cnn_detect_cluster_v1`, `drop_cnn_v1`, `sharkfin_cnn_v2`, and training templates `cnn_windows_v3`, `cnn_windowset_v1`. |
+| Actor | `this installation` (§11). |
+| Local limits | Analyse 20 min · Discovery 20 min · Models 2 h (Settings › Compute & HPC). Cluster results return through **Jobs › Manifest inbox**. |
+| Status badges | `cached` · `stale` · `new` · `running` · `paused` · `failed` · `on cluster` · `invalid` (junction only). |
+
+---
+
 ## 1. The files
 
 | File | Workspace | Screens |
@@ -343,7 +370,9 @@ commit actions: **Insert**, and **Insert and open settings →**.
 
 ### 6.5 Block pages, detection chain
 
-    ● Source  ›  01 Baseline  ›  02 Encoding  ›  03 Noise floor  ›  04 Detection
+    ● Source  ›  01 Baseline  ›  02 Noise floor  ›  03 Encoding  ›  04 Detection
+
+*(Order fixed 14 Sep, B24: the floor is estimated on the signal and consumed by the encoding's cutlines, so it must come first; §6.8's signatures only type-check in this order. In the code the floor is a control inside the dSAX adapter.)*
 
 **Encoding** is the reference block page. Output is the symbol strips and slope bars;
 controls are generated from the adapter spec; and a **surrogate sweep is folded into the
@@ -401,8 +430,8 @@ than substituted, to avoid a silent encoding mismatch with already-trained model
 
 **Model** — stages are **individually tickable**, with cached stages shown as skippable, so
 a job can run `--from-stage 03 --to-stage 05` and three hours of compute does not happen
-twice. The held-out lock is off for now (P19) — it lives in Settings › Datasets (§9.1).
-Results return through the **manifest inbox** (Settings › Storage & backups, §9.11), and the trained
+twice. The held-out lock is on (P19, D6) — it lives in Settings › Datasets (§9.1).
+Results return through **Jobs › Manifest inbox** (§7c.4), and the trained
 model then appears as a `Model` artifact any detection chain can reference. *Superseded in
 part by P11/P14/P16: Analyse builds and trials the template; the real training run, its
 results and the registry live in Models; detecting with a model is a Model stage inside a
@@ -437,10 +466,10 @@ page* below).
 | Signature | Chain-row thumbnail | Block page must add | Null presentation | Template page |
 |---|---|---|---|---|
 | `Signal → Signal` (transform: baseline, bandpass) | output curve, input ghosted behind | before/after overlay, removed component, residual or spectrum | the transform is applied identically to surrogates; show output statistic vs surrogate | chain 01 Baseline |
-| `Signal → Signal` + estimate (noise floor, thresholds) | curve with the estimate band | estimate drawn on the signal, estimate stability across the span, which downstream parameter consumes it | estimate on surrogate for comparison | chain 03 Noise floor |
-| `Signal → Encoding` (symbolic: SAX, dSAX) | symbol strip | signal + reduction (e.g. PAA), derived quantity with **draggable cutlines**, quantised strip; alphabet/segment sliders; noise-floor parameters | **parameter sweep vs null** (same parameter at N values, each with its own surrogate) | chain 02 Encoding |
+| `Signal → Signal` + estimate (noise floor, thresholds) | curve with the estimate band | estimate drawn on the signal, estimate stability across the span, which downstream parameter consumes it | estimate on surrogate for comparison | chain 02 Noise floor |
+| `Signal → Encoding` (symbolic: SAX, dSAX) | symbol strip | signal + reduction (e.g. PAA), derived quantity with **draggable cutlines**, quantised strip; alphabet/segment sliders; noise-floor parameters | **parameter sweep vs null** (same parameter at N values, each with its own surrogate) | chain 03 Encoding |
 | `Signal → Scores` (matrix profile, distance/novelty profiles) | series against time, top locations marked | the signal with the subsequence length drawn to scale, one worked **distance profile** for a selected subsequence, the profile with exclusion zone, top-k motif pairs / discords; length and exclusion parameters | score distribution vs **surrogate profile** distribution; parameter sweep where the length is a choice | chain 1h (row) + 7 Matrix profile (block page) |
-| `Scores → SpanSet` (threshold) | interval overlay on the scores | score histogram with **draggable threshold** over the null distribution, count-vs-threshold curve with null, min duration / merge gap | expected false spans at the chosen threshold | to build (backlog B10) |
+| `Scores → SpanSet` (threshold) | interval overlay on the scores | score histogram with **draggable threshold** over the null distribution, count-vs-threshold curve with null, min duration / merge gap | expected false spans at the chosen threshold | chain 7b Threshold to spans |
 | `Encoding → SpanSet` (detection) | interval overlay on the signal | detections in context, each kept detection as a card, dedupe breakdown | surrogate detection count beside real count | chain 04 Detection |
 | `SpanSet → SpanSet + Features` (feature block: slope, spike shape, FHN fit) | per-member thumbnails (≤10, sliding) | one event's anatomy with the rules that define each number, per-event table, sliding strip, sampled overlay; **declares each Feature (name, unit, kind)** so Aggregate can wire it | matched random windows (P10) | interrogation 4b |
 | `Features → views` (Aggregate) | small distribution | generic: histograms, switchable scaling relationship with β ± CI, timeline, colour-by — all driven by the declared Features | null β / null distribution behind every plot | interrogation 4c, 4c-c |
@@ -449,7 +478,7 @@ page* below).
 | `WindowSet → Grouping` (clustering) | class-per-window strip / cluster-size summary | dendrogram or embedding with the cut, selection criterion (B4), class cards (medoid + samples), time occupancy, bootstrap stability, contingency vs human verdicts | stability vs resampled data; ARI vs label shuffle | training 03, 2b |
 | `WindowSet → Encoding` (image: GASF, GADF, RP, fusion) | a **2-D image per window** for 3–4 sample windows | the selected window's signal beside each encoding with colour scale, include checkboxes, parameters (size, encoder version), **disk size estimate** (images × px × channels), **samples per class** of the window set with per-split counts | — (declared) | training 04 |
 | `Encoding + labels → Model` (template builder) | text card (PRD: a model has no natural plot) | stage ticks for the trial job, label source, training options, pre-training checks, trial script, *Train in Models* | label-shuffle null — shown in Models, not here | training 05 |
-| `Model + WindowSet → Scores` (inference) | series against time | to design — listed for completeness | — | not built |
+| `Model + WindowSet → Scores` (inference) | series against time | the model card (name, version, classes, calibration), windows scored over the signal with per-class score tracks, calibration thresholds offered as the Threshold stage's recommended values, disk + cost estimate | label-shuffle model scores on the same windows | chain 8 Model stage (B13) |
 
 A signature not in this table needs a row here before its first block is built.
 

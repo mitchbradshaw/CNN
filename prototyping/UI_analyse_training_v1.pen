@@ -180,7 +180,7 @@
                   "id": "pLuwW",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -2326,15 +2326,20 @@
                   "name": "box",
                   "width": 13,
                   "height": 13,
-                  "fill": "#007AFF",
+                  "fill": "#FFFFFF",
                   "cornerRadius": 3,
+                  "stroke": "#C7C7CC",
+                  "strokeWidth": 1,
                   "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
                     {
                       "type": "icon",
                       "id": "MqbQU",
+                      "x": 2,
+                      "y": 2,
                       "name": "i-check",
+                      "enabled": false,
                       "width": 9,
                       "height": 9,
                       "icon": "check",
@@ -2358,7 +2363,7 @@
                   "id": "G99ZP",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "2",
+                  "content": "2 · label-derived",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -2491,7 +2496,7 @@
                   "fill": "#3A3A3C",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "CNN scores come from models trained on manual verdicts — including them leaks manual labels into the clustering you compare against",
+                  "content": "CNN scores and the Random Forest group come from models trained on manual verdicts — including them leaks manual labels into the clustering you compare against",
                   "lineHeight": 1.35,
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
@@ -2728,7 +2733,7 @@
                   "fill": "#3A3A3C",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "recomputing locally would take ≈ 3 h — above the 10 min ceiling",
+                  "content": "recomputing locally would take ≈ 3 h — above the 20 min local limit",
                   "lineHeight": 1.35,
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
@@ -2865,7 +2870,7 @@
               "id": "tmADo",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "CNN scores excluded · 03 → 05 go stale · 02 reuses its cache (columns dropped, no recompute)",
+              "content": "Random Forest excluded · 03 → 05 go stale · 02 reuses its cache (columns dropped, no recompute)",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -3134,7 +3139,7 @@
                   "id": "z6xeA8",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -5194,8 +5199,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -5213,7 +5220,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -5356,8 +5363,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -5375,7 +5384,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -5518,8 +5527,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -5537,7 +5548,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -5680,8 +5691,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -5699,7 +5712,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -5842,8 +5855,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -5861,7 +5876,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -6033,8 +6048,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 50,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -6052,7 +6069,7 @@
                           ],
                           "width": 200,
                           "height": 50,
-                          "stroke": "#FFFFFF",
+                          "stroke": "#3A3A3C",
                           "strokeWidth": 1.6
                         },
                         {
@@ -7123,7 +7140,7 @@
                   "id": "OwQGL",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -14035,7 +14052,7 @@
                   "id": "S9KrX4",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -15336,9 +15353,9 @@
               "name": "s-03",
               "width": "fill_container",
               "height": 36,
-              "fill": "#F0F7FF",
+              "fill": "#FAFAFB",
               "cornerRadius": 6,
-              "stroke": "#007AFF",
+              "stroke": "#E5E5EA",
               "strokeWidth": 1,
               "gap": 10,
               "padding": [
@@ -15352,6 +15369,9 @@
                   "id": "DLlxH",
                   "name": "cb",
                   "width": 16,
+                  "fill": "#FFFFFF",
+                  "stroke": "#C7C7CC",
+                  "strokeWidth": 1,
                   "justifyContent": "center",
                   "children": [
                     {
@@ -15359,6 +15379,9 @@
                       "id": "dDfKt",
                       "name": "chk-",
                       "height": 24,
+                      "fill": "#FFFFFF",
+                      "stroke": "#C7C7CC",
+                      "strokeWidth": 1,
                       "gap": 6,
                       "alignItems": "center",
                       "children": [
@@ -15368,15 +15391,20 @@
                           "name": "box",
                           "width": 13,
                           "height": 13,
-                          "fill": "#007AFF",
+                          "fill": "#FFFFFF",
                           "cornerRadius": 3,
+                          "stroke": "#C7C7CC",
+                          "strokeWidth": 1,
                           "justifyContent": "center",
                           "alignItems": "center",
                           "children": [
                             {
                               "type": "icon",
                               "id": "zbZsN",
+                              "x": 2,
+                              "y": 2,
                               "name": "i-check",
+                              "enabled": false,
                               "width": 9,
                               "height": 9,
                               "icon": "check",
@@ -15483,7 +15511,7 @@
                   "id": "U0k2Ib",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "re-emitted as labels",
+                  "content": "skipped · labels read from cache",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -17215,7 +17243,7 @@
                   "id": "j2OtMO",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "stages 03 → 05 · one GPU task",
+                  "content": "stages 04 → 05 · one GPU task",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -17305,7 +17333,7 @@
                   "id": "DKDWS",
                   "name": "t",
                   "fill": "#FFFFFF",
-                  "content": "python -m pipeline.run --recipe c9e2…41 --from-stage 03 --to-stage 05 \\",
+                  "content": "python -m pipeline.run --recipe c9e2…41 --from-stage 04 --to-stage 05 \\",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -17335,7 +17363,7 @@
                   "id": "q5Cxq",
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "results return via Settings › Storage › manifest inbox",
+                  "content": "results return via Jobs › Manifest inbox",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -17857,7 +17885,7 @@
               "id": "Qx2IX",
               "name": "nav-jobs-label",
               "fill": "#8E8E93",
-              "content": "Jobs · 2",
+              "content": "Jobs · 3",
               "fontFamily": "Inter",
               "fontSize": 9,
               "fontWeight": "500"
@@ -18057,7 +18085,7 @@
               "id": "gLSgF",
               "name": "t",
               "fill": "#007AFF",
-              "content": "2 running · 1 on cluster",
+              "content": "3 need you",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -18244,7 +18272,7 @@
                   "id": "PJOjV",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -18600,7 +18628,7 @@
                   "id": "M5WUq",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH4_A2 · whole channel · 45.2 h",
+                  "content": "CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -18723,8 +18751,10 @@
               "clip": true,
               "width": 1082,
               "height": 68,
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "cornerRadius": 4,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1,
               "layout": "none",
               "children": [
                 {
@@ -18742,7 +18772,7 @@
                   ],
                   "width": 1082,
                   "height": 68,
-                  "stroke": "#FFFFFF",
+                  "stroke": "#3A3A3C",
                   "strokeWidth": 1
                 }
               ]
@@ -20520,7 +20550,7 @@
                   "id": "RdUVu",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "4 of 6 groups · CNN scores off",
+                  "content": "4 of 5 groups · CNN scores off",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -24253,7 +24283,7 @@
                   "y": 64,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "Catch22 · Entropy · RF · Wavelet  ·  CNN scores excluded",
+                  "content": "Catch22 · Entropy · Wavelet  ·  CNN scores + RF excluded",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -28804,7 +28834,7 @@
                   "id": "q5YAeP",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -32076,7 +32106,7 @@
                   "id": "rOBfr",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Signal · CH4_A2 · whole channel · 45.2 h",
+                  "content": "Signal · CH4_A2 · span 0–45.2 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -35865,7 +35895,7 @@
                   "id": "nupzH",
                   "name": "t",
                   "fill": "#248A3D",
-                  "content": "Human-labelled windows · 4,812 · all channels · interesting / not",
+                  "content": "ws_human_labelled_mixed · CH4_A2 · 412 windows · interesting / not",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -36145,7 +36175,7 @@
                   "id": "flmUD",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "4,812 windows · 38 % interesting",
+                  "content": "412 windows · 38 % interesting",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -36313,7 +36343,7 @@
                   "y": 48,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "one tick per window · green interesting · grey not_interesting · sampled 160 of 4,812",
+                  "content": "one tick per window · green interesting · grey not_interesting · sampled 160 of 412",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -36476,7 +36506,7 @@
                   "id": "wPYWx",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "4 of 6 groups · CNN scores off",
+                  "content": "4 of 5 groups · CNN scores off",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -40209,7 +40239,7 @@
                   "y": 64,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "Catch22 · Entropy · RF · Wavelet  ·  CNN scores excluded",
+                  "content": "Catch22 · Entropy · Wavelet  ·  CNN scores + RF excluded",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -41585,7 +41615,7 @@
                   "y": 50,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "class per window across 45.2 h",
+                  "content": "class per window across 412 windows",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -43951,7 +43981,7 @@
                   "y": 26,
                   "name": "t",
                   "fill": "#C77700",
-                  "content": "3 of 4 encodings ticked · 1,629 images · stale — cluster k changed",
+                  "content": "3 of 4 encodings ticked · 1,236 images · stale — cluster k changed",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -44427,7 +44457,7 @@
                   "id": "g0U2NW",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "4,812 windows · labels on every window",
+                  "content": "412 windows · labels on every window",
                   "fontFamily": "Inter",
                   "fontSize": 14,
                   "fontWeight": "600"

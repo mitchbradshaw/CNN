@@ -497,6 +497,42 @@
               "fontWeight": "normal"
             }
           ]
+        },
+        {
+          "type": "frame",
+          "id": "bPb7i",
+          "name": "hdr-heldout",
+          "height": 28,
+          "fill": "#F4F4F6",
+          "cornerRadius": 14,
+          "gap": 6,
+          "padding": [
+            0,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "RAvh0",
+              "name": "i-lock",
+              "width": 12,
+              "height": 12,
+              "icon": "lock",
+              "library": "lucide",
+              "fill": "#8E8E93"
+            },
+            {
+              "type": "text",
+              "id": "AXaKC",
+              "name": "t",
+              "fill": "#8E8E93",
+              "content": "M4 held out",
+              "fontFamily": "Geist Mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
         }
       ]
     },
@@ -544,7 +580,7 @@
               "content": "All jobs"
             },
             "nWrTx": {
-              "content": "3 need you · 2 local · 3 on hpc-1 · 4 queues"
+              "content": "3 need you · 2 local · 2 on hpc-1 · 4 queues"
             }
           }
         },
@@ -647,7 +683,7 @@
                       "id": "TcVPy",
                       "name": "t",
                       "fill": "#8944AB",
-                      "content": "3 on hpc-1",
+                      "content": "2 on hpc-1",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -673,7 +709,7 @@
                       "id": "TwGGT",
                       "name": "t",
                       "fill": "#636366",
-                      "content": "4 review queues",
+                      "content": "4 review queues · 1 idle",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -1197,7 +1233,7 @@
                       "id": "hPc1d",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "matrix profile for CH4 found in ./PROFILES",
+                      "content": "matrix profile for CH4_A2 found in ./PROFILES",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -1298,7 +1334,7 @@
                           "id": "AmGcS",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "j-0212 at 3.1× estimate",
+                          "content": "j-0214 at 3.3× estimate",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "600"
@@ -1337,7 +1373,7 @@
                       "id": "Cjh6R",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "training has been marked running for 9.3 h",
+                      "content": "seed repeats marked running for 3.3 h",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -1725,7 +1761,7 @@
                               "id": "t7zB9H",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "mp_drops_v3 · M2_aug fs1 CH2–CH4",
+                              "content": "mp_drops_v3 · M2_aug fs1 CH2_A1–CH4_A2",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "600"
@@ -1935,7 +1971,7 @@
                               "id": "I4zCq",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "sax_vs_mp · M2_aug fs1 CH4",
+                              "content": "sax_vs_mp · M2_aug fs1 CH4_A2",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "600"
@@ -2447,7 +2483,7 @@
                           "id": "DiprZ",
                           "name": "badge-warn",
                           "height": 18,
-                          "fill": "#FF950022",
+                          "fill": "#34C75922",
                           "cornerRadius": 9,
                           "gap": 4,
                           "padding": [
@@ -2460,8 +2496,8 @@
                               "type": "text",
                               "id": "l1rvrd",
                               "name": "t",
-                              "fill": "#C77700",
-                              "content": "running · 3.1× estimate",
+                              "fill": "#248A3D",
+                              "content": "finished · imported 13 Sep",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -2484,7 +2520,7 @@
                           "id": "AWCYy",
                           "name": "t",
                           "fill": "#8E8E93",
-                          "content": "9.3 h",
+                          "content": "—",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "normal"
@@ -2518,7 +2554,7 @@
                               "id": "J4u7Y1",
                               "name": "t",
                               "fill": "#007AFF",
-                              "content": "Mark…",
+                              "content": "Open in Models",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "normal"
@@ -2647,7 +2683,7 @@
                           "id": "KfW30",
                           "name": "badge-ok",
                           "height": 18,
-                          "fill": "#34C75922",
+                          "fill": "#FF950022",
                           "cornerRadius": 9,
                           "gap": 4,
                           "padding": [
@@ -2660,8 +2696,8 @@
                               "type": "text",
                               "id": "rm4fU",
                               "name": "t",
-                              "fill": "#248A3D",
-                              "content": "finished · manifest arrived",
+                              "fill": "#C77700",
+                              "content": "running · 3.3× estimate",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -2684,7 +2720,7 @@
                           "id": "fChuJ",
                           "name": "t",
                           "fill": "#8E8E93",
-                          "content": "—",
+                          "content": "3.3 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "normal"
@@ -2728,7 +2764,7 @@
                               "id": "Y1nOg",
                               "name": "t",
                               "fill": "#007AFF",
-                              "content": "Import",
+                              "content": "Mark…",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "normal"
@@ -3060,7 +3096,7 @@
                               "id": "QBKmz",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "image encoding · CH4",
+                              "content": "image encoding · CH4_A2",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "600"
@@ -4486,7 +4522,7 @@
               "id": "WLjR5",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "mp_drops_v3 v3 · M2_aug fs1 CH2–CH4 · started 08:02",
+              "content": "mp_drops_v3 v3 · M2_aug fs1 CH2_A1–CH4_A2 · started 08:02",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -4728,7 +4764,7 @@
                       "id": "n9uY7g",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "./PROFILES/…CH2-4_m120_9b24e1.npz",
+                      "content": "./PROFILES/…CH2-4_m120_9b24e1f0.npz",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -4979,7 +5015,10 @@
             {
               "type": "text",
               "id": "kXNz1",
+              "x": 16,
+              "y": 462,
               "name": "t",
+              "enabled": false,
               "fill": "#8E8E93",
               "content": "Models › Jobs has moved here.",
               "fontFamily": "Geist Mono",
@@ -5245,7 +5284,7 @@
               "id": "s1HS1U",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "Discovery run · mp_drops_v3 v3 · M2_aug fs1 CH2–CH4 · 45.2 h · started 14 Sep 08:02",
+              "content": "Discovery run · mp_drops_v3 v3 · M2_aug fs1 CH2_A1–CH4_A2 · 721 h · started 14 Sep 08:02",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -5996,7 +6035,7 @@
                               "id": "GQaSi",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "./PROFILES/M2_aug_fs1_CH2-4_1Hz_m120_9b24e1.npz",
+                              "content": "./PROFILES/M2_aug_fs1_CH2-4_1Hz_m120_9b24e1f0.npz",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6184,7 +6223,7 @@
                           "id": "jsW5D",
                           "name": "t",
                           "fill": "#8E8E93",
-                          "content": "CH2 · CH3 · CH4",
+                          "content": "CH2_A1 · CH3_A2 · CH4_A2",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -6912,10 +6951,10 @@
           "y": 0,
           "descendants": {
             "IOYKz": {
-              "content": "a-0102"
+              "content": "r-0431"
             },
             "nWrTx": {
-              "content": "Analyse chain · paused at stage 2 of 5"
+              "content": "Discovery run · paused at stage 3 of 4"
             }
           }
         },
@@ -7035,7 +7074,7 @@
               "id": "bFRn8",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "a-0102 · Analyse chain sax_vs_mp · stage 2 of 5 · Matrix profile on M3_jul CH1",
+              "content": "r-0431 · Discovery run mp_drops_v3 · stage 3 of 4 · Matrix profile on M2_aug fs1 CH2_A1–CH4_A2",
               "fontFamily": "Geist Mono",
               "fontSize": 10,
               "fontWeight": "normal"
@@ -7079,7 +7118,7 @@
                       "id": "Hnzl1",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "mp_M3jul_CH1.npz",
+                      "content": "mp_M2aug_CH2-4.npz",
                       "fontFamily": "Geist Mono",
                       "fontSize": 12,
                       "fontWeight": "600"
@@ -7089,7 +7128,7 @@
                       "id": "kgrN7",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "1.1 GB · from Downloads · copied off hpc-1 by hand",
+                      "content": "1.9 GB · from Downloads · copied off hpc-1 by hand",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -7178,7 +7217,7 @@
                       "id": "gZ6bd",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "./PROFILES/M3_jul_CH1_1Hz_m120_c41d07.npz",
+                      "content": "./PROFILES/M2_aug_fs1_CH2-4_1Hz_m120_9b24e1f0.npz",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -7286,7 +7325,7 @@
                   "id": "z2gyLJ",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "one profile for the channel",
+                  "content": "one profile per channel",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -7303,7 +7342,7 @@
                   "id": "A0JKfT",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "CH1",
+                  "content": "CH2_A1 · CH3_A2 · CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -7351,7 +7390,7 @@
                   "id": "KhT7o",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "1,007,880 samples (280 h at 1 Hz, less m)",
+                  "content": "2,595,481 samples per channel (721 h at 1 Hz, less m)",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -7447,7 +7486,7 @@
                   "id": "NQGwK",
                   "name": "t",
                   "fill": "#D70015",
-                  "content": "file says m = 60 s · recipe 77ab10 — the run expects m = 120 s · c41d07",
+                  "content": "file says m = 60 s · recipe 77ab10c3 — the run expects m = 120 s · 9b24e1f0",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -7495,7 +7534,7 @@
                   "id": "jsL1k",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "not in the file — stage 2's null would run separately",
+                  "content": "not in the file — stage 3's null would run separately",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -7538,7 +7577,7 @@
                       "id": "iQDGk",
                       "name": "t",
                       "fill": "#D70015",
-                      "content": "This file cannot continue a-0102",
+                      "content": "This file cannot continue r-0431",
                       "fontFamily": "Geist Mono",
                       "fontSize": 12,
                       "fontWeight": "600"
@@ -7835,7 +7874,7 @@
           "y": 0,
           "descendants": {
             "IOYKz": {
-              "content": "j-0212"
+              "content": "j-0214"
             },
             "nWrTx": {
               "content": "Models training · hpc-1"
@@ -7890,7 +7929,7 @@
                   "id": "wtJNX",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "j-0212",
+                  "content": "j-0214",
                   "fontFamily": "Inter",
                   "fontSize": 20,
                   "fontWeight": "700"
@@ -7914,7 +7953,7 @@
                       "id": "ZkDi7",
                       "name": "t",
                       "fill": "#C77700",
-                      "content": "running · 3.1× estimate",
+                      "content": "running · 3.3× estimate",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -7936,7 +7975,7 @@
                   "id": "aZ6gl",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "Models training · cnn_windows_v3 · paired arms",
+                  "content": "Models training · cnn_windows_v3 · seed repeats",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -8232,7 +8271,7 @@
                               "id": "ZP8IV",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "08:02 · automatic",
+                              "content": "10:50 · automatic",
                               "fontFamily": "Geist Mono",
                               "fontSize": 9,
                               "fontWeight": "normal"
@@ -8253,7 +8292,7 @@
                               "id": "Lz5CZ",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "08:10 · marked",
+                              "content": "10:58 · marked",
                               "fontFamily": "Geist Mono",
                               "fontSize": 9,
                               "fontWeight": "normal"
@@ -8274,7 +8313,7 @@
                               "id": "s86vbS",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "08:40 · marked",
+                              "content": "11:05 · marked",
                               "fontFamily": "Geist Mono",
                               "fontSize": 9,
                               "fontWeight": "normal"
@@ -8340,7 +8379,7 @@
                               "id": "KbPhO",
                               "name": "t",
                               "fill": "#C77700",
-                              "content": "Marked running for 9.3 h — 3.1× the 3 h estimate",
+                              "content": "Marked running for 3.3 h — 3.3× the 1 h estimate",
                               "fontFamily": "Geist Mono",
                               "fontSize": 12,
                               "fontWeight": "600"
@@ -8659,7 +8698,7 @@
                               "id": "UZ2F7",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "/scratch/$USER/cnn/out/j-0212  →  ./cluster_out",
+                              "content": "/scratch/$USER/cnn/out/j-0214  →  ./cluster_out",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -8731,7 +8770,7 @@
                               "id": "wOKDr",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "3 h · calibrated 12 Sep",
+                              "content": "1 h · calibrated 12 Sep",
                               "fontFamily": "Geist Mono",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -8893,7 +8932,7 @@
                           "id": "weWNK",
                           "name": "t",
                           "fill": "#E5E5EA",
-                          "content": "python -m pipeline.train --job j-0212 --recipe 5c1e...a07b --out /scratch/$USER/cnn/out/j-0212",
+                          "content": "python -m pipeline.train --job j-0214 --recipe 5c1e...a07b --seeds 3 --out /scratch/$USER/cnn/out/j-0214",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "normal"
@@ -8972,7 +9011,7 @@
                               "id": "fWpN7",
                               "name": "t",
                               "fill": "#248A3D",
-                              "content": "1 arrived",
+                              "content": "1 imported",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -9020,7 +9059,7 @@
                               "id": "HU6R6",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "j-0214",
+                              "content": "j-0212",
                               "fontFamily": "Geist Mono",
                               "fontSize": 12,
                               "fontWeight": "700"
@@ -9030,7 +9069,7 @@
                               "id": "Uv0k1",
                               "name": "t",
                               "fill": "#3A3A3C",
-                              "content": "cnn_windows_v3 · seed repeats",
+                              "content": "cnn_windows_v3 · paired arms",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -9047,7 +9086,7 @@
                               "id": "l9laSg",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "14:05",
+                              "content": "13 Sep 21:40",
                               "fontFamily": "Geist Mono",
                               "fontSize": 9,
                               "fontWeight": "normal"
@@ -9086,7 +9125,7 @@
                               "id": "ZmK81",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "model per arm · manual, cluster · 3 seeds",
+                              "content": "model per arm · manual, cluster · RF baseline",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "normal"
@@ -9347,7 +9386,7 @@
                               "id": "hzkex",
                               "name": "btn-Import results",
                               "height": 28,
-                              "fill": "#007AFF",
+                              "fill": "#D1D1D6",
                               "cornerRadius": 6,
                               "gap": 6,
                               "padding": [
@@ -9362,7 +9401,7 @@
                                   "name": "i-inbox",
                                   "width": 12,
                                   "height": 12,
-                                  "icon": "inbox",
+                                  "icon": "check",
                                   "library": "lucide",
                                   "fill": "#FFFFFF"
                                 },
@@ -9371,7 +9410,7 @@
                                   "id": "cQdpw",
                                   "name": "t",
                                   "fill": "#FFFFFF",
-                                  "content": "Import results",
+                                  "content": "Imported",
                                   "fontFamily": "Inter",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -9383,7 +9422,7 @@
                               "id": "dVVgT",
                               "name": "t",
                               "fill": "#8E8E93",
-                              "content": "marks j-0214 finished · results appear in Models",
+                              "content": "imported · results in Models › Results",
                               "fontFamily": "Geist Mono",
                               "fontSize": 9,
                               "fontWeight": "normal"

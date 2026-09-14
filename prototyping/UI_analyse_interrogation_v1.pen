@@ -813,7 +813,7 @@
               "id": "VHddi",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "F-03 sharkfin  ·  17 members  ·  3 recordings  ·  4 channels  ·  11 adjudicated",
+              "content": "F-03 sharkfin  ·  112 members  ·  17 within d ≤ 0.35  ·  3 recordings  ·  4 channels  ·  11 adjudicated",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -1270,8 +1270,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -1299,7 +1301,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -1317,7 +1319,7 @@
                           "id": "m73gyI",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 336.9 h",
+                          "content": "CH4_A2 · 336.9 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -1421,8 +1423,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -1450,7 +1454,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -1468,7 +1472,7 @@
                           "id": "qyZL8",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 338.2 h",
+                          "content": "CH4_A2 · 338.2 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -1572,8 +1576,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -1601,7 +1607,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -1619,7 +1625,7 @@
                           "id": "YAmYG",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 337.3 h",
+                          "content": "CH4_A2 · 337.3 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -1723,8 +1729,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -1752,7 +1760,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -1770,7 +1778,7 @@
                           "id": "Sfsf4",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH3 · 340.9 h",
+                          "content": "CH3_A2 · 340.9 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -1874,8 +1882,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -1903,7 +1913,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -1921,7 +1931,7 @@
                           "id": "yFeRG",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 337.8 h",
+                          "content": "CH4_A2 · 337.8 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -2034,8 +2044,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -2063,7 +2075,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -2185,8 +2197,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -2214,7 +2228,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -2232,7 +2246,7 @@
                           "id": "ymfcR",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH3 · 339.1 h",
+                          "content": "CH3_A2 · 339.1 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -2336,8 +2350,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -2365,7 +2381,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -2487,8 +2503,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -2516,7 +2534,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -2629,8 +2647,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -2676,7 +2696,7 @@
                           "id": "v3R0vW",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 340.0 h",
+                          "content": "CH4_A2 · 340.0 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -3019,8 +3039,10 @@
               "clip": true,
               "width": "fill_container",
               "height": 168,
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "cornerRadius": 6,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1,
               "layout": "none",
               "children": [
                 {
@@ -3132,7 +3154,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3150,7 +3172,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3168,7 +3190,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3186,7 +3208,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3204,7 +3226,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3222,7 +3244,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3240,7 +3262,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3258,7 +3280,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3276,7 +3298,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3294,7 +3316,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -3312,7 +3334,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FFFFFF",
+                  "stroke": "#3A3A3C",
                   "strokeWidth": 2
                 },
                 {
@@ -3335,7 +3357,7 @@
                           "type": "rectangle",
                           "id": "v8pEAk",
                           "name": "s",
-                          "fill": "#FF9F0A",
+                          "fill": "#30B0C7",
                           "width": 14,
                           "height": 2
                         },
@@ -3371,7 +3393,7 @@
                           "id": "nw3FQ",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "medoid s-0344",
+                          "content": "medoid m-1846",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -3742,7 +3764,7 @@
                           "id": "ZaxMz",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "Mushroom_260720",
+                          "content": "M3_jul",
                           "fontFamily": "Geist Mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -3871,7 +3893,7 @@
                           "id": "GqeLs",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "L_LM_Jul_26_J",
+                          "content": "L_LM_Jul26_J",
                           "fontFamily": "Geist Mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4577,7 +4599,7 @@
                       "id": "ZYxu0",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "seeded by exemplar E-014",
+                      "content": "seeded by exemplar E-0102",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -6035,7 +6057,7 @@
                       "id": "gY3WL",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "s-0344 · CH4 · 338.19 h",
+                      "content": "s-0344 · CH4_A2 · 338.19 h",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -8305,9 +8327,7 @@
                   "id": "W8hsI",
                   "name": "t",
                   "fill": "#007AFF",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -8468,7 +8488,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 120,
-                  "content": "Mushroom_260720",
+                  "content": "M3_jul",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -8651,9 +8671,7 @@
                   "id": "m79hG",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -8824,9 +8842,7 @@
                   "id": "z8zL5E",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH3",
+                  "content": "CH3_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -12858,7 +12874,7 @@
                       "id": "bdIaV",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "Mushroom_260720",
+                      "content": "M3_jul",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -12983,7 +12999,7 @@
                       "id": "UqMaI",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "L_LM_Jul_26_J",
+                      "content": "L_LM_Jul26_J",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -14147,6 +14163,40 @@
         },
         {
           "type": "frame",
+          "id": "CUDPJ",
+          "name": "nav-models",
+          "width": 56,
+          "height": 54,
+          "cornerRadius": 8,
+          "layout": "vertical",
+          "gap": 4,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "V7RZ4",
+              "name": "nav-discovery-icon",
+              "width": 20,
+              "height": 20,
+              "icon": "brain-circuit",
+              "library": "lucide",
+              "fill": "#8E8E93"
+            },
+            {
+              "type": "text",
+              "id": "RcLfk",
+              "name": "nav-discovery-label",
+              "fill": "#8E8E93",
+              "content": "Models",
+              "fontFamily": "Inter",
+              "fontSize": 9,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "frame",
           "id": "BiQUx",
           "name": "nav-review",
           "width": 56,
@@ -14247,7 +14297,7 @@
               "id": "RS6yH",
               "name": "nav-jobs-label",
               "fill": "#8E8E93",
-              "content": "Jobs · 2",
+              "content": "Jobs · 3",
               "fontFamily": "Inter",
               "fontSize": 9,
               "fontWeight": "500"
@@ -14447,7 +14497,7 @@
               "id": "a2Gdf9",
               "name": "hdr-jobs-text",
               "fill": "#007AFF",
-              "content": "2 running · 1 on cluster",
+              "content": "3 need you",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -14535,7 +14585,7 @@
               "content": "01 Resolve spans"
             },
             "WDy4t": {
-              "content": "slope analysis  ·  F-07 plateau-drop  ·  212 events"
+              "content": "slope analysis  ·  F-07 slow drift  ·  212 events"
             }
           }
         },
@@ -14630,7 +14680,7 @@
                   "id": "SC4TP",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Library family · F-07 plateau-drop",
+                  "content": "Library family · F-07 slow drift",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -15847,7 +15897,7 @@
                       "id": "kDHcD",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "s-0344 · CH4 · 338.19 h",
+                      "content": "s-1203 · CH4_A2 · 338.19 h",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -16612,7 +16662,7 @@
                       "id": "tyX65",
                       "name": "t",
                       "fill": "#C77700",
-                      "content": "1 event flagged · two troughs within window",
+                      "content": "9 events flagged · two troughs within window",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "normal"
@@ -17399,7 +17449,7 @@
                   "fill": "#007AFF",
                   "textGrowth": "fixed-width",
                   "width": 66,
-                  "content": "s-0344",
+                  "content": "s-1203",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17421,9 +17471,7 @@
                   "id": "PeYKW",
                   "name": "t",
                   "fill": "#007AFF",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17572,7 +17620,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 66,
-                  "content": "m-0118",
+                  "content": "m-0231",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17584,7 +17632,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 120,
-                  "content": "Mushroom_260720",
+                  "content": "M3_jul",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17745,7 +17793,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 66,
-                  "content": "s-0343",
+                  "content": "s-1204",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17767,9 +17815,7 @@
                   "id": "Q1yjCp",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17918,7 +17964,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 66,
-                  "content": "s-0346",
+                  "content": "s-1207",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17940,9 +17986,7 @@
                   "id": "So0U4",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH3",
+                  "content": "CH3_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -20074,7 +20118,7 @@
                       "id": "QCAUk",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "s-0344 · CH4 · 338.19 h",
+                      "content": "s-0344 · CH4_A2 · 338.19 h",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "600"
@@ -22380,9 +22424,7 @@
                   "id": "VyRUv",
                   "name": "t",
                   "fill": "#007AFF",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -22543,7 +22585,7 @@
                   "fill": "#000000",
                   "textGrowth": "fixed-width",
                   "width": 120,
-                  "content": "Mushroom_260720",
+                  "content": "M3_jul",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -22726,9 +22768,7 @@
                   "id": "K8lLwX",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH4",
+                  "content": "CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -22899,9 +22939,7 @@
                   "id": "VXrSP",
                   "name": "t",
                   "fill": "#000000",
-                  "textGrowth": "fixed-width",
-                  "width": 36,
-                  "content": "CH3",
+                  "content": "CH3_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -26995,7 +27033,7 @@
                               "id": "u8W6U",
                               "name": "t",
                               "fill": "#000000",
-                              "content": "Mushroom",
+                              "content": "M3_jul",
                               "fontFamily": "Geist Mono",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -27311,7 +27349,7 @@
                       "id": "z2hi9",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "Mushroom_260720",
+                      "content": "M3_jul",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -27436,7 +27474,7 @@
                       "id": "tmd3e",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "L_LM_Jul_26_J",
+                      "content": "L_LM_Jul26_J",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -28475,7 +28513,7 @@
                   "id": "e3KJFW",
                   "name": "t",
                   "fill": "#3A3A3C",
-                  "content": "Mushroom_260720",
+                  "content": "M3_jul",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -28503,7 +28541,7 @@
                   "id": "KT4pe",
                   "name": "t",
                   "fill": "#3A3A3C",
-                  "content": "L_LM_Jul_26_J",
+                  "content": "L_LM_Jul26_J",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -32375,7 +32413,7 @@
                       "id": "WKBBr",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "Mushroom_260720",
+                      "content": "M3_jul",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -32500,7 +32538,7 @@
                       "id": "PK9MZ",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "L_LM_Jul_26_J",
+                      "content": "L_LM_Jul26_J",
                       "fontFamily": "Geist Mono",
                       "fontSize": 10,
                       "fontWeight": "600"
@@ -34939,7 +34977,7 @@
               "id": "PiFr8",
               "name": "t",
               "fill": "#8E8E93",
-              "content": "F-03 sharkfin  ·  17 members  ·  3 recordings  ·  4 channels  ·  11 adjudicated",
+              "content": "F-03 sharkfin  ·  112 members  ·  17 within d ≤ 0.35  ·  3 recordings  ·  4 channels  ·  11 adjudicated",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -35396,8 +35434,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -35425,7 +35465,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -35443,7 +35483,7 @@
                           "id": "jnqiB",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 336.9 h",
+                          "content": "CH4_A2 · 336.9 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -35547,8 +35587,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -35576,7 +35618,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -35594,7 +35636,7 @@
                           "id": "VDHIQ",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 338.2 h",
+                          "content": "CH4_A2 · 338.2 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -35698,8 +35740,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -35727,7 +35771,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -35745,7 +35789,7 @@
                           "id": "IrhOG",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 337.3 h",
+                          "content": "CH4_A2 · 337.3 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -35849,8 +35893,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -35878,7 +35924,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -35896,7 +35942,7 @@
                           "id": "Uh2Ag",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH3 · 340.9 h",
+                          "content": "CH3_A2 · 340.9 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -36000,8 +36046,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36029,7 +36077,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -36047,7 +36095,7 @@
                           "id": "WYLfQ",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 337.8 h",
+                          "content": "CH4_A2 · 337.8 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -36160,8 +36208,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36189,7 +36239,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -36311,8 +36361,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36340,7 +36392,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -36358,7 +36410,7 @@
                           "id": "aqVJU",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH3 · 339.1 h",
+                          "content": "CH3_A2 · 339.1 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -36462,8 +36514,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36491,7 +36545,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -36613,8 +36667,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36642,7 +36698,7 @@
                           ],
                           "width": 150,
                           "height": 78,
-                          "stroke": "#FF9F0A",
+                          "stroke": "#30B0C7",
                           "strokeWidth": 1.5
                         }
                       ]
@@ -36755,8 +36811,10 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": 78,
-                      "fill": "#1C1C1E",
+                      "fill": "#F7F7F9",
                       "cornerRadius": 4,
+                      "stroke": "#E5E5EA",
+                      "strokeWidth": 1,
                       "layout": "none",
                       "children": [
                         {
@@ -36802,7 +36860,7 @@
                           "id": "i40fZ",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "CH4 · 340.0 h",
+                          "content": "CH4_A2 · 340.0 h",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -37145,8 +37203,10 @@
               "clip": true,
               "width": "fill_container",
               "height": 168,
-              "fill": "#1C1C1E",
+              "fill": "#F7F7F9",
               "cornerRadius": 6,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1,
               "layout": "none",
               "children": [
                 {
@@ -37258,7 +37318,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37276,7 +37336,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37294,7 +37354,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37312,7 +37372,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37330,7 +37390,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37348,7 +37408,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37366,7 +37426,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37384,7 +37444,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37402,7 +37462,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37420,7 +37480,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FF9F0A66",
+                  "stroke": "#30B0C766",
                   "strokeWidth": 1.2
                 },
                 {
@@ -37438,7 +37498,7 @@
                   ],
                   "width": 806,
                   "height": 150,
-                  "stroke": "#FFFFFF",
+                  "stroke": "#3A3A3C",
                   "strokeWidth": 2
                 },
                 {
@@ -37461,7 +37521,7 @@
                           "type": "rectangle",
                           "id": "lQLvu",
                           "name": "s",
-                          "fill": "#FF9F0A",
+                          "fill": "#30B0C7",
                           "width": 14,
                           "height": 2
                         },
@@ -37497,7 +37557,7 @@
                           "id": "R4rtv",
                           "name": "t",
                           "fill": "#AEAEB2",
-                          "content": "medoid s-0344",
+                          "content": "medoid m-1846",
                           "fontFamily": "Geist Mono",
                           "fontSize": 9,
                           "fontWeight": "normal"
@@ -37868,7 +37928,7 @@
                           "id": "arrs8",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "Mushroom_260720",
+                          "content": "M3_jul",
                           "fontFamily": "Geist Mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -37997,7 +38057,7 @@
                           "id": "P2ggY",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "L_LM_Jul_26_J",
+                          "content": "L_LM_Jul26_J",
                           "fontFamily": "Geist Mono",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -38703,7 +38763,7 @@
                       "id": "ufS0i",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "seeded by exemplar E-014",
+                      "content": "seeded by exemplar E-0102",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -39259,7 +39319,7 @@
                       "id": "zc7pQ",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "F-07 plateau-drop",
+                      "content": "F-07 slow drift",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -39376,7 +39436,7 @@
                       "id": "YMfM3",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "F-01 slow-drift",
+                      "content": "F-01 single drop",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"

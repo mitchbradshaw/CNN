@@ -291,7 +291,7 @@
               "id": "AZaAl",
               "name": "nav-jobs-label",
               "fill": "#8E8E93",
-              "content": "Jobs · 2",
+              "content": "Jobs · 3",
               "fontFamily": "Inter",
               "fontSize": 9,
               "fontWeight": "500"
@@ -491,7 +491,43 @@
               "id": "J4KMg",
               "name": "t",
               "fill": "#007AFF",
-              "content": "2 running · 1 on cluster",
+              "content": "3 need you",
+              "fontFamily": "Geist Mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "KwAoj",
+          "name": "hdr-heldout",
+          "height": 28,
+          "fill": "#F4F4F6",
+          "cornerRadius": 14,
+          "gap": 6,
+          "padding": [
+            0,
+            10
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "vKOxN",
+              "name": "i-lock",
+              "width": 12,
+              "height": 12,
+              "icon": "lock",
+              "library": "lucide",
+              "fill": "#8E8E93"
+            },
+            {
+              "type": "text",
+              "id": "pynpF",
+              "name": "t",
+              "fill": "#8E8E93",
+              "content": "M4 held out",
               "fontFamily": "Geist Mono",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -2006,7 +2042,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 · 14:22:06 → 14:22:41 · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
+          "content": "M2_aug fs1 · CH4_A2 · 192.371 → 192.381 h · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -2338,7 +2374,7 @@
             {
               "type": "text",
               "id": "B18g1r",
-              "x": 565.9272727272727,
+              "x": 661.9272727272727,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
@@ -2382,7 +2418,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "192.338 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2404,7 +2440,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "192.355 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2426,7 +2462,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "192.371 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2448,7 +2484,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "192.388 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2470,7 +2506,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "192.405 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2507,7 +2543,7 @@
                   "id": "St6yH",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape vs F-03 medoid · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -2621,7 +2657,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2645,7 +2681,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -2843,7 +2879,7 @@
                   "y": 22,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "spike-train",
+                  "content": "sharkfin",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -2855,7 +2891,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "41 members",
+                  "content": "112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -3109,7 +3145,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "63 members",
+                  "content": "212 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -4098,7 +4134,7 @@
                           "id": "d07Lc",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -4110,7 +4146,7 @@
                       "id": "eywTM",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -5813,7 +5849,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 · 14:22:06 → 14:22:41 · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
+          "content": "M2_aug fs1 · CH4_A2 · 192.371 → 192.381 h · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -6143,7 +6179,7 @@
             {
               "type": "text",
               "id": "yD9J2",
-              "x": 565.9272727272727,
+              "x": 661.9272727272727,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
@@ -6187,7 +6223,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "192.338 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6209,7 +6245,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "192.355 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6231,7 +6267,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "192.371 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6253,7 +6289,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "192.388 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6275,7 +6311,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "192.405 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6312,7 +6348,7 @@
                   "id": "UEaqN",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape vs F-03 medoid · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -6426,7 +6462,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6450,7 +6486,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -6648,7 +6684,7 @@
                   "y": 22,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "spike-train",
+                  "content": "sharkfin",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -6660,7 +6696,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "41 members",
+                  "content": "112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -6914,7 +6950,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "63 members",
+                  "content": "212 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -7903,7 +7939,7 @@
                           "id": "G6wLXA",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -7915,7 +7951,7 @@
                       "id": "yRe5I",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -8138,7 +8174,7 @@
                   "id": "lrbKz",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "same 14:20:06 → 14:24:41",
+                  "content": "same 192.338 → 192.405 h",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -8372,7 +8408,7 @@
             {
               "type": "text",
               "id": "W8wo5e",
-              "x": 504,
+              "x": 544,
               "y": 174,
               "name": "t",
               "fill": "#007AFF",
@@ -10190,7 +10226,7 @@
                   "id": "kkyd9",
                   "name": "t",
                   "fill": "#C77700",
-                  "content": "mean d 0.24 · worst 0.61",
+                  "content": "mean d 0.21 (6 included) · worst 0.61",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -10298,7 +10334,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 ×5, CH2_A1 ×2 · run r-0415 seed search, exemplar E-0102 · showing member c-0345",
+          "content": "M2_aug fs1 · CH4_A2 ×5, CH2_A1 ×2 · run r-0415 seed search, exemplar E-0102 · showing member c-0373",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -10630,11 +10666,11 @@
             {
               "type": "text",
               "id": "Wn2ZZ",
-              "x": 565.9272727272727,
+              "x": 675.9272727272727,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
-              "content": "c-0345 · 33.0 s · member 3 of 7",
+              "content": "c-0373 · 33.0 s · member 3 of 7",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10674,7 +10710,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "204.150 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10696,7 +10732,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "204.167 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10718,7 +10754,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "204.183 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10740,7 +10776,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "204.200 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10762,7 +10798,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "204.217 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -10809,7 +10845,7 @@
                   "id": "a4Z1B8",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "7 · seed-search matches of exemplar E-0102",
+                  "content": "7 · seed-search matches of exemplar E-0102 · shared y · mV",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -10924,7 +10960,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0343",
+                  "content": "c-0371",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11059,7 +11095,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0344",
+                  "content": "c-0372",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11194,7 +11230,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0345",
+                  "content": "c-0373",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11329,7 +11365,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0346",
+                  "content": "c-0374",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11464,7 +11500,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0347",
+                  "content": "c-0375",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11599,7 +11635,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0348",
+                  "content": "c-0376",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -11724,7 +11760,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0349",
+                  "content": "c-0377",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -12443,7 +12479,7 @@
                   "id": "J4qxsX",
                   "name": "t",
                   "fill": "#C77700",
-                  "content": "1 excluded · c-0349 d 0.61, above the 0.45 limit",
+                  "content": "1 excluded · c-0377 d 0.61, above the 0.45 limit",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -12824,7 +12860,7 @@
                           "id": "PzHnr",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -12836,7 +12872,7 @@
                       "id": "AvaR8",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -13732,7 +13768,7 @@
             },
             {
               "type": "frame",
-              "id": "fSB2o",
+              "id": "MST2g",
               "name": "pill-score",
               "height": 28,
               "fill": "#FFFFFF",
@@ -13748,7 +13784,7 @@
               "children": [
                 {
                   "type": "icon",
-                  "id": "qh1YX",
+                  "id": "th1Cm",
                   "name": "i-target",
                   "width": 12,
                   "height": 12,
@@ -13758,7 +13794,7 @@
                 },
                 {
                   "type": "text",
-                  "id": "czOqy",
+                  "id": "fFBnz",
                   "name": "t",
                   "fill": "#8E8E93",
                   "content": "score",
@@ -13768,10 +13804,56 @@
                 },
                 {
                   "type": "text",
-                  "id": "ZkOl1",
+                  "id": "t0MIm0",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "0.84",
+                  "content": "0.84 · 6.1× null",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 11,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ori47",
+              "name": "pill-family",
+              "height": 28,
+              "fill": "#FFFFFF",
+              "cornerRadius": 14,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                0,
+                11
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "kVzC4",
+                  "name": "dot",
+                  "fill": "#AF52DE",
+                  "width": 7,
+                  "height": 7
+                },
+                {
+                  "type": "text",
+                  "id": "UwP0n",
+                  "name": "t",
+                  "fill": "#8E8E93",
+                  "content": "family",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "GQB0x",
+                  "name": "t",
+                  "fill": "#000000",
+                  "content": "F-03 d 0.19",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -13833,7 +13915,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 · 14:22:06 → 14:22:41 · 35.0 s · run r-0412 · rank 37 of 1,284",
+          "content": "M2_aug fs1 · CH4_A2 · 192.371 → 192.381 h · 35.0 s · run r-0412 · rank 37 of 1,284",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -14165,7 +14247,7 @@
             {
               "type": "text",
               "id": "i8Vq0",
-              "x": 433.27272727272725,
+              "x": 529.2727272727273,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
@@ -14209,7 +14291,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "192.338 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14231,7 +14313,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "192.355 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14253,7 +14335,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "192.371 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14275,7 +14357,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "192.388 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14297,7 +14379,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "192.405 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14334,7 +14416,7 @@
                   "id": "hmeDq",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape vs F-03 medoid · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -14448,7 +14530,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14472,7 +14554,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -14670,7 +14752,7 @@
                   "y": 22,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "spike-train",
+                  "content": "sharkfin",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -14682,7 +14764,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "41 members",
+                  "content": "112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -14936,7 +15018,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "63 members",
+                  "content": "212 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -15895,7 +15977,7 @@
                           "id": "zlGxm",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -15907,7 +15989,7 @@
                       "id": "KG9Rq",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -16604,7 +16686,7 @@
                       "id": "ahuDk",
                       "name": "t",
                       "fill": "#8E8E93",
-                      "content": "cnn_cluster_v1 · test sample",
+                      "content": "cnn_windows_v3 · manual · test sample",
                       "fontFamily": "Geist Mono",
                       "fontSize": 9,
                       "fontWeight": "normal"
@@ -17570,7 +17652,7 @@
                   "id": "PFlFp",
                   "name": "t",
                   "fill": "#8944AB",
-                  "content": "sequence · 4 within 6 min · CH4_A2",
+                  "content": "sequence · 3 within 6 min · CH4_A2",
                   "fontFamily": "Geist Mono",
                   "fontSize": 9,
                   "fontWeight": "normal"
@@ -19204,7 +19286,7 @@
             },
             {
               "type": "frame",
-              "id": "f3v9rg",
+              "id": "XUT0T",
               "name": "pill-score",
               "height": 28,
               "fill": "#FFFFFF",
@@ -19220,7 +19302,7 @@
               "children": [
                 {
                   "type": "icon",
-                  "id": "phywC",
+                  "id": "f4Ulow",
                   "name": "i-target",
                   "width": 12,
                   "height": 12,
@@ -19230,7 +19312,7 @@
                 },
                 {
                   "type": "text",
-                  "id": "k8pJJ",
+                  "id": "bcb7X",
                   "name": "t",
                   "fill": "#8E8E93",
                   "content": "score",
@@ -19240,10 +19322,56 @@
                 },
                 {
                   "type": "text",
-                  "id": "b3gpa",
+                  "id": "Z1N2E",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "0.84",
+                  "content": "0.84 · 6.1× null",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 11,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "C7tNu",
+              "name": "pill-family",
+              "height": 28,
+              "fill": "#FFFFFF",
+              "cornerRadius": 14,
+              "stroke": "#E5E5EA",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": [
+                0,
+                11
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "Iz42F",
+                  "name": "dot",
+                  "fill": "#AF52DE",
+                  "width": 7,
+                  "height": 7
+                },
+                {
+                  "type": "text",
+                  "id": "Cdvjc",
+                  "name": "t",
+                  "fill": "#8E8E93",
+                  "content": "family",
+                  "fontFamily": "Geist Mono",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "YN24k",
+                  "name": "t",
+                  "fill": "#000000",
+                  "content": "F-03 d 0.19",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -19305,7 +19433,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 · 14:22:06 → 14:22:41 · 35.0 s · run r-0412 · rank 37 of 1,284",
+          "content": "M2_aug fs1 · CH4_A2 · 192.371 → 192.381 h · 35.0 s · run r-0412 · rank 37 of 1,284",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -19637,7 +19765,7 @@
             {
               "type": "text",
               "id": "ojc2c",
-              "x": 433.27272727272725,
+              "x": 529.2727272727273,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
@@ -19681,7 +19809,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "192.338 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19703,7 +19831,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "192.355 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19725,7 +19853,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "192.371 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19747,7 +19875,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "192.388 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19769,7 +19897,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "192.405 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19806,7 +19934,7 @@
                   "id": "Qzr6N",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape vs F-03 medoid · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -19920,7 +20048,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -19944,7 +20072,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -20142,7 +20270,7 @@
                   "y": 22,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "spike-train",
+                  "content": "sharkfin",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -20154,7 +20282,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "41 members",
+                  "content": "112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -20408,7 +20536,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "63 members",
+                  "content": "212 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -21367,7 +21495,7 @@
                           "id": "DmRj9",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -21379,7 +21507,7 @@
                       "id": "NSp5Z",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -22006,7 +22134,7 @@
                       "id": "s47oT",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "12 Sep 2026 · memeshaw",
+                      "content": "12 Sep 2026 · this installation",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -22043,7 +22171,7 @@
                       "id": "rTJ8t",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "M2_aug · 3 channels · 45.2 h",
+                      "content": "M2_aug fs1 · 3 channels · 721 h",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -22195,7 +22323,7 @@
                       "id": "LMnEN",
                       "name": "t",
                       "fill": "#000000",
-                      "content": "0.62 · recommended 0.60",
+                      "content": "0.62 · recommended 0.62",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -22616,7 +22744,7 @@
                           "id": "f53nL",
                           "name": "t",
                           "fill": "#000000",
-                          "content": "F-03 · spike-train",
+                          "content": "F-03 · sharkfin",
                           "fontFamily": "Geist Mono",
                           "fontSize": 11,
                           "fontWeight": "600"
@@ -22626,7 +22754,7 @@
                           "id": "cP2tR",
                           "name": "t",
                           "fill": "#8E8E93",
-                          "content": "d 0.19 · 41 members · medoid E-0102",
+                          "content": "d 0.19 · 112 members · medoid m-1846",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "normal"
@@ -23086,7 +23214,7 @@
               "content": "Inspector"
             },
             "BnDhC": {
-              "content": "queue model verification · cnn_cluster_v1"
+              "content": "queue model verification · cnn_windows_v3 · manual"
             }
           }
         },
@@ -23144,7 +23272,7 @@
                   "id": "Q6YfH7",
                   "name": "t",
                   "fill": "#007AFF",
-                  "content": "Model verification · cnn_cluster_v1",
+                  "content": "Model verification · cnn_windows_v3 · manual",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -24492,7 +24620,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH2_A1 · 03:10:00 → 03:20:00 · 600 s window · stratified test sample, 34 of 40 · candidate cnn_cluster_v1",
+          "content": "M2_aug fs1 · CH2_A1 · 3.17 → 3.33 h · 600 s window · stratified test sample, 34 of 40 · candidate cnn_windows_v3 · manual",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -24676,7 +24804,10 @@
                 {
                   "type": "frame",
                   "id": "S2W5rV",
+                  "x": 1048,
+                  "y": 0,
                   "name": "btn-Edit span in Explore",
+                  "enabled": false,
                   "height": 28,
                   "fill": "#FFFFFF",
                   "cornerRadius": 6,
@@ -24868,7 +24999,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "03:08:00",
+              "content": "3.13 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24890,7 +25021,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "03:11:30",
+              "content": "3.19 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24912,7 +25043,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "03:15:00",
+              "content": "3.25 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24934,7 +25065,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "03:18:30",
+              "content": "3.31 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -24971,7 +25102,7 @@
                   "id": "e6oQCu",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -25058,7 +25189,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -25082,7 +25213,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -26295,7 +26426,7 @@
                           "id": "p8SReW",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -26307,7 +26438,7 @@
                       "id": "ALySP",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -26951,7 +27082,7 @@
                   "id": "fYmWy",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "942",
+                  "content": "941",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "600"
@@ -28035,7 +28166,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 · 14:22:06 → 14:22:41 · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
+          "content": "M2_aug fs1 · CH4_A2 · 192.371 → 192.381 h · 35.0 s · run r-0412 · rank 37 of 1,284 by score",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -28367,7 +28498,7 @@
             {
               "type": "text",
               "id": "Q2fub",
-              "x": 565.9272727272727,
+              "x": 661.9272727272727,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
@@ -28411,7 +28542,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "192.338 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28433,7 +28564,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "192.355 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28455,7 +28586,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "192.371 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28477,7 +28608,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "192.388 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28499,7 +28630,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "192.405 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28536,7 +28667,7 @@
                   "id": "sPlFB",
                   "name": "t",
                   "fill": "#000000",
-                  "content": "Shape, z-normalised",
+                  "content": "Shape vs F-03 medoid · mV",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
@@ -28650,7 +28781,7 @@
               "y": 39,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "+2σ",
+              "content": "+0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28674,7 +28805,7 @@
               "y": 168,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "−2σ",
+              "content": "−0.4 mV",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -28872,7 +29003,7 @@
                   "y": 22,
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "spike-train",
+                  "content": "sharkfin",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -28884,7 +29015,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "41 members",
+                  "content": "112 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -29138,7 +29269,7 @@
                   "y": 14,
                   "name": "t",
                   "fill": "#AEAEB2",
-                  "content": "63 members",
+                  "content": "212 members",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -30129,7 +30260,7 @@
                           "id": "WidH0",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -30141,7 +30272,7 @@
                       "id": "m6BAQU",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -30464,7 +30595,7 @@
                       "id": "m5PBc",
                       "name": "t",
                       "fill": "#007AFF",
-                      "content": "F-03 spike-train · nearest, d 0.19",
+                      "content": "F-03 sharkfin · nearest, d 0.19",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -32238,7 +32369,7 @@
                   "id": "kEInY",
                   "name": "t",
                   "fill": "#C77700",
-                  "content": "mean d 0.24 · worst 0.61",
+                  "content": "mean d 0.21 (6 included) · worst 0.61",
                   "fontFamily": "Geist Mono",
                   "fontSize": 11,
                   "fontWeight": "500"
@@ -32300,7 +32431,7 @@
           "y": 146,
           "name": "t",
           "fill": "#8E8E93",
-          "content": "M2_aug · CH4_A2 ×5, CH2_A1 ×2 · run r-0415 seed search, exemplar E-0102 · showing member c-0345",
+          "content": "M2_aug fs1 · CH4_A2 ×5, CH2_A1 ×2 · run r-0415 seed search, exemplar E-0102 · showing member c-0373",
           "fontFamily": "Geist Mono",
           "fontSize": 11,
           "fontWeight": "normal"
@@ -32632,11 +32763,11 @@
             {
               "type": "text",
               "id": "ox9Kh",
-              "x": 565.9272727272727,
+              "x": 675.9272727272727,
               "y": 54,
               "name": "t",
               "fill": "#007AFF",
-              "content": "c-0345 · 33.0 s · member 3 of 7",
+              "content": "c-0373 · 33.0 s · member 3 of 7",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32676,7 +32807,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:20:06",
+              "content": "204.150 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32698,7 +32829,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:21:06",
+              "content": "204.167 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32720,7 +32851,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:22:06",
+              "content": "204.183 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32742,7 +32873,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:23:06",
+              "content": "204.200 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32764,7 +32895,7 @@
               "y": 226,
               "name": "t",
               "fill": "#AEAEB2",
-              "content": "14:24:06",
+              "content": "204.217 h",
               "fontFamily": "Geist Mono",
               "fontSize": 9,
               "fontWeight": "normal"
@@ -32811,7 +32942,7 @@
                   "id": "RZh75",
                   "name": "t",
                   "fill": "#8E8E93",
-                  "content": "7 · seed-search matches of exemplar E-0102",
+                  "content": "7 · seed-search matches of exemplar E-0102 · shared y · mV",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -32926,7 +33057,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0343",
+                  "content": "c-0371",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33061,7 +33192,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0344",
+                  "content": "c-0372",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33196,7 +33327,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0345",
+                  "content": "c-0373",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33331,7 +33462,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0346",
+                  "content": "c-0374",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33466,7 +33597,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0347",
+                  "content": "c-0375",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33601,7 +33732,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0348",
+                  "content": "c-0376",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -33726,7 +33857,7 @@
                   "y": 8,
                   "name": "t",
                   "fill": "#000000",
-                  "content": "c-0349",
+                  "content": "c-0377",
                   "fontFamily": "Geist Mono",
                   "fontSize": 10,
                   "fontWeight": "600"
@@ -34882,7 +35013,7 @@
                           "id": "DfyNt",
                           "name": "t",
                           "fill": "#3A3A3C",
-                          "content": "0",
+                          "content": "9",
                           "fontFamily": "Geist Mono",
                           "fontSize": 10,
                           "fontWeight": "600"
@@ -34894,7 +35025,7 @@
                       "id": "ekALu",
                       "name": "t",
                       "fill": "#3A3A3C",
-                      "content": "none",
+                      "content": "electrode artifact",
                       "fontFamily": "Geist Mono",
                       "fontSize": 11,
                       "fontWeight": "normal"
