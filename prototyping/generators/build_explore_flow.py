@@ -25,20 +25,20 @@ The flow:
   2  cross-channel Mode two. Deliberately loose -- a placeholder that holds
                    the slot and the future multivariate direction.
 
-  3  agreement     Mode three. One channel. Annotation track, detection
-                   track, and their disagreement, with actions to pass
-                   machine-only spans to Review.
+Agreement mode is gone: comparing a detector against the human annotation
+store is the n=2 case of Discovery's algorithm comparison, so it folded into
+Discovery rather than existing twice.
 
-Run:  python build_explore_flow.py  ->  UI_explore_flow_v1.pen
+Run:  python build_explore_flow.py  ->  UI_explore_flow_v2.pen
 """
 
 import math
 
 from pen_kit import (C, MONO, SANS, frame, rect, ellipse, text, rtext, ctext,
-                     trace, motif_trace, sidebar, header, chip, button, tw,
-                     write_doc)
+                     trace, motif_trace, header, chip, button, tw, write_doc)
+from build_blocks import nav as sidebar   # five-item nav, imported last so it wins
 
-MODES = ["Signal", "Cross-channel", "Agreement"]
+MODES = ["Signal", "Cross-channel"]
 RAMP = ["#F2F2F4", "#DCEAF9", "#B6D6F4", "#7FB8EE", "#3D93E4", "#007AFF"]
 CHANS = ["CH%d_%s" % (i + 1, ["A1", "A1", "A2", "A2", "B1", "B1", "B2", "B2",
                               "C1", "C1", "C2", "C2", "D1", "D1", "D2", "D2"][i])
@@ -443,115 +443,127 @@ def cross_channel(ox):
     return frame("explore-2-cross-channel", ox, 0, 1440, 900, C["page"], children=k)
 
 
-# ================================================================ 3  AGREE
-def agreement(ox):
-    k = mode_chrome("Agreement", "708 annotations  ·  1284 detections  ·  184 disagree")
-    X, W = 88, 1000
+# ============================================== 2c  SPAN EDIT (from Review)
+def signal_edit(ox):
+    """Span editing, opened from Review and returning to it."""
+    k = [sidebar(0), header("Explore", "Editing a span",
+                            "m-1846  \u00b7  opened from Review")]
+    tb = breadcrumb(24, 19, ["Corpus", "M2_aug fs1", "CH4_A2", "edit span"])
+    tb.append(rtext("span editing always happens here, so human geometry "
+                    "stays in the human store", 1352, 20, 10, C["muted"], MONO))
+    k.append(frame("toolbar", 64, 44, 1376, 52, C["page"], children=tb))
 
-    # ---- channel trace with both overlays
-    ov = [text("CHANNEL", 18, 14, 10, C["muted"], MONO),
-          text("CH4_A2  ·  0 – 720 h", 96, 14, 10, C["grey"], MONO),
-          rtext("both stores overlaid", W - 18, 14, 10, C["muted"], MONO),
-          frame("plot", 18, 34, W - 36, 108, C["dark"], radius=5, children=[
-              rect(180, 0, 52, 108, C["ov_interest"]),
-              rect(300, 0, 78, 108, C["ov_span"]),
-              rect(560, 0, 64, 108, C["ov_span"]),
-              rect(700, 0, 46, 108, C["ov_interest"]),
-              trace(0, 0, W - 36, 108, 4711, pts=360, amp=0.32, drift=0.16,
-                    wobble=27)])]
-    k.append(frame("channel-overview", X, 108, W, 158, C["white"], radius=10,
+    X2, W2 = 88, 1328
+    bk = [ellipse(18, 16, 10, 10, C["amber"]),
+          text("Editing m-1846 for Review", 38, 12, 12, C["black"], SANS, True),
+          text("candidate 12 of 50  \u00b7  drop_motifs9 run 128", 250, 15, 10,
+               "#9A6206", MONO)]
+    p, bw = button("Save and return to Review  \u2192", W2 - 18 - 218, 8,
+                   primary=True, h=28)
+    bk += p
+    p, bw2 = button("Return without saving", W2 - 18 - 384, 8, h=28)
+    bk += p
+    k.append(frame("banner", X2, 108, W2, 44, "#FDF0D5", radius=10,
+                   stroke=C["amber"], children=bk))
+
+    ov = [text("CHANNEL", 16, 12, 9, C["muted"], MONO),
+          text("CH4_A2  \u00b7  0 \u2013 720 h", 82, 12, 9, C["grey"], MONO),
+          rtext("the span being edited is highlighted", W2 - 16, 12, 9,
+                C["muted"], MONO),
+          rect(16, 30, W2 - 32, 62, C["dark"], radius=5)]
+    ov.append(trace(16, 30, W2 - 32, 62, 4711, pts=380, amp=0.34, drift=0.16,
+                    wobble=29))
+    ov.append(rect(16 + (W2 - 32) * 0.47, 30, 10, 62, C["ov_motif"],
+                   stroke=C["orange"]))
+    k.append(frame("overview", X2, 164, W2, 106, C["white"], radius=10,
                    stroke=C["border"], children=ov))
 
-    # ---- the three tracks
-    tr = [text("WHERE THE TWO STORES AGREE", 18, 14, 10, C["muted"], MONO),
-          text("annotations are human, detections are machine — they are "
-               "stored separately and never merged", 250, 14, 10, C["muted"], MONO),
-          text("annotations", 18, 46, 9, C["muted"], MONO),
-          text("detections", 18, 76, 9, C["muted"], MONO),
-          text("agreed", 18, 106, 9, C["muted"], MONO),
-          text("disagree", 18, 136, 9, C["muted"], MONO)]
-    ann = [(20, 70), (150, 48), (300, 96), (470, 60), (600, 84), (790, 52)]
-    det = [(24, 64), (218, 70), (302, 92), (540, 66), (604, 78), (700, 58), (860, 50)]
-    agr = [(24, 60), (302, 88), (604, 74)]
-    dis = [(150, 48), (218, 70), (470, 60), (540, 66), (700, 58), (790, 52), (860, 50)]
-    sc = 0.93
-    for xs, y, col in [(ann, 44, C["green"]), (det, 74, C["blue"]),
-                       (agr, 104, C["muted"]), (dis, 134, C["amber"])]:
-        for x0, wd in xs:
-            tr.append(rect(110 + x0 * sc, y, wd * sc, 14, col, radius=2))
-    k.append(frame("tracks", X, 282, W, 176, C["white"], radius=10,
-                   stroke=C["border"], children=tr))
+    sp = [text("THE SPAN", 18, 14, 10, C["muted"], MONO),
+          text("drag either handle  \u00b7  arrow keys nudge by one sample",
+               96, 14, 10, C["grey"], MONO),
+          rtext("\u00d7 4200", W2 - 18, 14, 10, C["muted"], MONO),
+          rect(18, 34, W2 - 36, 184, C["dark"], radius=5)]
+    pw = W2 - 36
+    sp.append(rect(18 + pw * 0.335, 34, pw * 0.20, 184, "#3A3A3C"))
+    sp += span_handles(18 + pw * 0.30, pw * 0.26, 184, y=34)
+    sp.append(trace(18, 34, pw, 184, 9137, pts=300, amp=0.30, drift=0.20,
+                    wobble=17))
+    sp += [rect(18 + pw * 0.335, 226, 12, 10, "#5A5A5E"),
+           text("original extent, from the detection", 18 + pw * 0.335 + 18,
+                225, 9, C["muted"], MONO),
+           rect(18 + pw * 0.62, 226, 12, 10, C["blue"]),
+           text("your extent", 18 + pw * 0.62 + 18, 225, 9, C["blue"], MONO)]
+    k.append(frame("span-editor", X2, 282, W2, 252, C["white"], radius=10,
+                   stroke=C["border"], children=sp))
 
-    # ---- the disagreement list
-    ls = [text("Disagreements", 18, 16, 12),
-          text("184", 132, 17, 11, C["grey"], MONO),
-          rtext("sorted by score ↓", W - 18, 19, 10, C["muted"], MONO)]
-    items = [("d-0412", "machine only", "192.4 h", "0.88", C["blue"]),
-             ("a-1835", "human only", "276.4 h", "—", C["green"]),
-             ("d-0455", "machine only", "301.8 h", "0.81", C["blue"]),
-             ("a-1578", "human only", "344.2 h", "—", C["green"]),
-             ("d-0501", "machine only", "402.6 h", "0.79", C["blue"])]
-    for i, (iid, kind, t, sc_, col) in enumerate(items):
-        y = 46 + i * 62
-        ls += [rect(18, y, W - 36, 54, C["page"], radius=8),
-               ellipse(30, y + 23, 8, 8, col),
-               text(iid, 48, y + 8, 11, C["black"], MONO),
-               text(kind, 48, y + 26, 10, C["grey"], MONO),
-               text(t, 150, y + 17, 11, C["black"], MONO),
-               frame("sp%d" % i, 230, y + 13, 300, 28, C["dark"], radius=4,
-                     children=[trace(0, 0, 300, 28, 700 + i * 91, pts=90,
-                                     amp=0.32, drift=0.28, col=C["trace"],
-                                     sw=1, wobble=7)]),
-               text("score", 556, y + 10, 9, C["muted"], MONO),
-               text(sc_, 556, y + 26, 11, C["black"], MONO)]
-        if kind == "machine only":
-            p, w = button("pass to Review", W - 36 - 150, y + 14, h=26)
-            ls += p
-        else:
-            p, w = button("run detection here", W - 36 - 180, y + 14, h=26)
-            ls += p
-    k.append(frame("disagreement-list", X, 474, W, 382, C["white"], radius=10,
-                   stroke=C["border"], children=ls))
+    ek = [text("Extent", 18, 14, 12)]
+    for i, (lab, val) in enumerate([("start", "148.6021 h"),
+                                    ("end", "148.6025 h"),
+                                    ("duration", "1.62 s")]):
+        xx = 18 + i * 220
+        ek += [text(lab, xx, 44, 9, C["muted"], MONO),
+               rect(xx, 60, 200, 28, C["page"], radius=6, stroke=C["border"]),
+               text(val, xx + 10, 67, 11, C["black"], MONO)]
+        if i < 2:
+            ek += [rect(xx + 168, 64, 12, 10, C["white"], radius=3,
+                        stroke=C["border"]),
+                   rect(xx + 168, 76, 12, 10, C["white"], radius=3,
+                        stroke=C["border"])]
+    ek.append(text("snap to", 690, 44, 9, C["muted"], MONO))
+    cx = 690
+    for lab, on in [("steepest sample", True), ("trough", False),
+                    ("zero crossing", False), ("free", False)]:
+        parts, cw = chip(lab, cx, 58, on)
+        ek += parts
+        cx += cw + 6
+    ek += [text("the onset rule that produced the original was \u2018walk back "
+                "from steepest while descending\u2019 \u2014 snapping to the same "
+                "rule keeps your edit comparable with the rest of the family",
+                18, 100, 10, C["muted"], MONO)]
+    k.append(frame("extent", X2, 546, W2, 136, C["white"], radius=10,
+                   stroke=C["border"], children=ek))
 
-    # ---- summary rail + bulk actions
-    RW = 320
-    sm = [text("Summary", 20, 18, 12), rect(20, 42, RW - 40, 1, C["border"])]
-    for i, (lab, n, col, note) in enumerate([
-            ("agreed", "128", C["muted"], "both stores mark it"),
-            ("machine only", "76", C["blue"], "no human looked, or human passed"),
-            ("human only", "108", C["green"], "an analytical blind spot")]):
-        y = 56 + i * 56
-        sm += [ellipse(20, y + 5, 9, 9, col), text(lab, 38, y, 12),
-               rtext(n, RW - 20, y, 12, C["black"], MONO),
-               text(note, 38, y + 20, 9, C["muted"], MONO)]
-    sm += [rect(20, 232, RW - 40, 1, C["border"]),
-           text("Bulk", 20, 246, 12)]
-    p1, w1 = button("Pass all 76 machine-only to Review  →", 20, 274,
-                    primary=True, h=30)
-    p2, w2 = button("Export disagreement set (CSV)", 20, 314, h=30)
-    sm += p1 + p2
-    sm += [rect(20, 362, RW - 40, 1, C["border"]),
-           text("Nothing here writes a verdict. Adjudication happens in "
-                "Review, against detections only — so this screen can never "
-                "put a machine verdict into the annotation store.",
-                20, 378, 10, C["muted"], MONO),
-           text("Human-only spans are the finding, not the backlog: they are "
-                "where the algorithms are blind.", 20, 448, 10, C["amber"], MONO)]
-    k.append(frame("summary-rail", 1112, 108, RW, 748, C["white"], radius=10,
-                   stroke=C["border"], children=sm))
-
-    return frame("explore-3-agreement", ox, 0, 1440, 900, C["page"], children=k)
+    rk = [text("What saving writes", 18, 16, 12),
+          text("a new revision of this motif, not a replacement", 168, 19, 10,
+               C["muted"], MONO)]
+    revs = [("rev 1", "detection d-0412", "run 128  \u00b7  machine", "kept",
+             C["muted"]),
+            ("rev 2", "annotation a-2077", "this edit  \u00b7  human", "current",
+             C["blue"])]
+    for i, (rev, sid, src, state, col) in enumerate(revs):
+        yy = 46 + i * 26
+        rk += [text(rev, 18, yy, 10, C["muted"], MONO),
+               text(sid, 80, yy, 10, C["black"], MONO),
+               text(src, 240, yy, 10, C["grey"], MONO),
+               ellipse(430, yy + 3, 7, 7, col),
+               text(state, 446, yy, 10, col, MONO)]
+    rk += [text("The detection stays on its run untouched, so run 128", 540,
+                46, 10, C["grey"], MONO),
+           text("still reproduces from its recipe. If a later run finds the", 540,
+                64, 10, C["grey"], MONO),
+           text("original extent again it resolves to this same motif rather", 540,
+                82, 10, C["grey"], MONO),
+           text("than creating a duplicate \u2014 rev 1 is what it matches,", 540,
+                100, 10, C["grey"], MONO),
+           text("rev 2 is what you see.", 540, 118, 10, C["grey"], MONO),
+           text("Your edit lands in the annotation store because you drew it.",
+                18, 100, 10, C["blue"], MONO),
+           text("Nothing human is ever written into the detection table.",
+                18, 118, 10, C["blue"], MONO)]
+    k.append(frame("revision", X2, 694, W2, 126, C["white"], radius=10,
+                   stroke=C["border"], children=rk))
+    return frame("explore-2c-span-edit", ox, 0, 1440, 900, C["page"], children=k)
 
 
 # ================================================================ output
-STEPS = [("1  ·  corpus — pick a channel", 0),
-         ("2  ·  Signal mode", 1560),
-         ("2b  ·  Signal mode, drawer open", 3120),
-         ("3  ·  Cross-channel mode (placeholder)", 4680),
-         ("4  ·  Agreement mode", 6240)]
+STEPS = [("1  \u00b7  corpus \u2014 pick a channel", 0),
+         ("2  \u00b7  Signal mode", 1560),
+         ("2b  \u00b7  Signal mode, drawer open", 3120),
+         ("3  \u00b7  Cross-channel mode (placeholder)", 4680),
+         ("4  \u00b7  editing a span, opened from Review", 6240)]
 
 screens = [corpus(0), signal(1560), signal(3120, drawer=True),
-           cross_channel(4680), agreement(6240)]
+           cross_channel(4680), signal_edit(6240)]
 labels = [text(lab, x, -46, 16, C["grey"], MONO) for lab, x in STEPS]
 
-write_doc("UI_explore_flow_v1.pen", screens + labels)
+write_doc("UI_explore_flow_v2.pen", screens + labels)

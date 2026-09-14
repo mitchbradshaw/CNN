@@ -206,7 +206,17 @@ def count_nodes(n):
 
 
 def write_doc(path, screens, token="8f3c1d52-0b47-4e19-9a6d-7c2e5b810f44"):
-    import json
+    """Write a .pen document.
+
+    A bare filename is written to the PARENT of the directory holding the
+    generators, so `prototyping/generators/build_x.py` writes
+    `prototyping/UI_x.pen`.  Pass an absolute path to override.
+    """
+    import json, os
+    if not os.path.isabs(path) and os.sep not in path:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if os.path.basename(here) == "generators":
+            path = os.path.join(os.path.dirname(here), path)
     doc = {"version": "2.17", "children": screens, "fileToken": token}
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=2, ensure_ascii=False)
