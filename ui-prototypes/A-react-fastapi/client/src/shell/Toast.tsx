@@ -1,5 +1,5 @@
 /* Bottom-centre toasts (frame chain-1e: "03 Symbolic encoding deleted  Undo Ctrl Z"). */
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 export interface ToastSpec { id: number; text: string; kind?: 'info' | 'error'; action?: { label: string; onClick: () => void }; ttlMs?: number }
 interface ToastApi { push: (t: Omit<ToastSpec, 'id'>) => number; dismiss: (id: number) => void }
@@ -9,6 +9,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastSpec[]>([])
   const seq = useRef(1)
   const dismiss = useCallback((id: number) => setItems(xs => xs.filter(x => x.id !== id)), [])
+  // toasts belong to the page they were raised on: clear them on navigation
+  useEffect(() => {
+    const clear = () => setItems([])
+    window.addEventListener('hashchange', clear)
+    return () => window.removeEventListener('hashchange', clear)
+  }, [])
   const push = useCallback((t: Omit<ToastSpec, 'id'>) => {
     const id = seq.current++
     setItems(xs => [...xs, { ...t, id }])

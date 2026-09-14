@@ -29,7 +29,8 @@ const post = <T,>(path: string, body: unknown) => req<T>(path, { method: 'POST',
 /* ---------------- explore ---------------- */
 export interface ChannelRef { id: number; channel: number; name: string; npy_exists: boolean }
 export interface RecordingFile {
-  source_file: string; fs: number; n_samples: number; duration_h: number; n_channels: number; held_out: boolean; channels: ChannelRef[]
+  source_file: string; fs: number; n_samples: number; duration_h: number; n_channels: number; held_out: boolean
+  held_out_reason: string | null; channels: ChannelRef[]
 }
 export interface CoverageRow {
   id: number; channel: number; name: string

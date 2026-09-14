@@ -159,3 +159,121 @@ points), capped span lists, symbol strips, base64 PNG thumbnails for image stack
 metadata card for Model. Progress crosses thread→event-loop through `loop.call_soon_threadsafe`
 onto an `asyncio.Queue` per run. Cancel is a `threading.Event` read by `should_cancel`. Client
 disconnect does **not** cancel (the run finishes and its snapshot survives reload).
+
+## 4. Decisions made while building A's service layer (2026-09-14, ~23:00–00:30)
+
+- **Chain composed from real adapters.** The concept chain (baseline → noise floor → symbolic
+  encoding → drop detection) has no real equivalent: `Encoding` is terminal in the registry (no
+  adapter consumes it), so "Encoding → SpanSet" cannot exist. Default chain is
+  `preprocessing.detrend` (Baseline removal, Signal→Signal) → `detection.matrix_profile`
+  (Signal→Scores, window_min 1.0 min) → `detection.threshold` (Scores→SpanSet, 8.0) on the
+  frames' example span CH4_A2 276.4–278.4 h (samples 995040–1002240). Runs in ~0.3 s warm and
+  exercises Signal, Scores (awkward) and SpanSet for real. Built-in templates reach the rest:
+  `dsax_encoding` (Encoding symbolic), `windows_model` (WindowSet → Grouping → Model, with the
+  classifier's `windows` side-input bound to step 0), `gramian` (Encoding image). All seven
+  types are therefore reachable in the UI with real values.
+- **`force=True` on every run.** Without it `execute_recipe` returns `{reused: True}` for a recipe
+  that already completed and fires no callbacks; with it the step loop runs and cache hits
+  report `step_timings[i] == 0.0` — the core's own signal, which the UI shows as "cached · 0 s".
+- **`STEP_CACHE_WRITE_THRESHOLD_S = 0.0`** in the redirected runtime, otherwise a 0.3 s chain
+  caches nothing and the suffix re-run test proves nothing (evidence-audit gap §6 bullet 7).
+- **Three more writable paths redirected** beyond the DB and step cache: the matrix-profile and
+  window-matrix `persist` hooks write `.npz` under `Results/…` (module-level `RESULTS_DIR`) and
+  the classifier writes a joblib under `DATA/derived/models` (`MODEL_ROOT`) from inside its run
+  body. All three are rebound at call time on the adapter modules (the codebase's own test hook).
+- **`UI/analyse/chain_state.py` not reused.** Importing it via the package runs
+  `UI/analyse/__init__.py`, which imports `RunPanel` → Panel/Bokeh/HoloViews; it answers only
+  "what can be appended at the tail"; and `to_recipe()` drops side-inputs. `server/chain.py`
+  reimplements the ~40 lines of two-sided insert-at-position checking from
+  `UI/workspaces/analyse/builder.py` over the untouched `check_step_compatibility`.
+- **Decimation fast path.** The verbatim `_minmax_decimate` measures 35 ms on a full channel on
+  this machine (its docstring says 12 ms on the machine it was written on). An equal-width
+  reshape+argmin/argmax path with identical per-bucket semantics measures 12–14 ms and is used
+  for NaN-free input; a NaN-aware fallback handles Scores (matrix profile NaN tail → JSON null).
+  The verbatim copy stays in `server/decimate.py` for attribution and equivalence checks.
+- **Cancel is honest.** The core polls `should_cancel` once before each step; the UI says so
+  ("cancel checks between steps") and shows the step that never started as `cancelled`.
+- **Progress is per step.** The core gives `on_progress(i, n, stage, algorithm)` and
+  `on_step_result`; there is no within-step fraction (except window_matrix's own callback).
+  The running row shows an indeterminate bar + elapsed, not a fake percentage.
+- **Reload mid-run.** Jobs live in server memory; the SSE endpoint replays a job's whole event
+  history to a late subscriber, and `GET /api/runs/{job}` gives a snapshot. The client stores the
+  last job id in sessionStorage and re-attaches. A client disconnect never cancels.
+- **Header chips are real.** "N need you" = failed jobs in this server session; "Jobs · N" =
+  running jobs; "M4 held out" = `HELD_OUT_RECORDING_FILE`. Placeholder numbers were not copied.
+- **Fonts** load from Google Fonts (Inter, Geist Mono) with system fallbacks; offline the page
+  degrades to the fallback stack.
+- **TypeScript `noUnusedLocals/Parameters` relaxed** in `tsconfig.app.json` so the two parallel
+  builders do not fail the build on a stray import; recorded here as a deliberate loosening.
+- **Two parallel builder agents** own `client/src/explore/` and `client/src/analyse/`; shared
+  files (api.ts, state.tsx, charts/, shell/, theme.css, server/) are read-only for them and they
+  return change requests instead. Their friction reports are stack evidence for REPORT.md.
+- **Smoke test** is `A-react-fastapi/smoke.py` (conda python + Playwright): fails on console/page
+  errors, unpainted panes (SVG `d` length, filled rect counts, canvas presence), unexpected server
+  tracebacks, and a broken Must flow; writes `screenshots/NN-<frame>.png` + `smoke-result.json`.
+
+## 5. Plan for Prototype B — Panel 1.9.3 + Bokeh 3.9.2 (Python-native web), drafted while A's pages were being built
+
+Why this family second: it is the incumbent and #12 says it "must win or lose on evidence"; it
+is the other side of fork F2 (Python UI in-process vs JS UI over a transport). Nothing to
+install. NiceGUI/Dash would need a venv install and are the same family; Panel answers the
+question the project actually has.
+
+Architecture (`ui-prototypes/B-panel/`):
+- **Reuses A's UI-free service modules in-process** (`../A-react-fastapi/server/{runtime,decimate,
+  serialize,chain,corpus,runs}.py` imported by path): the same runtime isolation, the same seven-type
+  payload seam, the same run manager. B therefore measures the *frontend* difference only — the
+  bridge cost that A pays (HTTP + SSE + JSON) is replaced by direct calls, which is the honest
+  comparison: same core, same seam, two renderers.
+- **Shell**: `pn.template` is NOT used (its chrome fights the 64 px rail / header design). A raw
+  `pn.Column` page with `pn.pane.HTML` for the rail/header/chips/badges and
+  `pn.config.raw_css` for the token sheet (the same tokens as A's theme.css). Workspace routing
+  via a `param` state object + `pn.state.location` hash sync.
+- **Plots**: Bokeh `figure`s directly (no HoloViews `DynamicMap` — the documented silent-failure
+  trap). Chain rows share ONE `x_range` object (Bokeh range linking = the shared time axis); a
+  `CrosshairTool` with `dimensions="height"` linked across figures for the hover crosshair.
+  Envelopes are `line` glyphs over the same decimated payloads. Explore signal viewport: a
+  `RangesUpdate`/`x_range.on_change` callback re-fetches the envelope per viewport (throttled).
+- **Draggable threshold**: Bokeh has no draggable `Span`; B uses a 1-point `ColumnDataSource`
+  with `PointDrawTool` restricted to y (drag the handle, `on_change("data")` writes the param) plus
+  a `Span` following it — a known Bokeh idiom; the friction of it is evidence.
+- **Runs**: `RunManager` threads + `pn.state.add_periodic_callback(200 ms)` polling the job
+  snapshot (in-process, no transport); cancel = the same `threading.Event`.
+- **Loud failure**: Panel logs callback exceptions server-side and leaves the pane as it was.
+  B adds a global `pn.state.onload` error hook and wraps every renderer in a `try/except` that
+  swaps in an error `pn.pane.HTML` — and the critique measures whether a *thrown* renderer error
+  without that wrapper shows anywhere (the historical failure).
+- **Smoke test**: the same `smoke.py` shape with Panel's shadow-DOM-aware selectors
+  (`docs/UI_VERIFICATION.md` findings: pierce with Playwright locators; assert canvas ink).
+- Budget: B is built by one builder agent with the same checklist, then two critique rounds.
+
+## 6. Integration of A's pages (2026-09-15, ~00:40–01:40)
+
+Two builders (Explore, Analyse) returned in parallel after ~44 min; zero page errors on their
+own Playwright walks; 3,604 lines under `client/src/{explore,analyse}` (18 + 18 files). Their
+friction reports are quoted in REPORT.md as evidence. Change requests I applied:
+
+- `server/runs.py`: the recipe's short hash is computed when the job starts, so a **failed** run
+  carries it (frame chain-1f "recipe a7f39c").
+- `server/corpus.py` + `api.ts`: `/api/recordings` now returns `held_out_reason` for M4, so the
+  corpus locked card and the signal page show the server's refusal **without making any request
+  for M4 data** (previously the corpus page probed one M4 channel to obtain the 423 text, which
+  also logged a Chrome "Failed to load resource" console line that the smoke gate counted).
+- `state.tsx fmtAxis`: hours since recording start with span-adaptive decimals (spec §0 canon);
+  only spans ≤ 15 min fall back to absolute seconds (what frame chain-1 shows for 50 s).
+- `charts/primitives.tsx YLabels`: adaptive digits (a 60 s viewport spans ~0.0005 mV), no pointer
+  events (bands underneath stay clickable), white halo.
+- `theme.css .btn { flex: none }`, toasts cleared on hashchange, Vite `server.host = 127.0.0.1`
+  (Vite 8 bound only `::1` on this machine — both builders lost a curl to it).
+- Builtin `gramian` template renamed to say it needs a span ≤ 5000 samples (the core's
+  `max_span_samples` refuses the 2 h example; the UI shows the over-ceiling card).
+- Rejected: the "verdict filter leaks into detections" report was live-data drift (the other
+  builder's runs were writing detections to CH4 in the shared DB copy); identical counts at the
+  same instant.
+- Not done (recorded for the report): a discriminated-union `RunEvent` type (the analyse store
+  carries ~8 casts), `staleFrom` in the shared `ChainDraft`, per-card estimates in the insert
+  modal (needs a hypothetical-recipe estimate endpoint), motif *pairs* from the core's matrix
+  profile indices (the client infers M1a/M1b from equal profile values).
+
+Smoke run 1 (before these fixes): 27/30 checks green; the three reds were the overview path
+test-id, the modal disabled-card heuristic, and the M4 423 console line — all addressed above.

@@ -116,6 +116,9 @@ class RunManager:
     # ---------------------------------------------------------------- start --
     def start(self, recipe: dict, recording: dict, px: int = 1200) -> Job:
         job = Job(recipe, recording, px)
+        # the recipe's short hash is known before the run, so a FAILED run still
+        # carries it (frame chain-1f: "adapter … · recipe a7f39c · traceback in log")
+        job.config_hash = chain_mod.hashes(recipe)["config_hash"]
         with self._lock:
             self.jobs[job.id] = job
         conn = init_db(self.db_path)

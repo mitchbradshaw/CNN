@@ -232,7 +232,7 @@ def create_app(rt: Runtime) -> FastAPI:
                            {"stage": "catalogue", "algorithm": "cluster", "params": {"k": 3}},
                            {"stage": "catalogue", "algorithm": "classifier", "params": {"n_estimators": 50},
                             "side_inputs": {"windows": {"source_kind": "earlier_step", "step_index": 0}}}]},
-                {"id": "builtin:gramian", "name": "gramian · Baseline → Gramian GASF image", "builtin": True,
+                {"id": "builtin:gramian", "name": "gramian · Baseline → Gramian GASF image (needs a span ≤ 5000 samples)", "builtin": True,
                  "steps": [{"stage": "preprocessing", "algorithm": "detrend", "params": {"mode": "rolling_mean", "window_s": 600.0}},
                            {"stage": "catalogue", "algorithm": "gramian_gasf", "params": {}}]},
             ]

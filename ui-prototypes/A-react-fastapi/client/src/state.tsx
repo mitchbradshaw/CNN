@@ -100,9 +100,14 @@ export function fmtDuration(s: number) {
   if (s < 3600 * 2) return `${(s / 60).toFixed(1)} min`
   return `${(s / 3600).toFixed(1)} h`
 }
-/** Axis label for absolute time t (s) inside a window of length span (s). */
+/** Axis label for absolute time t (s) inside a window of length span (s).
+ *  Spec §0: time is displayed as hours since recording start ("192.40 h"), with decimals
+ *  adaptive to the span; only very short spans (≤ 15 min) fall back to absolute seconds,
+ *  which is what frame chain-1 shows for its 50 s example ("825 s … 875 s"). */
 export function fmtAxis(t: number, span: number) {
-  if (span <= 3600) return `${Math.round(t)} s`
-  if (span <= 36 * 3600) return `${(t / 3600).toFixed(2)} h`
-  return `${Math.round(t / 3600)} h`
+  if (span <= 900) return `${Math.round(t)} s`
+  const h = t / 3600
+  if (span <= 3 * 3600) return `${h.toFixed(3)} h`
+  if (span <= 36 * 3600) return `${h.toFixed(2)} h`
+  return `${Math.round(h)} h`
 }

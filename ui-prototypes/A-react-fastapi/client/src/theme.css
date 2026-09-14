@@ -102,7 +102,7 @@ svg text { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-strong);
-       background: var(--card); color: var(--text); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+       background: var(--card); color: var(--text); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; flex: none; }
 .btn:hover { background: #f9fafb; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }

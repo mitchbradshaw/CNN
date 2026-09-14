@@ -78,7 +78,16 @@ export function CrosshairLayer({ x, height, children }: { x: XScale; height: num
   )
 }
 
-/** Small y-axis labels at the left (e.g. "+0.4 mV / 0 / −0.4 mV"). */
-export function YLabels({ y, values, x = 4, unit = '' }: { y: XScale; values: number[]; x?: number; unit?: string }) {
-  return <g>{values.map(v => <text key={v} x={x} y={y(v) + 3}>{(v > 0 ? '+' : '') + (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : +v.toFixed(3))}{unit ? ' ' + unit : ''}</text>)}</g>
+/** Small y-axis labels at the left (e.g. "+0.4 mV / 0 / −0.4 mV"). Digits adapt to the
+ *  scale's range (a 60 s viewport spans ~0.0005 mV) unless `digits` is given; the group never
+ *  intercepts pointer events (bands underneath stay clickable) and text carries a white halo. */
+export function YLabels({ y, values, x = 4, unit = '', digits }: { y: XScale; values: number[]; x?: number; unit?: string; digits?: number }) {
+  const [d0, d1] = y.domain()
+  const range = Math.abs(d1 - d0) || 1
+  const nd = digits ?? Math.min(6, Math.max(2, Math.ceil(-Math.log10(range)) + 2))
+  return (
+    <g pointerEvents="none" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' }}>
+      {values.map(v => <text key={v} x={x} y={y(v) + 3}>{(v > 0 ? '+' : '') + (v === 0 ? '0' : v.toFixed(nd))}{unit ? ' ' + unit : ''}</text>)}
+    </g>
+  )
 }

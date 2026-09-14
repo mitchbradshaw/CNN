@@ -1,14 +1,14 @@
-/* Analyse workspace entry — routes #/analyse/chain and #/analyse/block/<index>.
-   STUB: replaced by the Analyse builder (ChainPage.tsx, BlockPage.tsx, InsertStageModal.tsx, Renderer.tsx, useRun.ts). */
-import { Header } from '../shell/Header'
+/* Analyse workspace entry — routes #/analyse/chain and #/analyse/block/<index>. */
+import './analyse.css'
 import { useApp } from '../state'
+import { BlockPage } from './BlockPage'
+import { ChainPage } from './ChainPage'
 
 export function AnalysePage() {
   const { route } = useApp()
-  return (
-    <>
-      <Header workspace="Analyse" page={route.page === 'block' ? 'Block' : 'Chain'} subtitle="build here · open a block to tune it" />
-      <div className="page"><div className="page-inner"><div className="card card-pad">Analyse — to be built</div></div></div>
-    </>
-  )
+  if (route.page === 'block') {
+    const idx = Number(route.params.id)
+    return <BlockPage index={Number.isFinite(idx) ? idx : 0} />
+  }
+  return <ChainPage />
 }

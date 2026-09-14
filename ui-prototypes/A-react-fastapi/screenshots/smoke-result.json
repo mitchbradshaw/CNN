@@ -1,0 +1,170 @@
+{
+  "failures": [],
+  "browser_errors": [],
+  "evidence": {
+    "heatmap_cells": 912,
+    "heatmap_distinct_fills": 5,
+    "envelope_path_lengths": [
+      28996,
+      33073
+    ],
+    "span_bands": 4,
+    "zoom_stats": [
+      {
+        "seq": 1,
+        "t0": 995040,
+        "t1": 1002240,
+        "px": 1304,
+        "n_points": 2880,
+        "decimate_ms": 0.7117000059224665,
+        "round_trip_ms": 8.799999982118607,
+        "paint_ms": 14.400000005960464
+      },
+      {
+        "seq": 2,
+        "t0": 996168.1605153364,
+        "t1": 1001316.3874163145,
+        "px": 1304,
+        "n_points": 3434,
+        "decimate_ms": 2.3241000017151237,
+        "round_trip_ms": 25,
+        "paint_ms": 9.199999988079071
+      },
+      {
+        "seq": 3,
+        "t0": 996974.8308366804,
+        "t1": 1000655.9753122295,
+        "px": 1304,
+        "n_points": 3682,
+        "decimate_ms": 0.5750000127591193,
+        "round_trip_ms": 15.099999994039536,
+        "paint_ms": 6.799999982118607
+      },
+      {
+        "seq": 4,
+        "t0": 997551.6255378698,
+        "t1": 1000183.7598455653,
+        "px": 1304,
+        "n_points": 2634,
+        "decimate_ms": 0.3939000016544014,
+        "round_trip_ms": 21.5,
+        "paint_ms": 15.300000011920929
+      },
+      {
+        "seq": 5,
+        "t0": 997964.0519263427,
+        "t1": 999846.1109054906,
+        "px": 1304,
+        "n_points": 1883,
+        "decimate_ms": 0.2896999940276146,
+        "round_trip_ms": 20.600000023841858,
+        "paint_ms": 16.19999998807907
+      },
+      {
+        "seq": 6,
+        "t0": 998258.9497913162,
+        "t1": 999604.6812726601,
+        "px": 1304,
+        "n_points": 1347,
+        "decimate_ms": 0.1813999842852354,
+        "round_trip_ms": 7.700000017881393,
+        "paint_ms": 12.399999976158142
+      },
+      {
+        "seq": 7,
+        "t0": 998469.8110581909,
+        "t1": 999432.0514767669,
+        "px": 1304,
+        "n_points": 964,
+        "decimate_ms": 0.1894999877549708,
+        "round_trip_ms": 5.9000000059604645,
+        "paint_ms": 8.099999994039536
+      },
+      {
+        "seq": 8,
+        "t0": 998620.5835090935,
+        "t1": 999308.6157324438,
+        "px": 1304,
+        "n_points": 689,
+        "decimate_ms": 0.14139999984763563,
+        "round_trip_ms": 91.69999998807907,
+        "paint_ms": 11.699999988079071
+      },
+      {
+        "seq": 9,
+        "t0": 998728.3905629355,
+        "t1": 999220.3552852954,
+        "px": 1304,
+        "n_points": 493,
+        "decimate_ms": 0.13699999544769526,
+        "round_trip_ms": 20.099999994039536,
+        "paint_ms": 15.099999994039536
+      },
+      {
+        "seq": 10,
+        "t0": 998803.8452749539,
+        "t1": 999295.8099973138,
+        "px": 1304,
+        "n_points": 493,
+        "decimate_ms": 0.1689000055193901,
+        "round_trip_ms": 5.5,
+        "paint_ms": 14
+      }
+    ],
+    "zoom_round_trip_ms": {
+      "min": 5.5,
+      "max": 91.69999998807907,
+      "median": 20.099999994039536
+    },
+    "run_wall_s": 31.94,
+    "badges_after_run": [
+      "cached",
+      "cached",
+      "cached"
+    ],
+    "row_plots": [
+      "path",
+      "path",
+      "path"
+    ],
+    "badges_after_edit": [
+      "cached",
+      "cached",
+      "stale"
+    ],
+    "badges_after_rerun": [
+      "cached \u00b7 0 s",
+      "cached \u00b7 0 s",
+      "cached"
+    ],
+    "badge_titles_after_rerun": [
+      "restored from the prefix cache (core step time 0.0 s)",
+      "restored from the prefix cache (core step time 0.0 s)",
+      "core step time 0.000 s"
+    ],
+    "server_log_error_lines": [
+      "2026-09-15 04:31:25,598 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
+    ]
+  },
+  "screenshots": [
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\01-explore-1-corpus.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\02-explore-1-corpus-colour-by.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\03-explore-1-corpus-selected.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\04-explore-2-signal.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\05-explore-2-signal-zoomed.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\06-explore-2-signal-motif.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\07-explore-m4-held-out.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\08-chain-1-chain-before-run.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\09-chain-2-insert-stage.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\10-chain-1-chain-completed.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\11-chain-7b-block-threshold.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\12-chain-7b-block-threshold-dragged.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\13-chain-1-chain-suffix-rerun.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\14-chain-1b-run-history.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\15-chain-1e-invalid-junction.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\16-chain-1f-failed-block.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\17-chain-1d-running.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\18-chain-cancelled.png",
+    "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\A-react-fastapi\\screenshots\\19-loud-failure-render-error.png"
+  ]
+}
