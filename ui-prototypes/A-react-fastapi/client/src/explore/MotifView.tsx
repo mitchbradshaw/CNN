@@ -7,7 +7,7 @@ import { makeX, makeY } from '../charts/scale'
 import { useSize } from '../charts/useSize'
 import { ErrorCard } from './ErrorCard'
 import { MvLabels } from './MvLabels'
-import { asApiError, fmtSecs, relativeTicks, vRange, type Motif } from './util'
+import { asApiError, envelopeOk, fmtSecs, MALFORMED_WINDOW, relativeTicks, vRange, type Motif } from './util'
 
 const H = 96, AXIS_H = 20
 const CONTEXTS = [10, 20, 60]
@@ -26,11 +26,13 @@ export function MotifView({ ch, motif, onSend }: { ch: Channel; motif: Motif | n
     if (!motif || widthKey <= 0) return
     let alive = true
     setErr(null)
-    getWindow(ch.id, t0, t1, widthKey * 50).then(w => { if (alive) setWin({ data: w, key }) }).catch(e => { if (alive) setErr(asApiError(e)) })
+    getWindow(ch.id, t0, t1, widthKey * 50)
+      .then(w => { if (!alive) return; if (!envelopeOk(w?.envelope)) { setErr(MALFORMED_WINDOW); return } setWin({ data: w, key }) })   // shape guard (critique r1)
+      .catch(e => { if (alive) setErr(asApiError(e)) })
     return () => { alive = false }
   }, [key, ch.id, t0, t1, widthKey, motif])
 
-  const cur = win && win.key === key ? win.data : null
+  const cur = win && win.key === key && envelopeOk(win.data?.envelope) ? win.data : null
   const x = makeX(t0, t1, W)
   const range = (cur && vRange(cur.envelope.v)) ?? ch.y_range
   const y = makeY(range[0], range[1], H, 8, 8)
@@ -50,7 +52,7 @@ export function MotifView({ ch, motif, onSend }: { ch: Channel; motif: Motif | n
             {CONTEXTS.map(c => <option key={c} value={c}>±{c} s</option>)}
           </select>
         </span>
-        <label className="checkbox inert" title="Library medoids are out of slice scope"><input type="checkbox" disabled /> overlay F-03 medoid</label>
+        <label className="checkbox inert" title="library medoids are out of slice scope · no families exist in this database" data-testid="medoid-overlay"><input type="checkbox" disabled aria-disabled /> overlay family medoid · no families in this database</label>
       </div>
       {err && <ErrorCard error={err} title="motif window failed" />}
       <div className="ex-plot" ref={ref} style={{ height: H + AXIS_H }}>
@@ -76,7 +78,7 @@ export function MotifView({ ch, motif, onSend }: { ch: Channel; motif: Motif | n
       <div className="ex-motif-foot">
         <span className="fam" data-testid="motif-footer">nearest family — · tagged {motif?.tag ?? '—'} · {motif ? (motif.kind === 'annotated' ? (motif.verdict ?? 'unadjudicated') : 'unadjudicated') : '—'}</span>
         <span className="row">
-          <button className="btn" disabled={!motif} onClick={() => motif && onSend(motif)} data-testid="send-motif">Send motif to Analyse →</button>
+          <button className="btn" disabled={!motif} title={motif ? 'send this motif to Analyse as the chain source' : 'select a motif first'} onClick={() => motif && onSend(motif)} data-testid="send-motif">Send motif to Analyse →</button>
           <button className="btn primary inert" title="Review is out of slice scope" aria-disabled>Review this motif →</button>
         </span>
       </div>

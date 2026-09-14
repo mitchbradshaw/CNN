@@ -277,3 +277,40 @@ friction reports are quoted in REPORT.md as evidence. Change requests I applied:
 
 Smoke run 1 (before these fixes): 27/30 checks green; the three reds were the overview path
 test-id, the modal disabled-card heuristic, and the M4 423 console line — all addressed above.
+
+## 7. P0 from critique round 1 — a stray file in the REAL DATA (2026-09-14 23:05:59 +10:00)
+
+`DATA/derived/models/catalogue_classifier_153815b9dea451b2.joblib` (13,986 B) was written into the
+real data tree through the junction **before any server/runtime redirect existed** (first runtime
+dir 23:33:39). Cause: during the read-only "understand" phase, the *adapters* reader subagent
+called `catalogue.classifier`'s `spec.run` directly on a synthetic 6-window set to time it; that
+adapter writes its joblib from inside its run body (`MODEL_ROOT = DATA/derived/models`), which
+the reader's brief ("read-only; write scratch only under the scratchpad") did not anticipate. My
+mid-way check covered only `DATA/db/*.sqlite` and `DATA/derived/step_cache/` (the two paths the
+task brief named), so it did not catch this.
+
+Consequences and handling:
+- Nothing existing was modified: it is one additive file, not a change to any recording, annotation
+  or cache. The DB and step cache mtimes are unchanged (verified again at the round-1 critique).
+- **I have not deleted it** (hard rule 5: never delete anything under `DATA/`). It is reported in
+  REPORT.md and in the issue comment for the user to remove (or keep) by hand.
+- The closing check is extended to every file under `DATA/` (not only db + step_cache) and to
+  `Results/`, using `find -newer DATA_MTIMES_START.txt`.
+- `server/runtime.py` now asserts after setup that every adapter-level writable path is under the
+  runtime dir, so a future refactor of an adapter's module constant fails fast rather than silently
+  writing into DATA.
+- Lesson recorded for the report: any agent that *executes* an adapter — even "just to time it" —
+  must run with the same redirects as the server, or under `Working.config` overrides; "read-only"
+  in a brief is not enforced by the core.
+
+## 8. Critique round 1 → fixes (2026-09-15, ~04:30–09:30)
+
+Findings: 42 (1 P0, 11 P1, 30 P2) — summarised in REPORT.md §4; full JSON in the session
+scratchpad. Server + shell fixes were applied by me and verified through the API (sidecar meta on
+cached re-runs, 422 on over-ceiling runs, db_run_id on failures, hash normalisation, 2·px cap,
+423 on held-out history, 422 on inverted windows). Client fixes were split between two fixer
+agents by directory; **both were cut off by the account's session usage limit after ~8.5 min**
+(the Explore fixer had applied most of its list and left one type error, which I repaired; the
+Analyse fixer had finished only the store's liveness/polling fallback). They were relaunched from
+the on-disk state with "read your directory's diff first". Recorded as orchestration friction:
+a wall-clock usage cap, not the stack, was the largest single delay of the night.

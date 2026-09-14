@@ -5,7 +5,7 @@ import { useApp } from '../state'
 export interface HeaderSpec { workspace: string; page: string; subtitle?: string }
 
 export function Header({ workspace, page, subtitle }: HeaderSpec) {
-  const { needYou } = useApp()
+  const { needYou, bridgeDown } = useApp()
   return (
     <header className="hdr" data-testid="header">
       <div className="hdr-left">
@@ -15,8 +15,9 @@ export function Header({ workspace, page, subtitle }: HeaderSpec) {
         {subtitle && <span className="hdr-sub mono">{subtitle}</span>}
       </div>
       <div className="hdr-right">
-        <div className="hdr-search mono" role="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg><span>Search spans, runs, families</span><kbd>Ctrl K</kbd></div>
-        <span className={`chip ${needYou ? 'blue' : 'grey'}`} title="runs in this session that failed or need a decision">● {needYou} need you</span>
+        <div className="hdr-search mono" role="search" aria-disabled="true" title="global search · out of slice scope" style={{ opacity: 0.7, cursor: 'not-allowed' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg><span>Search spans, runs, families</span><kbd>Ctrl K</kbd></div>
+        {bridgeDown && <span className="chip red" title="the FastAPI bridge did not answer the last poll; retrying every 5 s">bridge unreachable</span>}
+        <span className={`chip ${needYou ? 'blue' : 'grey'}`} title="runs started from this browser tab that failed (the frame's chip means Review items, which are out of slice scope)">● {needYou} need you</span>
         <span className="chip grey" title="M4_aug_concat_fs1.mat is held out (D6): every workspace refuses it"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg> M4 held out</span>
       </div>
       <style>{`

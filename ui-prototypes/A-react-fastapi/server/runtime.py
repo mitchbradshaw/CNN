@@ -74,6 +74,14 @@ class Runtime:
         _mp.RESULTS_DIR = os.path.join(self.results_dir, "matrix_profile")
         _wm.RESULTS_DIR = os.path.join(self.results_dir, "window_matrix")
         _cc.MODEL_ROOT = self.models_dir
+        self.meta_dir = os.path.join(self.dir, "meta")
+        os.makedirs(self.meta_dir, exist_ok=True)
+        # Critique r1 P0: an adapter executed outside these redirects writes into the real DATA
+        # tree. Assert every writable path the adapters read at call time is inside this runtime.
+        for label, p in (("STEP_CACHE_ROOT", cfg.STEP_CACHE_ROOT), ("matrix_profile.RESULTS_DIR", _mp.RESULTS_DIR),
+                         ("window_matrix.RESULTS_DIR", _wm.RESULTS_DIR), ("classifier.MODEL_ROOT", _cc.MODEL_ROOT)):
+            if not os.path.abspath(p).lower().startswith(os.path.abspath(self.dir).lower()):
+                raise SystemExit(f"refusing to start: {label} = {p} is outside the runtime dir {self.dir}")
         return self
 
     def describe(self) -> dict:
@@ -85,6 +93,7 @@ class Runtime:
             "results_dir": self.results_dir,
             "models_dir": self.models_dir,
             "log_path": self.log_path,
+            "meta_dir": getattr(self, "meta_dir", None),
             "held_out_file": HELD_OUT_FILE,
             "cwd": os.getcwd(),
         }

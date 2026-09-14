@@ -1,7 +1,7 @@
 /* Local helpers for the Explore workspace. Nothing here duplicates api.ts, state.tsx or charts/ —
    these are the bits the shared layer does not offer (hour-based axis ticks, verdict colours,
    the motif list built from a Spans payload, view clamping). */
-import { ApiError, type Spans } from '../api'
+import { ApiError, type Envelope, type Spans } from '../api'
 
 export const MIN_SPAN_S = 60
 
@@ -29,6 +29,35 @@ export function rampIndex(count: number, max: number): number {
   if (!(count > 0) || !(max > 0)) return 0
   return Math.min(5, Math.max(1, Math.ceil((count / max) * 5)))
 }
+
+/** Quantile-rank ramp (critique r1: a linear count/max ramp collapsed the map to one shade once a
+ *  single hot cell existed). Level 1–5 is the percentile rank of a cell among the NON-ZERO cells of
+ *  the drawn matrix — mid-rank for ties, so a near-uniform matrix sits mid-blue and its small
+ *  differences move cells up or down; zero stays level 0 ("no spans"). */
+export function quantileRamp(values: number[]): (count: number) => number {
+  const nz = values.filter(v => v > 0).sort((p, q) => p - q)
+  const n = nz.length
+  return (count: number) => {
+    if (!(count > 0) || n === 0) return 0
+    let lo = 0, hi = n                       // lower bound: values strictly below count
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (nz[mid] < count) lo = mid + 1; else hi = mid }
+    let up = lo                              // upper bound: values ≤ count
+    while (up < n && nz[up] === count) up++
+    return 1 + Math.min(4, Math.floor((5 * (lo + up)) / (2 * n)))
+  }
+}
+
+/* ---- payload shape guards (critique r1: a malformed 200 must land in an ErrorCard, not a render throw) ---- */
+export function envelopeOk(e: unknown): e is Envelope {
+  const x = e as Envelope | null
+  return !!x && Array.isArray(x.t) && Array.isArray(x.v)
+}
+export function spansOk(s: unknown): s is Spans {
+  const x = s as Spans | null
+  return !!x && Array.isArray(x.annotations) && Array.isArray(x.detections)
+}
+export const MALFORMED_WINDOW = new ApiError(0, 'malformed window payload: envelope.t / envelope.v are not arrays')
+export const MALFORMED_SPANS = new ApiError(0, 'malformed spans payload: annotations / detections are not arrays')
 
 export function asApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e

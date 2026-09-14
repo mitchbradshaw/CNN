@@ -5,7 +5,7 @@
    stack decision): server decimate_ms, round_trip_ms, and paint_ms (rAF after the state commit). */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSpans, getWindow, type ApiError, type Channel, type Spans, type WindowData } from '../api'
-import { asApiError, clampView, MIN_SPAN_S } from './util'
+import { asApiError, clampView, envelopeOk, MALFORMED_SPANS, MALFORMED_WINDOW, MIN_SPAN_S, spansOk } from './util'
 
 export interface ZoomStat { seq: number; t0: number; t1: number; px: number; n_points: number; decimate_ms: number; round_trip_ms: number; paint_ms: number }
 declare global { interface Window { __zoomStats?: ZoomStat[] } }
@@ -39,10 +39,16 @@ export function useViewport(ch: Channel, initial: () => [number, number], width:
       const px = Math.round(width)
       setFetching(true)
       getWindow(ch.id, t0, t1, px)
-        .then(w => { if (my !== seq.current) return; setWin({ data: w, view: [t0, t1], px, tCommit: performance.now(), seq: my }); setFetching(false); setError(null) })
+        .then(w => {
+          if (my !== seq.current) return
+          setFetching(false)
+          // shape guard (critique r1): a 200 with a malformed envelope lands in the ErrorCard, never in a render throw
+          if (!envelopeOk(w?.envelope)) { setError(MALFORMED_WINDOW); return }
+          setWin({ data: w, view: [t0, t1], px, tCommit: performance.now(), seq: my }); setError(null)
+        })
         .catch(e => { if (my !== seq.current) return; setFetching(false); setError(asApiError(e)) })
       getSpans(ch.id, t0, t1)
-        .then(s => { if (my === seq.current) setSpans(s) })
+        .then(s => { if (my !== seq.current) return; if (!spansOk(s)) { setError(MALFORMED_SPANS); return } setSpans(s) })
         .catch(e => { if (my === seq.current) setError(asApiError(e)) })
     }, DEBOUNCE_MS)
     return () => window.clearTimeout(id)

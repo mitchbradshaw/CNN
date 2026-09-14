@@ -115,6 +115,8 @@ def _scores(value, meta, ctx):
         counts, edges = np.histogram(finite, bins=40)
         hist = {"counts": counts.tolist(), "edges": edges.tolist()}
     m = meta.get("m") if meta else None
+    if not m and ctx.get("params", {}).get("window_min"):
+        m = int(round(float(ctx["params"]["window_min"]) * 60 * fs))   # matrix_profile: window_min is minutes
     return {
         "type": "scores", "fs": fs, "n": n, "t0_s": ss / fs, "t1_s": (ss + n) / fs,
         "nan_tail": nan_tail, "value_range": _finite_range(vals), "envelope": env,

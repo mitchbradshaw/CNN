@@ -40,7 +40,13 @@ interface AppState {
   setLiveJobs: (n: number) => void
   needYou: number
   setNeedYou: (n: number) => void
+  bridgeDown: boolean
+  setBridgeDown: (b: boolean) => void
 }
+
+/** Job ids started from THIS browser tab (sessionStorage), so header counts are scoped to the user. */
+export function myJobIds(): number[] { return load<number[]>('myjobs', []) }
+export function rememberMyJob(id: number) { const xs = myJobIds(); if (!xs.includes(id)) save('myjobs', [...xs, id].slice(-200)) }
 
 const Ctx = createContext<AppState | null>(null)
 
@@ -66,6 +72,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [explore, setExploreState] = useState<AppState['explore']>(() => load('explore', { file: null, channelId: null, view: null, colourBy: 'both' }))
   const [liveJobs, setLiveJobs] = useState(0)
   const [needYou, setNeedYou] = useState(0)
+  const [bridgeDown, setBridgeDown] = useState(false)
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash(window.location.hash))
@@ -74,7 +81,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  const setSource = useCallback((s: SourceSpan | null) => { setSourceState(s); save('source', s) }, [])
+  const setSource = useCallback((s: SourceSpan | null) => {
+    setSourceState(prev => {
+      const changed = !prev || !s || prev.recording_id !== s.recording_id || prev.start_idx !== s.start_idx || prev.end_idx !== s.end_idx
+      if (changed) {
+        // a new source has no run and nothing stale (critique r1: the stale index leaked across sources)
+        try { sessionStorage.removeItem(`${SS_KEY}:analyse:staleFrom`) } catch { /* ignore */ }
+        setChainState(c => { const next = { ...c, lastRunJobId: null }; save('chain', next); return next })
+      }
+      return s
+    })
+    save('source', s)
+  }, [])
   const setChain = useCallback((c: ChainDraft | ((prev: ChainDraft) => ChainDraft)) => {
     setChainState(prev => { const next = typeof c === 'function' ? c(prev) : c; save('chain', next); return next })
   }, [])
@@ -82,8 +100,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setExploreState(prev => { const next = { ...prev, ...patch }; save('explore', next); return next })
   }, [])
 
-  const value = useMemo<AppState>(() => ({ route, source, setSource, chain, setChain, explore, setExplore, liveJobs, setLiveJobs, needYou, setNeedYou }),
-    [route, source, setSource, chain, setChain, explore, setExplore, liveJobs, needYou])
+  const value = useMemo<AppState>(() => ({ route, source, setSource, chain, setChain, explore, setExplore, liveJobs, setLiveJobs, needYou, setNeedYou, bridgeDown, setBridgeDown }),
+    [route, source, setSource, chain, setChain, explore, setExplore, liveJobs, needYou, bridgeDown])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
@@ -105,8 +123,8 @@ export function fmtDuration(s: number) {
  *  adaptive to the span; only very short spans (≤ 15 min) fall back to absolute seconds,
  *  which is what frame chain-1 shows for its 50 s example ("825 s … 875 s"). */
 export function fmtAxis(t: number, span: number) {
-  if (span <= 900) return `${Math.round(t)} s`
   const h = t / 3600
+  if (span <= 20 * 60) return `${h.toFixed(4)} h`
   if (span <= 3 * 3600) return `${h.toFixed(3)} h`
   if (span <= 36 * 3600) return `${h.toFixed(2)} h`
   return `${Math.round(h)} h`

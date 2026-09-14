@@ -59,7 +59,7 @@ def recordings(conn) -> list[dict]:
             "source_file": sf, "fs": fs, "n_samples": n, "duration_h": n / fs / 3600.0,
             "n_channels": len(chans), "held_out": sf == HELD_OUT_FILE,
             "held_out_reason": (f"{HELD_OUT_FILE} is held out (spec §0 D6 / Working.config.HELD_OUT_RECORDING_FILE); "
-                                "every workspace refuses it — no data request is made") if sf == HELD_OUT_FILE else None,
+                                "the bridge refuses every request for it and the pages never draw it") if sf == HELD_OUT_FILE else None,
             "channels": [{"id": c["id"], "channel": c["channel"],
                           "name": channel_name(sf, c["channel"], len(chans)),
                           "npy_exists": os.path.isfile(c["npy_path"])} for c in chans],

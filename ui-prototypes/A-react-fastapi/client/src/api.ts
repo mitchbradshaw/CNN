@@ -124,19 +124,26 @@ export const getRunLog = (jobId: number) => req<{ job_id: number; lines: string[
 export const listRuns = (recording_id?: number, limit = 30) => req<{ db_runs: DbRun[]; jobs: JobSnapshot[] }>(`/api/runs?limit=${limit}${recording_id ? `&recording_id=${recording_id}` : ''}`)
 export const exportRun = (jobId: number) => req<{ path: string; bytes: number }>(`/api/runs/${jobId}/export`)
 
-/** Subscribe to a run's SSE stream. Late subscribers get the full replay. Returns an unsubscribe fn. */
-export function subscribeRun(jobId: number, onEvent: (e: RunEvent) => void, onError?: (e: Event) => void): () => void {
+/** Subscribe to a run's SSE stream. Late subscribers get the full replay. Returns an unsubscribe fn.
+ *  `onError` fires with a typed reason for a transport error AND for an unparseable frame (critique r1:
+ *  a corrupt frame must never leave the page "computing" forever); `isOpen()` lets a store poll as a
+ *  liveness fallback while the socket is not OPEN. */
+export interface SseHandle { close: () => void; isOpen: () => boolean }
+export function subscribeRun(jobId: number, onEvent: (e: RunEvent) => void, onError?: (reason: string) => void): SseHandle {
   const es = new EventSource(`/api/runs/${jobId}/events`)
   const handler = (ev: MessageEvent) => {
     try {
       const data = JSON.parse(ev.data) as RunEvent
       onEvent({ ...data, event: (ev.type as RunEvent['event']) })
       if (ev.type === 'run_end') es.close()
-    } catch (err) { console.error('bad SSE payload', err, ev.data) }
+    } catch (err) {
+      console.error('bad SSE payload', err, ev.data)
+      onError?.(`run stream unreadable (${err instanceof Error ? err.message : String(err)})`)
+    }
   }
   for (const name of ['hello', 'step_start', 'step_done', 'run_end', 'cancel_requested']) es.addEventListener(name, handler as EventListener)
-  es.onerror = (e) => { if (onError) onError(e) }
-  return () => es.close()
+  es.onerror = () => { onError?.(es.readyState === EventSource.CLOSED ? 'run stream closed' : 'run stream interrupted') }
+  return { close: () => es.close(), isOpen: () => es.readyState === EventSource.OPEN }
 }
 
 /* ---------------- the seven payload types (server/serialize.py) ---------------- */

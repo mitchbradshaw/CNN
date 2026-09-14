@@ -72,7 +72,7 @@ def adapter_card(spec) -> dict:
         "display_name": spec.display_name, "page_name": _PAGE_NAME.get(spec.name, spec.display_name),
         "description": spec.description or "",
         "input_kind": in_kind, "output_kind": spec.output_kind,
-        "signature": f"{TYPE_LABEL[in_kind]} → {TYPE_LABEL[spec.output_kind]}",
+        "signature": f"{TYPE_LABEL.get(in_kind, in_kind)} → {TYPE_LABEL.get(spec.output_kind, spec.output_kind)}",
         "category": _CATEGORY.get(spec.name, "control"),
         "has_estimate": spec.estimate is not None,
         "max_span_samples": spec.max_span_samples,
@@ -112,7 +112,7 @@ def validate(steps: list[dict]) -> dict:
         ok, reason = check_step_compatibility(producing, spec)
         expected = spec.input_kind or ROOT_SIGNAL_KIND
         junctions.append({"index": i, "ok": bool(ok), "producing": producing, "expected": expected,
-                          "reason": "" if ok else f"{_PAGE_NAME.get(spec.name, spec.display_name)} needs {TYPE_LABEL[expected]} · previous emits {TYPE_LABEL[producing]}",
+                          "reason": "" if ok else f"{_PAGE_NAME.get(spec.name, spec.display_name)} needs {TYPE_LABEL.get(expected, expected)} · previous emits {TYPE_LABEL.get(producing, producing)}",
                           "core_reason": reason})
         ok_all = ok_all and bool(ok)
         producing = spec.output_kind
@@ -144,20 +144,20 @@ def compatible_at(steps: list[dict], position: int) -> dict:
         expected = spec.input_kind or ROOT_SIGNAL_KIND
         why = ""
         if not ok:
-            why = f"needs {TYPE_LABEL[expected]} · here: {TYPE_LABEL[producing]}"
+            why = f"needs {TYPE_LABEL.get(expected, expected)} · here: {TYPE_LABEL.get(producing, producing)}"
         elif next_spec is not None:
             ok2, _ = check_step_compatibility(spec.output_kind, next_spec)
             if not ok2:
                 nexp = next_spec.input_kind or ROOT_SIGNAL_KIND
                 ok = False
-                why = f"emits {TYPE_LABEL[spec.output_kind]} · next needs {TYPE_LABEL[nexp]}"
+                why = f"emits {TYPE_LABEL.get(spec.output_kind, spec.output_kind)} · next needs {TYPE_LABEL.get(nexp, nexp)}"
         if ok and spec.name in _KNOWN_BROKEN:
             why = "fits · " + _KNOWN_BROKEN[spec.name]
         rows.append({"name": spec.name, "ok": bool(ok), "reason": why})
     n_fit = sum(1 for r in rows if r["ok"])
-    return {"position": position, "producing": producing, "producing_label": TYPE_LABEL[producing],
+    return {"position": position, "producing": producing, "producing_label": TYPE_LABEL.get(producing, producing),
             "next_requires": (next_spec.input_kind or ROOT_SIGNAL_KIND) if next_spec else None,
-            "next_requires_label": TYPE_LABEL[(next_spec.input_kind or ROOT_SIGNAL_KIND)] if next_spec else None,
+            "next_requires_label": TYPE_LABEL.get((next_spec.input_kind or ROOT_SIGNAL_KIND), (next_spec.input_kind or ROOT_SIGNAL_KIND)) if next_spec else None,
             "next_name": _PAGE_NAME.get(next_spec.name, next_spec.display_name) if next_spec else None,
             "n_fit": n_fit, "n_total": len(rows), "rows": rows,
             "stale_from": position if position < len(steps) else None}
@@ -169,10 +169,18 @@ def validated_params(step: dict) -> dict:
 
 
 def build_recipe(recording_id: int, span: tuple[int, int] | None, steps: list[dict]) -> dict:
-    return make_recipe(recording_id, [
-        {"stage": s["stage"], "algorithm": s["algorithm"], "params": s.get("params") or {},
-         "side_inputs": s.get("side_inputs") or {}} for s in steps
-    ], span=span)
+    """Params are normalised through the adapter's own ``validate_params`` (defaults filled,
+    coerced) BEFORE hashing, so a chain with an explicit default and the same chain without it
+    share one recipe hash and therefore one step-cache prefix (critique r1)."""
+    norm = []
+    for s in steps:
+        try:
+            params = get_adapter(f"{s['stage']}.{s['algorithm']}").validate_params(s.get("params") or {})
+        except KeyError:
+            params = s.get("params") or {}
+        norm.append({"stage": s["stage"], "algorithm": s["algorithm"], "params": params,
+                     "side_inputs": s.get("side_inputs") or {}})
+    return make_recipe(recording_id, norm, span=span)
 
 
 def estimate(recipe: dict, n_samples: int, fs: float) -> dict:

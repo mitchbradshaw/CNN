@@ -1,19 +1,18 @@
-/* Real-mV y labels with adaptive precision and a white halo, so a 60 s viewport whose range is
-   0.0005 mV still shows three different numbers. (charts/primitives YLabels fixes 3 decimals —
-   change request filed; this is the local stand-in.) */
+/* Real-mV y labels for the signal tiers. Rendering is the shared charts/primitives YLabels (which
+   now has adaptive digits, a white halo and pointer-events none, so labels never swallow band
+   clicks); this wrapper only chooses WHICH values to print (top / zero-or-mid / bottom) and how many
+   decimals (mvDigits: a 60 s viewport whose range is 0.0005 mV still shows three different numbers).
+   `dim` greys the labels while a viewport fetch is in flight (critique r1: stale labels read as live). */
+import { YLabels } from '../charts/primitives'
 import type { XScale } from '../charts/scale'
 import { mvDigits } from './util'
 
-export function MvLabels({ y, lo, hi, x = 4 }: { y: XScale; lo: number; hi: number; x?: number }) {
+export function MvLabels({ y, lo, hi, x = 4, dim = false }: { y: XScale; lo: number; hi: number; x?: number; dim?: boolean }) {
   const d = mvDigits(lo, hi)
-  const values = lo < 0 && hi > 0 ? [hi, 0, lo] : [hi, (lo + hi) / 2, lo]
+  const values = Array.from(new Set(lo < 0 && hi > 0 ? [hi, 0, lo] : [hi, (lo + hi) / 2, lo]))
   return (
-    <g data-testid="mv-labels" data-digits={d} pointerEvents="none">
-      {values.map((v, i) => (
-        <text key={i} x={x} y={y(v) + 3.5} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round', fill: 'var(--muted)' }}>
-          {(v > 0 ? '+' : '') + v.toFixed(d)} mV
-        </text>
-      ))}
+    <g data-testid="mv-labels" data-digits={d} data-dim={dim ? '1' : '0'} pointerEvents="none" opacity={dim ? 0.4 : 1}>
+      <YLabels y={y} values={values} x={x} unit="mV" digits={d} />
     </g>
   )
 }

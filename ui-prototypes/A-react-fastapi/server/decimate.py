@@ -130,7 +130,7 @@ def _fast_minmax(seg: np.ndarray, n_buckets: int):
     (indices, values) as interleaved polyline arrays of length 2 * buckets.
     NaN-free input only."""
     n = len(seg)
-    b = max(1, n // n_buckets)
+    b = max(1, int(np.ceil(n / n_buckets)))
     m = (n // b) * b
     y = seg[:m].reshape(-1, b)
     rows = np.arange(len(y))

@@ -7,7 +7,7 @@ import { ErrorBoundary } from './shell/ErrorBoundary'
 import { Header } from './shell/Header'
 import { NavRail } from './shell/NavRail'
 import { ToastProvider } from './shell/Toast'
-import { AppProvider, useApp } from './state'
+import { AppProvider, myJobIds, useApp } from './state'
 
 const INERT: Record<string, { page: string; subtitle: string }> = {
   discovery: { page: 'Runs', subtitle: 'apply finished recipes at scale · out of slice scope' },
@@ -34,20 +34,22 @@ function Inert({ ws }: { ws: string }) {
 }
 
 function Body() {
-  const { route, setLiveJobs, setNeedYou } = useApp()
+  const { route, setLiveJobs, setNeedYou, setBridgeDown } = useApp()
   useEffect(() => {
     let alive = true
     const tick = async () => {
       try {
         const r = await listRuns(undefined, 1)
         if (!alive) return
+        const mine = new Set(myJobIds())
         setLiveJobs(r.jobs.filter(j => j.status === 'running').length)
-        setNeedYou(r.jobs.filter(j => j.status === 'failed').length)
-      } catch { /* header counts are best-effort */ }
+        setNeedYou(r.jobs.filter(j => j.status === 'failed' && mine.has(j.job_id)).length)
+        setBridgeDown(false)
+      } catch { if (alive) setBridgeDown(true) }
     }
     tick(); const id = window.setInterval(tick, 5000)
     return () => { alive = false; window.clearInterval(id) }
-  }, [setLiveJobs, setNeedYou])
+  }, [setLiveJobs, setNeedYou, setBridgeDown])
   const ws = route.workspace
   return (
     <div className="app">

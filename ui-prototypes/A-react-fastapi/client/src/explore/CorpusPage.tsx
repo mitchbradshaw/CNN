@@ -3,10 +3,11 @@
    /api/corpus/{file}/coverage; the held-out recording renders a locked card and is never fetched. */
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, getCoverage, getRecordings, type Coverage, type RecordingFile } from '../api'
+import { ErrorBoundary } from '../shell/ErrorBoundary'
 import { Header } from '../shell/Header'
 import { navigate, useApp } from '../state'
 import { ErrorCard } from './ErrorCard'
-import { Heatmap } from './Heatmap'
+import { DISAGREE_DEF, Heatmap } from './Heatmap'
 import { LockedCard } from './LockedCard'
 import { RightRail, type ShowState } from './RightRail'
 import { asApiError, COLOUR_BY, fmtInt, MATRIX_UNIT, RAMP, VERDICTS, type ColourBy } from './util'
@@ -72,7 +73,7 @@ export function CorpusPage() {
   const selRow = rows.find(r => r.id === selId) ?? null
   const matching = useMemo(() => {
     let spans = 0, channels = 0
-    if (matrix) for (const r of rows) { let s = 0; for (const c of r[matrix]) s += c; spans += s; if (s > 0) channels++ }
+    if (matrix) for (const r of rows) { const vals = r[matrix]; if (!Array.isArray(vals)) continue; let s = 0; for (const c of vals) s += Number(c) || 0; spans += s; if (s > 0) channels++ }
     return { spans, channels, total: rows.length }
   }, [rows, matrix])
   const select = (id: number) => { if (id !== selId) setExplore({ channelId: id, view: null }) }
@@ -135,13 +136,18 @@ export function CorpusPage() {
                 <span className="meta">{rows.length || file?.n_channels || '—'} channels · 0 – {Math.round(durH)} h · bin {binH ? binH.toFixed(1) : '—'} h</span>
                 <span className="grow" />
                 <span className="meta" data-testid="matrix-label">{matrix ?? 'nothing shown'} · spans per bin</span>
-                <span className="ex-legend">low {RAMP.slice(1).map(c => <i key={c} style={{ background: c }} />)} high</span>
+                <span className="ex-legend" title="quantile ramp: each shade is a fifth of the non-zero cells, ranked — one hot cell never flattens the rest" data-testid="ramp-legend">low {RAMP.slice(1).map(c => <i key={c} style={{ background: c }} />)} high · quantiles</span>
               </div>
               <div className="mono" style={{ fontSize: 10, color: 'var(--muted-2)', marginBottom: 2 }}>channel</div>
               {cov && cov.source_file === fileName ? (
-                <Heatmap cov={cov} matrix={matrix} unit={matrix ? MATRIX_UNIT[matrix] : 'spans'} selectedId={selId} onSelect={select} />
+                <ErrorBoundary label="coverage map">
+                  <Heatmap cov={cov} matrix={matrix} unit={matrix ? MATRIX_UNIT[matrix] : 'spans'} selectedId={selId} onSelect={select} />
+                </ErrorBoundary>
               ) : covErr ? null : <div className="skeleton" style={{ height: 16 * 34 + 22 }} data-testid="coverage-skeleton" />}
-              <p className="muted small" style={{ margin: '8px 0 0' }}>each cell counts spans whose start falls in that bin · darker is more · click a row to select the channel</p>
+              <p className="muted small" style={{ margin: '8px 0 0' }} data-testid="coverage-caption">
+                each cell counts spans whose start falls in that bin · shade = quantile rank among the non-zero cells (five bins, ties share a shade) · click a row to select the channel
+                {matrix === 'disagree' && <> · <b>disagree</b> = {DISAGREE_DEF}; a channel with no detections (or no annotations) has nothing to compare and stays blank</>}
+              </p>
             </div>
             <RightRail cov={cov && cov.source_file === fileName ? cov : null} show={show} setShow={setShow} verdicts={verdicts} setVerdicts={setVerdicts} matching={matching} />
           </div>
@@ -150,9 +156,12 @@ export function CorpusPage() {
         <div className="card ex-bottom" data-testid="corpus-bottom-bar">
           <div className="row" style={{ gap: 18 }}>
             <span className="name" data-testid="selected-channel-name">{heldOut ? '—' : selRow?.name ?? '—'}</span>
-            <span className="counts">
+            <span className="counts" title={`disagree = ${DISAGREE_DEF}`} data-testid="selected-channel-counts">
               {heldOut ? 'held out · no channel can be opened' : c
-                ? `${fmtInt(c.annotations)} annotations · ${fmtInt(c.detections)} detections · ${fmtInt(c.disagree)} disagree · ${c.reviewed_pct == null ? '—' : Math.round(c.reviewed_pct) + ' %'} reviewed`
+                ? `${fmtInt(c.annotations)} annotations · ${fmtInt(c.detections)} detections · ${
+                  // "disagree" compares the two sources; with one of them empty there is nothing to compare (critique r1)
+                  c.detections > 0 && c.annotations > 0 ? `${fmtInt(c.disagree)} disagree` : `— disagree (${c.detections > 0 ? 'no annotations' : 'no detections'})`
+                } · ${c.reviewed_pct == null ? '—' : Math.round(c.reviewed_pct) + ' %'} reviewed`
                 : 'select a channel'}
             </span>
           </div>

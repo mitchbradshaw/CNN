@@ -1,23 +1,24 @@
 /* Bottom-centre toasts (frame chain-1e: "03 Symbolic encoding deleted  Undo Ctrl Z"). */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-export interface ToastSpec { id: number; text: string; kind?: 'info' | 'error'; action?: { label: string; onClick: () => void }; ttlMs?: number }
-interface ToastApi { push: (t: Omit<ToastSpec, 'id'>) => number; dismiss: (id: number) => void }
+export interface ToastSpec { id: number; text: string; kind?: 'info' | 'error'; action?: { label: string; onClick: () => void; hint?: string }; ttlMs?: number; raisedAt: number }
+interface ToastApi { push: (t: Omit<ToastSpec, 'id' | 'raisedAt'>) => number; dismiss: (id: number) => void }
 const Ctx = createContext<ToastApi | null>(null)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastSpec[]>([])
   const seq = useRef(1)
   const dismiss = useCallback((id: number) => setItems(xs => xs.filter(x => x.id !== id)), [])
-  // toasts belong to the page they were raised on: clear them on navigation
+  // toasts belong to the page they were raised on: clear them on navigation — except ones raised
+  // in the last second, which were raised *for* the navigation ("sent to Analyse") (critique r1)
   useEffect(() => {
-    const clear = () => setItems([])
+    const clear = () => setItems(xs => xs.filter(x => Date.now() - x.raisedAt < 1000))
     window.addEventListener('hashchange', clear)
     return () => window.removeEventListener('hashchange', clear)
   }, [])
-  const push = useCallback((t: Omit<ToastSpec, 'id'>) => {
+  const push = useCallback((t: Omit<ToastSpec, 'id' | 'raisedAt'>) => {
     const id = seq.current++
-    setItems(xs => [...xs, { ...t, id }])
+    setItems(xs => [...xs, { ...t, id, raisedAt: Date.now() }])
     window.setTimeout(() => dismiss(id), t.ttlMs ?? (t.kind === 'error' ? 12000 : 6000))
     return id
   }, [dismiss])
@@ -29,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map(t => (
           <div key={t.id} className={`toast${t.kind === 'error' ? ' error' : ''}`}>
             <span>{t.text}</span>
-            {t.action && <button className="btn sm" onClick={() => { t.action!.onClick(); dismiss(t.id) }}>{t.action.label}</button>}
+            {t.action && <button className="btn sm" onClick={() => { t.action!.onClick(); dismiss(t.id) }}>{t.action.label}{t.action.hint && <kbd style={{ marginLeft: 6, opacity: 0.7, fontFamily: 'var(--font-mono)', fontSize: 10 }}>{t.action.hint}</kbd>}</button>}
           </div>
         ))}
       </div>

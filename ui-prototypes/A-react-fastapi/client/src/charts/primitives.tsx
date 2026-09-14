@@ -2,6 +2,7 @@
    xScale so several rows can share one time axis. Thin lines, light grounds, tinted bands. */
 import { createContext, useContext, type ReactNode } from 'react'
 import { polylinePath, timeTicks, type XScale } from './scale'
+import { fmtAxis } from '../state'
 
 /** A peak-preserving polyline (interleaved t/v from the server envelope). */
 export function EnvelopePath({ t, v, x, y, stroke = 'var(--trace)', width = 1, opacity = 1, testid }:
@@ -11,18 +12,27 @@ export function EnvelopePath({ t, v, x, y, stroke = 'var(--trace)', width = 1, o
 }
 
 /** Time axis ticks along the bottom of a surface. */
-export function TimeAxis({ x, y, t0, t1, n = 6, showLine = true }: { x: XScale; y: number; t0: number; t1: number; n?: number; showLine?: boolean }) {
-  const ticks = timeTicks(t0, t1, n)
+export function TimeAxis({ x, y, t0, t1, n = 6, showLine = true, ends = false }: { x: XScale; y: number; t0: number; t1: number; n?: number; showLine?: boolean; ends?: boolean }) {
+  let ticks = timeTicks(t0, t1, n)
   const [r0, r1] = x.range()
+  if (ends) {   // frame chain-1 prints the window's own ends ("825 s … 875 s"); drop interior ticks that would collide
+    const span = t1 - t0
+    ticks = [{ t: t0, label: fmtAxis(t0, span) }, ...ticks.filter(k => x(k.t) - r0 > 48 && r1 - x(k.t) > 48), { t: t1, label: fmtAxis(t1, span) }]
+  }
   return (
     <g className="time-axis">
       {showLine && <line x1={r0} x2={r1} y1={y} y2={y} stroke="var(--border)" />}
-      {ticks.map(k => (
-        <g key={k.t} transform={`translate(${x(k.t)},${y})`}>
-          <line y1={0} y2={4} stroke="var(--border-strong)" />
-          <text y={14} textAnchor="middle">{k.label}</text>
-        </g>
-      ))}
+      {ticks.map(k => {
+        const px = x(k.t)
+        // first/last labels anchor inward so nothing renders half off the surface (critique r1)
+        const anchor = px - r0 < 24 ? 'start' : r1 - px < 24 ? 'end' : 'middle'
+        return (
+          <g key={k.t} transform={`translate(${px},${y})`}>
+            <line y1={0} y2={4} stroke="var(--border-strong)" />
+            <text y={14} textAnchor={anchor}>{k.label}</text>
+          </g>
+        )
+      })}
     </g>
   )
 }

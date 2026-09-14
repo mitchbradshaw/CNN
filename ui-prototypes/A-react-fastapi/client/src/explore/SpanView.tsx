@@ -10,10 +10,14 @@ import { makeX, makeY } from '../charts/scale'
 import { fmtDuration } from '../state'
 import { ErrorCard } from './ErrorCard'
 import { MvLabels } from './MvLabels'
-import { fmtInt, fmtMs, fmtRangeH, viewportHourTicks, vRange, type Motif } from './util'
+import { envelopeOk, fmtInt, fmtMs, fmtRangeH, MALFORMED_WINDOW, viewportHourTicks, vRange, type Motif } from './util'
 import type { Viewport } from './useViewport'
 
 const H = 150, TOP = 18, AXIS_H = 20
+/** Past this CSS scale the kept path is a stretched/squashed sliver, not a preview: show the skeleton instead (critique r1). */
+const MAX_STRETCH = 8
+/** Left gutter kept clear of the y labels ("−0.235 mV" at x=4) so the motif label never overprints them. */
+const LABEL_GUTTER = 64
 
 export interface Band { start_s: number; end_s: number; kind: BandKind; id: string; title: string; motif: Motif }
 
@@ -26,17 +30,20 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
   const [a, b] = vp.view
   const x = makeX(a, b, W)
   const win = vp.win
-  const range = (win && vRange(win.data.envelope.v)) ?? ch.y_range
+  const envOk = !win || envelopeOk(win.data?.envelope)   // shape guard: a malformed 200 draws an ErrorCard, not a throw
+  const range = (win && envOk ? vRange(win.data.envelope.v) : null) ?? ch.y_range
   const y = makeY(range[0], range[1], H, TOP + 6, 8)
   // transform from the fetched viewport onto the current one (kept until the new data lands)
   let transform: string | undefined
   let xf = x
+  let stale = false   // the kept path would be stretched > MAX_STRETCH× or does not overlap the new view: draw the skeleton
   if (win) {
     const [fa, fb] = win.view
     xf = makeX(fa, fb, W)
     const s = (fb - fa) / (b - a)
     const dx = ((fa - a) / (b - a)) * W
     if (Math.abs(s - 1) > 1e-9 || Math.abs(dx) > 1e-6) transform = `translate(${dx.toFixed(2)},0) scale(${s.toFixed(6)},1)`
+    stale = s > MAX_STRETCH || s < 1 / MAX_STRETCH || fb <= a || fa >= b
   }
 
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -70,16 +77,28 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
     setView([va + dt, vb + dt])
   }
   const onUp = () => { drag.current = null; setDragging(false) }
+  // keyboard (critique r1: pan/zoom were pointer-only): ← → pan a tenth of the view (Shift: half), + − zoom about the centre
+  const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    const [va, vb] = viewRef.current
+    const span = vb - va
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const dt = (e.shiftKey ? 0.5 : 0.1) * span * (e.key === 'ArrowLeft' ? -1 : 1)
+      setView([va + dt, vb + dt])
+    } else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAt(1 / 1.5, (va + vb) / 2) }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAt(1.5, (va + vb) / 2) }
+  }
 
   const st = vp.lastStat
   const ticks = viewportHourTicks(a, b)
+  const dim = vp.fetching   // stale numbers (previous view) read as live otherwise
 
   return (
     <div className="card ex-tier" data-testid="signal-span-card">
       <div className="head">
         <span className="card-title">Span</span>
         <span className="range" data-testid="span-range">{fmtRangeH(a, b)} · {fmtDuration(b - a)}</span>
-        {st && <span className="stat" data-testid="zoom-stat">{fmtInt(st.n_points)} pts · server {fmtMs(st.decimate_ms)} · round trip {fmtMs(st.round_trip_ms)} · paint {fmtMs(st.paint_ms)}</span>}
+        {st && <span className="stat" data-testid="zoom-stat" data-dim={dim ? '1' : '0'} style={{ opacity: dim ? 0.4 : 1 }} title={dim ? 'previous viewport — refreshing' : undefined}>{fmtInt(st.n_points)} pts · server {fmtMs(st.decimate_ms)} · round trip {fmtMs(st.round_trip_ms)} · paint {fmtMs(st.paint_ms)}</span>}
         {vp.fetching && <span className="stat">fetching…</span>}
         <span className="grow" />
         <span className="ex-nav" data-testid="motif-nav">
@@ -94,23 +113,26 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
         </span>
       </div>
       {vp.error && <ErrorCard error={vp.error} title="viewport fetch failed" />}
+      {!envOk && <ErrorCard error={MALFORMED_WINDOW} title="viewport payload cannot be drawn" />}
       <div className={`ex-plot pan${dragging ? ' dragging' : ''}`} ref={plotRef} style={{ height: H + AXIS_H }}>
         {W > 0 && (
-          <svg ref={svgRef} width={W} height={H + AXIS_H} data-testid="signal-span" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+          <svg ref={svgRef} width={W} height={H + AXIS_H} data-testid="signal-span" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+            tabIndex={0} role="group" aria-label="span viewport: ← → pan, Shift for a larger step, + − zoom" aria-keyshortcuts="ArrowLeft ArrowRight + -" onKeyDown={onKey}>
             <rect x={0} y={0} width={W} height={H + AXIS_H} fill="#fff" />
             <g transform={`translate(0,${TOP})`}><TimeGrid x={x} t0={a} t1={b} height={H - TOP} /></g>
             <g transform={`translate(0,${TOP})`}>
               <SpanBands spans={bands} x={x} height={H - TOP} capY={-13} capH={6} onClick={s => onBandClick((s as Band).motif)} minPx={2} />
             </g>
             {selected && selected.end_s > a && selected.start_s < b && (
-              <text x={Math.max(4, x(selected.start_s)) + 4} y={TOP + 12} style={{ fill: 'var(--amber)', fontWeight: 600 }} pointerEvents="none">MOTIF_{selected.id}</text>
+              // starts at the band, but never inside the y-label gutter (critique r1: MOTIF_744 overprinted "−0.23 mV")
+              <text x={Math.max(LABEL_GUTTER, x(selected.start_s) + 4)} y={TOP + 12} style={{ fill: 'var(--amber)', fontWeight: 600 }} pointerEvents="none" data-testid="motif-label">MOTIF_{selected.id}</text>
             )}
-            {win ? (
+            {win && envOk && !stale ? (
               <g transform={transform} data-testid="envelope-group" data-transformed={transform ? '1' : '0'}>
                 <EnvelopePath t={win.data.envelope.t} v={win.data.envelope.v} x={xf} y={y} testid="envelope-path" />
               </g>
-            ) : <rect className="skeleton" x={0} y={TOP + 8} width={W} height={H - TOP - 16} fill="var(--grey-100)" data-testid="span-skeleton" />}
-            <MvLabels y={y} lo={range[0]} hi={range[1]} />
+            ) : <rect className="skeleton" x={0} y={TOP + 8} width={W} height={H - TOP - 16} fill="var(--grey-100)" data-testid="span-skeleton" data-reason={!win ? 'no-data' : !envOk ? 'malformed' : 'stale-transform'} />}
+            <MvLabels y={y} lo={range[0]} hi={range[1]} dim={dim || stale} />
             <line x1={0} x2={W} y1={H} y2={H} stroke="var(--border)" />
             <g className="time-axis" transform={`translate(0,${H})`}>
               {ticks.map(k => { const px = x(k.t); return <g key={k.t} transform={`translate(${px},0)`}><line y1={0} y2={4} stroke="var(--border-strong)" /><text x={px < 24 ? 2 : 0} y={14} textAnchor={px < 24 ? 'start' : px > W - 24 ? 'end' : 'middle'}>{k.label}</text></g> })}
@@ -120,7 +142,7 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
       </div>
       <div className="row between" style={{ marginTop: 6 }}>
         <span className="legend"><span><i style={{ background: 'var(--blue)' }} />detected</span><span><i style={{ background: 'var(--green)' }} />annotated</span><span><i style={{ background: 'var(--amber)' }} />selected</span><span><i style={{ background: 'var(--red)' }} />artifact</span></span>
-        <span className="muted small">drag to pan · wheel to zoom · peak-preserving min/max envelope re-fetched for every viewport · real mV, never normalised · click a band to select that motif</span>
+        <span className="muted small">drag to pan · wheel to zoom · or click the plot and use ← → and + − · peak-preserving min/max envelope re-fetched for every viewport · real mV, never normalised · click a band to select that motif</span>
       </div>
     </div>
   )

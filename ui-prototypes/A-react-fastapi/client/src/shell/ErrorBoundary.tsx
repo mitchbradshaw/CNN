@@ -3,7 +3,7 @@
    Playwright gate fails too). Nothing is silently blank. */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
-interface Props { children: ReactNode; label?: string }
+interface Props { children: ReactNode; label?: string; onError?: (error: Error) => void; compact?: boolean }
 interface State { error: Error | null; info: string }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -12,6 +12,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(`[render error in ${this.props.label ?? 'component'}]`, error, info.componentStack)
     this.setState({ info: info.componentStack ?? '' })
+    this.props.onError?.(error)   // lets a host (e.g. a chain row) lift the failure into its own state/badge
   }
   render() {
     if (this.state.error) {

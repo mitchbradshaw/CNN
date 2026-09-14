@@ -31,7 +31,11 @@ from Working.execution import RecipeCancelled, RecipeExecutionError, execute_rec
 from Working.database.schema import init_db
 
 from . import chain as chain_mod
-from .serialize import to_payload
+from .serialize import _clean, to_payload
+from Working.execution import _recipe_prefix_hash
+import json
+import os
+import re
 
 log = logging.getLogger("proto.runs")
 
@@ -80,8 +84,9 @@ class Job:
 
 
 class RunManager:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, meta_dir: str | None = None):
         self.db_path = db_path
+        self.meta_dir = meta_dir
         self.jobs: dict[int, Job] = {}
         self.loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
@@ -139,6 +144,19 @@ class RunManager:
         self._emit(job, {"event": "cancel_requested", "step": job.current_step})
         return True
 
+    def _latest_db_run_id(self, job: Job) -> int | None:
+        """The core writes the runs row before raising; find it by the recipe's config hash."""
+        try:
+            conn = init_db(self.db_path)
+            try:
+                row = conn.execute("SELECT r.id FROM runs r JOIN configs c ON c.id = r.config_id WHERE c.config_hash = ? "
+                                   "ORDER BY r.id DESC LIMIT 1", (job.config_hash,)).fetchone()
+                return int(row[0]) if row else None
+            finally:
+                conn.close()
+        except Exception:
+            return None
+
     # ------------------------------------------------------------- worker --
     def _run(self, job: Job):
         span = job.recipe.get("span")
@@ -161,11 +179,31 @@ class RunManager:
             wall = time.perf_counter() - step_wall.get(i, time.perf_counter())
             kind = result.output_kind
             ctx = {"fs": fs, "span_start": span_start, "px": job.px, "n_samples": n_span,
-                   "windowset": job._windowset}
+                   "windowset": job._windowset, "params": job.recipe["steps"][i].get("params") or {}}
+            # The core's step cache restores the typed value only; AdapterResult.meta (SAX cutlines,
+            # MP window m, the model card) is lost on a hit. The bridge keeps a JSON sidecar per
+            # prefix hash at first compute and reads it back on a hit (critique r1 P1).
+            meta = result.meta or {}
+            meta_from_sidecar = False
+            if self.meta_dir:
+                try:
+                    side = os.path.join(self.meta_dir, _recipe_prefix_hash(job.recipe, i), f"{i}.json")
+                    if meta:
+                        os.makedirs(os.path.dirname(side), exist_ok=True)
+                        with open(side, "w", encoding="utf-8") as f:
+                            json.dump(_clean(meta), f)
+                    elif os.path.isfile(side):
+                        with open(side, encoding="utf-8") as f:
+                            meta = json.load(f)
+                        meta_from_sidecar = True
+                except Exception:
+                    log.exception("meta sidecar failed for step %d", i)
             try:
                 if kind == "windowset":
                     job._windowset = result.value
-                payload = to_payload(kind, result.value, result.meta, ctx)
+                payload = to_payload(kind, result.value, meta, ctx)
+                if meta_from_sidecar:
+                    payload["meta_from_sidecar"] = True
                 job.payloads[i] = payload
                 job.steps[i]["has_payload"] = True
                 job.steps[i]["summary"] = payload.get("summary")
@@ -206,6 +244,7 @@ class RunManager:
                              "db_run_id": job.db_run_id, "elapsed_s": time.perf_counter() - t0})
         except RecipeCancelled as e:
             i = job.current_step
+            job.db_run_id = self._latest_db_run_id(job)
             if i is not None and job.steps[i]["status"] != "done":
                 job.steps[i]["status"] = "cancelled"
             for s in job.steps:
@@ -215,9 +254,11 @@ class RunManager:
             job.finished_at = time.time()
             job.error = {"step": i, "message": str(e), "type": "RecipeCancelled"}
             self._emit(job, {"event": "run_end", "status": "cancelled", "step": i, "message": str(e),
-                             "elapsed_s": time.perf_counter() - t0})
+                             "db_run_id": job.db_run_id, "elapsed_s": time.perf_counter() - t0})
         except RecipeExecutionError as e:
             i = job.current_step
+            m = re.search(r"run_id=(\d+)", str(e))
+            job.db_run_id = int(m.group(1)) if m else self._latest_db_run_id(job)
             cause = e.__cause__
             tb = "".join(traceback.format_exception(cause)) if cause else traceback.format_exc()
             job.log_lines.append(tb)
@@ -234,7 +275,7 @@ class RunManager:
                          "traceback": tb, "adapter": (job.recipe["steps"][i]["stage"] + "." + job.recipe["steps"][i]["algorithm"]) if i is not None else None}
             log.error("run %s failed at step %s: %s", job.id, i, job.error["message"])
             self._emit(job, {"event": "run_end", "status": "failed", "step": i, "error": job.error,
-                             "elapsed_s": time.perf_counter() - t0})
+                             "db_run_id": job.db_run_id, "elapsed_s": time.perf_counter() - t0})
         except Exception as e:          # pre-run validation errors etc.
             tb = traceback.format_exc()
             job.log_lines.append(tb)

@@ -2,7 +2,8 @@
    Filters & search · Annotations N · Detections N · Keyboard shortcuts. Opening Annotations or
    Detections lists the spans currently in view; the other two are out of slice scope and say so. */
 import { useState } from 'react'
-import type { Annotation, Detection } from '../api'
+import { ApiError, type Annotation, type Detection } from '../api'
+import { ErrorCard } from './ErrorCard'
 import { fmtInt, fmtSecs, VERDICT_COLOUR, type Motif } from './util'
 
 type Key = 'filters' | 'annotations' | 'detections' | 'shortcuts'
@@ -14,23 +15,28 @@ export function Ribbons({ annotations, detections, totals, capped, selected, onS
 }) {
   const [open, setOpen] = useState<Key | null>(null)
   const toggle = (k: Key) => setOpen(open === k ? null : k)
-  const Row = ({ k, label, n }: { k: Key; label: string; n?: number }) => (
-    <div className={`card ex-ribbon${open === k ? ' open' : ''}`} onClick={() => toggle(k)} data-testid={`ribbon-${k}`} role="button" aria-expanded={open === k}>
+  const Row = ({ k, label, n, title }: { k: Key; label: string; n?: number; title?: string }) => (
+    <div className={`card ex-ribbon${open === k ? ' open' : ''}`} onClick={() => toggle(k)} data-testid={`ribbon-${k}`} role="button" aria-expanded={open === k} title={title}
+      tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(k) } }}>
       <span className="chev">›</span><span>{label}</span>{n !== undefined && <span className="n">{fmtInt(n)}</span>}
     </div>
   )
+  // shape guard (critique r1): a malformed spans list renders an ErrorCard here instead of taking the workspace down
+  if (!Array.isArray(annotations) || !Array.isArray(detections)) {
+    return <ErrorCard error={new ApiError(0, 'malformed spans payload: annotations / detections are not arrays')} title="span lists cannot be drawn" />
+  }
   return (
     <>
       <div className="ex-ribbons">
-        <Row k="filters" label="Filters & search" />
-        <Row k="annotations" label="Annotations" n={totals.annotations} />
-        <Row k="detections" label="Detections" n={totals.detections} />
-        <Row k="shortcuts" label="Keyboard shortcuts" />
+        <Row k="filters" label="Filters & search" title="out of slice scope · opens a note saying so" />
+        <Row k="annotations" label="Annotations" n={totals.annotations} title="annotations in the current viewport" />
+        <Row k="detections" label="Detections" n={totals.detections} title="detections in the current viewport" />
+        <Row k="shortcuts" label="Keyboard shortcuts" title="the shortcut list is out of slice scope · opens a note with what works today" />
       </div>
       {open && (
         <div className="card card-pad" data-testid={`ribbon-body-${open}`}>
           {open === 'filters' && <div className="muted small mono">ten filter fields, match count, CSV/JSON export, bulk staging — the drawer (frame explore-2b) is out of slice scope</div>}
-          {open === 'shortcuts' && <div className="muted small mono">keyboard shortcuts are out of slice scope · today: drag to pan, wheel to zoom, ‹ › for the motif list</div>}
+          {open === 'shortcuts' && <div className="muted small mono">the shortcut list is out of slice scope · today: drag to pan, wheel to zoom, ‹ › for the motif list · Tab to a grip or the span box and press ← → (Shift ×10 buckets) · Tab to the span plot and press ← → to pan, + − to zoom</div>}
           {open === 'annotations' && (
             <>
               <div className="muted small mono" style={{ marginBottom: 6 }}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'} in view{capped.annotations ? ' (list capped by the server)' : ''} · of {fmtInt(totals.annotations)} on this channel</div>

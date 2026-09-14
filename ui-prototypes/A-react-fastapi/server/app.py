@@ -60,7 +60,7 @@ def _steps(body) -> list[dict]:
 
 def create_app(rt: Runtime) -> FastAPI:
     app = FastAPI(title="Underground Brains — UI prototype A bridge", docs_url="/api/docs", openapi_url="/api/openapi.json")
-    manager = RunManager(rt.db_path)
+    manager = RunManager(rt.db_path, meta_dir=getattr(rt, "meta_dir", None))
     app.state.rt = rt
     app.state.manager = manager
     app.state.started = time.time()
@@ -153,11 +153,15 @@ def create_app(rt: Runtime) -> FastAPI:
         rec = rec_or_423(recording_id)
         if t1 is None:
             t1 = rec["duration_s"]
+        if not (0 <= t0 < t1):
+            raise HTTPException(422, f"window must satisfy 0 <= t0 < t1 <= {rec['duration_s']:.0f} s; got t0={t0}, t1={t1}")
+        px_used = max(16, min(8000, px))
         c = conn()
         try:
-            out = corpus.window(c, rec, t0, t1, max(16, min(8000, px)))
+            out = corpus.window(c, rec, t0, min(t1, rec["duration_s"]), px_used)
         finally:
             c.close()
+        out["px_used"] = px_used
         resp = JSONResponse(out)
         resp.headers["Server-Timing"] = f"decimate;dur={out['decimate_ms']:.2f}"
         return resp
@@ -167,6 +171,8 @@ def create_app(rt: Runtime) -> FastAPI:
         rec = rec_or_423(recording_id)
         if t1 is None:
             t1 = rec["duration_s"]
+        if not (0 <= t0 < t1):
+            raise HTTPException(422, f"window must satisfy 0 <= t0 < t1 <= {rec['duration_s']:.0f} s; got t0={t0}, t1={t1}")
         c = conn()
         try:
             return corpus.spans(c, recording_id, t0, t1, rec["fs"])
@@ -264,17 +270,29 @@ def create_app(rt: Runtime) -> FastAPI:
             recipe = chain_mod.build_recipe(body.recording_id, span, steps)
         except ValueError as e:
             raise HTTPException(422, str(e))
+        n = (span[1] - span[0]) if span else rec["n_samples"]
+        over = [{"index": i, "name": f"{s['stage']}.{s['algorithm']}", "max_span_samples": chain_mod.get_adapter(f"{s['stage']}.{s['algorithm']}").max_span_samples}
+                for i, s in enumerate(recipe["steps"])
+                if chain_mod.get_adapter(f"{s['stage']}.{s['algorithm']}").max_span_samples is not None
+                and n > chain_mod.get_adapter(f"{s['stage']}.{s['algorithm']}").max_span_samples]
+        if over:
+            raise HTTPException(422, {"message": f"stage {over[0]['index'] + 1:02d} ({over[0]['name']}) exceeds its local ceiling of {over[0]['max_span_samples']:,} samples (span is {n:,}); shorten the span or route it to HPC (out of slice scope)",
+                                      "over_ceiling": over})
         job = manager.start(recipe, rec, px=body.px)
         return job.snapshot()
 
     @app.get("/api/runs")
     def get_runs(recording_id: int | None = None, limit: int = 30):
+        if recording_id is not None:
+            rec_or_423(recording_id)
         c = conn()
         try:
-            rows = list_runs(c, recording_id=recording_id)[:limit]
+            held = {r["id"] for r in c.execute("SELECT id FROM recordings WHERE source_file = ?", (HELD_OUT_FILE,))}
+            rows = [r for r in list_runs(c, recording_id=recording_id) if r["recording_id"] not in held][:limit]
             out = []
             for row in rows:
                 d = dict(row)
+                d["cancelled"] = bool(d["status"] == "failed" and (d.get("error_text") or "").startswith("Cancelled"))
                 try:
                     recipe = load_recipe(c, d["config_id"])
                     d["steps"] = [f"{s['stage']}.{s['algorithm']}" for s in recipe["steps"]]

@@ -7,7 +7,7 @@ import { EnvelopePath } from '../charts/primitives'
 import { clamp, makeX, makeY } from '../charts/scale'
 import { useSize } from '../charts/useSize'
 import { ErrorCard } from './ErrorCard'
-import { asApiError, hourTicks, MIN_SPAN_S, VERDICT_COLOUR, vRange } from './util'
+import { asApiError, envelopeOk, fmtRangeH, hourTicks, MALFORMED_WINDOW, MIN_SPAN_S, VERDICT_COLOUR, vRange } from './util'
 
 const TRACE_H = 64, COV_Y = 72, COV_H = 8, DEN_Y = 84, DEN_H = 14, AXIS_Y = 104, H = 116
 const HW = 8, HH = 22
@@ -26,7 +26,9 @@ export function Overview({ ch, view, onView }: { ch: Channel; view: [number, num
   useEffect(() => {
     if (widthKey <= 0) return
     let alive = true
-    getWindow(ch.id, 0, dur, widthKey * 100).then(w => { if (alive) setFull(w) }).catch(e => { if (alive) setErr(asApiError(e)) })
+    getWindow(ch.id, 0, dur, widthKey * 100)
+      .then(w => { if (!alive) return; if (!envelopeOk(w?.envelope)) { setFull(null); setErr(MALFORMED_WINDOW); return } setFull(w); setErr(null) })
+      .catch(e => { if (alive) setErr(asApiError(e)) })
     return () => { alive = false }
   }, [ch.id, dur, widthKey])
 
@@ -54,6 +56,28 @@ export function Overview({ ch, view, onView }: { ch: Channel; view: [number, num
     else onView([a, clamp(b + dt, a + minSpan, dur)])
   }
   const end = () => { drag.current = null; setDragging(false) }
+  // keyboard: ← → nudge a grip (or the whole box) by one overview bucket, Shift = ×10 (critique r1: mouse-only)
+  const bucket = ch.ribbons.bucket_s > 0 ? ch.ribbons.bucket_s : dur / Math.max(1, ch.ribbons.buckets)
+  const nudge = (mode: Drag['mode'], dir: -1 | 1, big: boolean) => {
+    const dt = dir * bucket * (big ? 10 : 1)
+    const [a, b] = view
+    const minSpan = Math.min(dur, MIN_SPAN_S)
+    if (mode === 'body') onView([a + dt, b + dt])
+    else if (mode === 'left') onView([clamp(a + dt, 0, b - minSpan), b])
+    else onView([a, clamp(b + dt, a + minSpan, dur)])
+  }
+  const onKey = (mode: Drag['mode']) => (e: React.KeyboardEvent<SVGElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault(); e.stopPropagation()
+    nudge(mode, e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey)
+  }
+  const sliderProps = (mode: Drag['mode']) => ({
+    tabIndex: 0, role: 'slider', 'aria-orientation': 'horizontal' as const,
+    'aria-label': mode === 'body' ? 'selected span (← → move by one bucket, Shift ×10)' : `span ${mode === 'left' ? 'start' : 'end'} (← → nudge by one bucket, Shift ×10)`,
+    'aria-valuemin': 0, 'aria-valuemax': Math.round(dur), 'aria-valuenow': Math.round(mode === 'right' ? view[1] : view[0]),
+    'aria-valuetext': mode === 'body' ? fmtRangeH(view[0], view[1]) : `${((mode === 'right' ? view[1] : view[0]) / 3600).toFixed(2)} h`,
+    onKeyDown: onKey(mode),
+  })
   const clickBg = (e: React.PointerEvent<SVGRectElement>) => {
     // click on the trace outside the box: move the box there, same length
     const r = (e.currentTarget as SVGRectElement).getBoundingClientRect()
@@ -99,10 +123,10 @@ export function Overview({ ch, view, onView }: { ch: Channel; view: [number, num
             {full ? <EnvelopePath t={full.envelope.t} v={full.envelope.v} x={x} y={y} testid="overview-path" /> : <rect className="skeleton" x={0} y={8} width={W} height={TRACE_H - 16} fill="var(--grey-100)" />}
             {/* selected span box: draggable body */}
             <rect x={x0} y={0} width={boxW} height={TRACE_H} fill="var(--blue)" fillOpacity={0.16} stroke="var(--blue)" strokeWidth={1}
-              data-testid="span-box" style={{ cursor: 'move' }} onPointerDown={start('body')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
+              data-testid="span-box" className="ex-focusable" style={{ cursor: 'move' }} onPointerDown={start('body')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} {...sliderProps('body')} />
             {/* grip handles with a centre groove */}
             {([['left', lhx], ['right', rhx]] as const).map(([side, hx]) => (
-              <g key={side} data-testid={`span-handle-${side}`} style={{ cursor: 'ew-resize' }} onPointerDown={start(side)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
+              <g key={side} data-testid={`span-handle-${side}`} className="ex-focusable" style={{ cursor: 'ew-resize' }} onPointerDown={start(side)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} {...sliderProps(side)}>
                 <rect x={hx - 3} y={hy - 3} width={HW + 6} height={HH + 6} fill="transparent" />
                 <rect x={hx} y={hy} width={HW} height={HH} rx={3} fill="var(--blue)" />
                 <line x1={hx + HW / 2} x2={hx + HW / 2} y1={hy + 6} y2={hy + HH - 6} stroke="#fff" strokeOpacity={0.75} strokeWidth={1.2} />
@@ -133,7 +157,7 @@ export function Overview({ ch, view, onView }: { ch: Channel; view: [number, num
         )}
       </div>
       <p className="muted small" style={{ margin: '4px 0 0' }}>
-        the whole channel at {full ? `${full.envelope.n_points.toLocaleString('en-US')} min/max points` : '…'} · drag the blue box or its grips to choose the span shown below · ribbons: human verdicts per bucket, then machine detection density
+        the whole channel at {full ? `${full.envelope.n_points.toLocaleString('en-US')} min/max points` : '…'} · drag the blue box or its grips to choose the span shown below (or Tab to a grip and press ← → · Shift ×10) · ribbons: human verdicts per bucket, then machine detection density
       </p>
     </div>
   )
