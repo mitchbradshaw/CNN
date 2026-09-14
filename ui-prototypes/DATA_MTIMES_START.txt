@@ -1,0 +1,12 @@
+# DATA mtime snapshot — START 2026-09-14T12:58:33Z
+## DATA/db/*.sqlite
+1789297374 4349952 DATA/db/annotations.sqlite
+1787091986 3280896 DATA/db/annotations.sqlite.pre-seed-rebuild-20260819-082626.bak
+## DATA/derived/step_cache/ (recursive)
+1788495173.3734808000 17385 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/features.parquet
+1788495171.0366506000 588 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/windowset.npz
+1788495155.2907731000 8575 DATA/derived/step_cache/0a00dbd38655d9083fa3a375a43131a698ffd8744b773146784ca95ebaf99ae4/0/scores.npz
+1788494892.1593902000 31295 DATA/derived/step_cache/2a42e965b8a5c70d410f3c0a8e56cf342e9c1ba5b4c4d795bd5e1407899a02fb/0/scores.npz
+1788169082.2190618000 413 DATA/derived/step_cache/3bf6bc6f093599f87194ea2da434de609e063926d0cf355f6f98dbbaffdb60f2/1/scores.npz
+1788495474.4962673000 1030 DATA/derived/step_cache/bf50caf24febd94b8b8d57fb6434cadd370097266fe33fdfaf76afb6d696d9f9/0/scores.npz
+## step_cache dir count: 11, file count: 6

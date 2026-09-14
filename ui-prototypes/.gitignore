@@ -1,0 +1,14 @@
+# per-prototype local installs and build output — never committed
+**/node_modules/
+**/.venv/
+**/dist/
+**/build/
+**/__pycache__/
+**/*.pyc
+**/.vite/
+**/tmp/
+# throwaway runtime state (db copies, step cache, session state, logs)
+**/runtime/
+**/*.log
+# screenshots over ~1 MB are excluded by the screenshot script naming them *.big.png
+**/*.big.png
