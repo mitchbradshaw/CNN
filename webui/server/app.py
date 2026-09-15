@@ -1,4 +1,4 @@
-"""FastAPI bridge for prototype A. Thin: every route is a few lines over
+"""FastAPI bridge for the web UI. Thin: every route is a few lines over
 ``server/{corpus,chain,runs,serialize}.py``. Errors are **loud**: an
 unhandled exception returns a 500 whose body carries the traceback and is
 logged to ``runtime/<stamp>/server.log``; the page shows it in a red card.
@@ -25,7 +25,7 @@ from . import corpus
 from .runs import RunManager
 from .runtime import HELD_OUT_FILE, PROTO_DIR, Runtime
 
-log = logging.getLogger("proto")
+log = logging.getLogger("webui")
 
 
 class Step(BaseModel):
@@ -59,7 +59,7 @@ def _steps(body) -> list[dict]:
 
 
 def create_app(rt: Runtime) -> FastAPI:
-    app = FastAPI(title="Underground Brains — UI prototype A bridge", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="Underground Brains — web UI bridge", docs_url="/api/docs", openapi_url="/api/openapi.json")
     manager = RunManager(rt.db_path, meta_dir=getattr(rt, "meta_dir", None))
     app.state.rt = rt
     app.state.manager = manager
@@ -77,7 +77,7 @@ def create_app(rt: Runtime) -> FastAPI:
         if rec is None:
             raise HTTPException(404, f"no recording id {recording_id}")
         if rec["held_out"]:
-            raise HTTPException(423, f"{HELD_OUT_FILE} is held out (spec §0 D6 / Working.config.HELD_OUT_RECORDING_FILE); this prototype refuses it")
+            raise HTTPException(423, f"{HELD_OUT_FILE} is held out (spec §0 D6 / Working.config.HELD_OUT_RECORDING_FILE); the web UI refuses it")
         return rec
 
     @app.on_event("startup")

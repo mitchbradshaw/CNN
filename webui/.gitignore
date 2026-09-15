@@ -1,0 +1,14 @@
+# project-local installs and build output — never committed
+node_modules/
+.venv/
+dist/
+build/
+__pycache__/
+*.pyc
+.vite/
+tmp/
+# throwaway runtime state (db copies, step cache, logs) — one dir per server start
+runtime/
+*.log
+# smoke screenshots over ~1 MB are renamed *.big.png by smoke.py
+*.big.png

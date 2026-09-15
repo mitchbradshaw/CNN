@@ -1,0 +1,170 @@
+{
+  "failures": [],
+  "browser_errors": [],
+  "evidence": {
+    "heatmap_cells": 912,
+    "heatmap_distinct_fills": 5,
+    "envelope_path_lengths": [
+      28973,
+      27561
+    ],
+    "span_bands": 4,
+    "zoom_stats": [
+      {
+        "seq": 1,
+        "t0": 995040,
+        "t1": 1002240,
+        "px": 1304,
+        "n_points": 2400,
+        "decimate_ms": 0.6309000018518418,
+        "round_trip_ms": 12.100000023841858,
+        "paint_ms": 14.900000005960464
+      },
+      {
+        "seq": 2,
+        "t0": 996168.1605153364,
+        "t1": 1001316.3874163145,
+        "px": 1304,
+        "n_points": 2576,
+        "decimate_ms": 0.4895000020042062,
+        "round_trip_ms": 11.599999994039536,
+        "paint_ms": 21
+      },
+      {
+        "seq": 3,
+        "t0": 996974.8308366804,
+        "t1": 1000655.9753122295,
+        "px": 1304,
+        "n_points": 2456,
+        "decimate_ms": 0.5774000019300729,
+        "round_trip_ms": 11.099999994039536,
+        "paint_ms": 19
+      },
+      {
+        "seq": 4,
+        "t0": 997551.6255378698,
+        "t1": 1000183.7598455653,
+        "px": 1304,
+        "n_points": 1756,
+        "decimate_ms": 0.5375999899115413,
+        "round_trip_ms": 12.599999994039536,
+        "paint_ms": 17.600000023841858
+      },
+      {
+        "seq": 5,
+        "t0": 997964.0519263427,
+        "t1": 999846.1109054906,
+        "px": 1304,
+        "n_points": 1883,
+        "decimate_ms": 0.4783000040333718,
+        "round_trip_ms": 12.5,
+        "paint_ms": 21.100000023841858
+      },
+      {
+        "seq": 6,
+        "t0": 998258.9497913162,
+        "t1": 999604.6812726601,
+        "px": 1304,
+        "n_points": 1347,
+        "decimate_ms": 0.36669999826699495,
+        "round_trip_ms": 10.800000011920929,
+        "paint_ms": 15.099999994039536
+      },
+      {
+        "seq": 7,
+        "t0": 998469.8110581909,
+        "t1": 999432.0514767669,
+        "px": 1304,
+        "n_points": 964,
+        "decimate_ms": 0.6096999859437346,
+        "round_trip_ms": 12.200000017881393,
+        "paint_ms": 8.5
+      },
+      {
+        "seq": 8,
+        "t0": 998620.5835090935,
+        "t1": 999308.6157324438,
+        "px": 1304,
+        "n_points": 689,
+        "decimate_ms": 0.287600007141009,
+        "round_trip_ms": 10,
+        "paint_ms": 8.700000017881393
+      },
+      {
+        "seq": 9,
+        "t0": 998728.3905629355,
+        "t1": 999220.3552852954,
+        "px": 1304,
+        "n_points": 493,
+        "decimate_ms": 0.1511000155005604,
+        "round_trip_ms": 9.400000005960464,
+        "paint_ms": 9.400000005960464
+      },
+      {
+        "seq": 10,
+        "t0": 998803.8452749539,
+        "t1": 999295.8099973138,
+        "px": 1304,
+        "n_points": 493,
+        "decimate_ms": 0.42139997822232544,
+        "round_trip_ms": 12.099999994039536,
+        "paint_ms": 14.199999988079071
+      }
+    ],
+    "zoom_round_trip_ms": {
+      "min": 9.400000005960464,
+      "max": 12.599999994039536,
+      "median": 12.099999994039536
+    },
+    "run_wall_s": 31.77,
+    "badges_after_run": [
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached"
+    ],
+    "row_plots": [
+      "path",
+      "path",
+      "path"
+    ],
+    "badges_after_edit": [
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached",
+      "stale"
+    ],
+    "badges_after_rerun": [
+      "cached \u00b7 0 s",
+      "cached \u00b7 0 s",
+      "computed \u00b7 now cached"
+    ],
+    "badge_titles_after_rerun": [
+      "restored from the prefix cache (core step time 0.0 s)",
+      "restored from the prefix cache (core step time 0.0 s)",
+      "core step time 0.000 s"
+    ],
+    "server_log_error_lines": [
+      "2026-09-15 23:59:30,738 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
+    ]
+  },
+  "screenshots": [
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\01-explore-1-corpus.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\02-explore-1-corpus-colour-by.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\03-explore-1-corpus-selected.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\04-explore-2-signal.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\05-explore-2-signal-zoomed.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\06-explore-2-signal-motif.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\07-explore-m4-held-out.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\08-chain-1-chain-before-run.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\09-chain-2-insert-stage.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\10-chain-1-chain-completed.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\11-chain-7b-block-threshold.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\12-chain-7b-block-threshold-dragged.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\13-chain-1-chain-suffix-rerun.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\14-chain-1b-run-history.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\15-chain-1e-invalid-junction.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\16-chain-1f-failed-block.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\17-chain-1d-running.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\18-chain-cancelled.png",
+    "C:\\Users\\mmebr\\Documents\\CNN\\webui\\screenshots\\19-loud-failure-render-error.png"
+  ]
+}

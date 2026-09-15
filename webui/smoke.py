@@ -1,4 +1,4 @@
-"""Smoke test + screenshot capture for prototype A.
+"""Smoke test + screenshot capture for the web UI (webui/).
 
     "/c/ProgramData/anaconda3/python.exe" smoke.py [--url http://127.0.0.1:8765] [--no-run]
 
@@ -321,7 +321,7 @@ class Smoke:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default=os.environ.get("PROTO_A_URL", "http://127.0.0.1:8765"))
+    ap.add_argument("--url", default=os.environ.get("WEBUI_URL", "http://127.0.0.1:8765"))
     ap.add_argument("--no-run", action="store_true", help="skip the run/cancel/fail flows")
     a = ap.parse_args()
     sys.exit(Smoke(a.url, not a.no_run).run())

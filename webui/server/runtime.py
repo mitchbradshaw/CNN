@@ -1,7 +1,7 @@
-"""Runtime isolation for prototype A (task brief, hard rule 2).
+"""Runtime isolation for the web UI bridge (never touch real data).
 
 Everything the core could write is redirected under
-``ui-prototypes/A-react-fastapi/runtime/<stamp>/`` before any run happens:
+``webui/runtime/<stamp>/`` before any run happens:
 
 * the database — a **copy** of ``DATA/db/annotations.sqlite`` (the
   ``scripts/dev_serve.py`` pattern); every ``execute_recipe`` call and every
@@ -30,8 +30,9 @@ import os
 import shutil
 import sys
 
-PROTO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # .../A-react-fastapi
-REPO_ROOT = os.path.dirname(os.path.dirname(PROTO_DIR))                     # worktree root
+WEBUI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # .../webui
+PROTO_DIR = WEBUI_DIR  # historical name (prototype A), kept for importers
+REPO_ROOT = os.path.dirname(WEBUI_DIR)                                      # repo root
 REAL_DB = os.path.join(REPO_ROOT, "DATA", "db", "annotations.sqlite")
 HELD_OUT_FILE = "M4_aug_concat_fs1.mat"
 
@@ -42,7 +43,7 @@ class Runtime:
     def __init__(self, stamp: str | None = None):
         stamp = stamp or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.stamp = stamp
-        self.dir = os.path.join(PROTO_DIR, "runtime", stamp)
+        self.dir = os.path.join(WEBUI_DIR, "runtime", stamp)
         self.db_path = os.path.join(self.dir, "annotations.sqlite")
         self.step_cache_root = os.path.join(self.dir, "step_cache")
         self.results_dir = os.path.join(self.dir, "results")
@@ -61,7 +62,7 @@ class Runtime:
             os.makedirs(d, exist_ok=True)
 
         if not os.path.isfile(REAL_DB):
-            raise SystemExit(f"real database not found at {REAL_DB}; is the DATA junction in place?")
+            raise SystemExit(f"real database not found at {REAL_DB}; run from a checkout that has DATA/db/annotations.sqlite")
         shutil.copyfile(REAL_DB, self.db_path)
 
         import Working.config as cfg
