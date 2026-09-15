@@ -392,3 +392,16 @@ Three critics, 2026-09-15 ~19:40–20:00. Headline findings (full JSON in the se
 
 One fixer agent applies P0 → P1 → cheap P2, keeps the smoke test green (adding the four built-in
 templates so the image path is exercised), then B stops.
+
+## 14. Close-out (2026-09-15 ~20:45)
+
+- B fix pass: 10 P0/P1 fixed, smoke 73 checks green; B stops (user: one round only). No C (user).
+- All prototype servers stopped (8765, 8766; no Vite dev servers left). Core untouched:
+  `git status` and `git diff main` on Working/Adapters/UI/tests/scripts/pytest.ini/environment.yml empty.
+- Closing DATA check: `DATA_CHECK_END.txt`. `annotations.sqlite` identical to the start snapshot. The
+  only differences are the files already listed in `REAL_DATA_WRITES.md` (one from a reader subagent at
+  23:05 on 14 Sep, the rest from the repo's pytest run 17:34–17:36 on 15 Sep); nothing under DATA/ or
+  Results/ is newer than 17:40. Nothing deleted.
+- pytest: run once (1296 passed / 41 pre-existing failures, DECISIONS §10); deliberately not re-run at
+  the very end because it writes into the real DATA through the junction.
+- Issue #12: one summary comment (tracker write 2 of 2). Issue left open.

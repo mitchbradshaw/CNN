@@ -13,6 +13,7 @@ import copy
 import html
 import json
 import logging
+import os
 import time
 
 import numpy as np
@@ -32,7 +33,7 @@ esc = html.escape
 
 ROW_H = 112
 LEFT_W = 250
-BADGE_LABEL = {"new": "new", "cached": "cached", "stale": "stale", "running": "running", "waiting": "waiting", "failed": "failed",
+BADGE_LABEL = {"new": "new", "cached": "cached", "computed": "✓ computed", "stale": "stale", "running": "running", "waiting": "waiting", "failed": "failed",
                "blocked": "blocked", "cancelled": "cancelled", "invalid": "invalid", "error": "render error"}
 
 
@@ -42,7 +43,10 @@ def badge_html(row: dict, testid: str) -> str:
     t = row.get("timing")
     txt = BADGE_LABEL[st]
     title = ""
-    if st == "cached" and t is not None:
+    if st == "cached" and row.get("cache_only"):
+        txt += " · not loaded"
+        title = "this step's result is in the core's step cache, but no run of this chain on this span is attached to the page · Run reads it back in ~0 s"
+    elif st in ("cached", "computed") and t is not None:
         txt += f" · {RS.fmt_timing(t)}"
         title = (f"core step time {t:.3f} s" + (" — 0.0 is the core's own prefix-cache hit signal" if t == 0 else "")) if row.get("timing_is_core") else f"wall {t:.3f} s"
     return f'<span class="badge {cls}" data-testid="{testid}" title="{esc(title)}">{esc(txt)}</span>'
@@ -55,6 +59,8 @@ def source_payload(ctx, src: dict, px: int = 1200) -> dict:
         if rec is None or rec["held_out"]:
             raise PermissionError(f"{src.get('source_file')} is held out (spec §0 D6); the chain refuses it as a source")
         fs = float(rec["fs"])
+        if int(src["end_idx"]) - int(src["start_idx"]) <= 0:    # critique r1 P1: say it, never a numpy reduction traceback
+            raise ValueError(f"the source span is empty ({int(src['end_idx']) - int(src['start_idx'])} samples) · send a span of at least 30 s from Explore")
         w = corpus.window(conn, rec, src["start_idx"] / fs, src["end_idx"] / fs, px)
     finally:
         conn.close()
@@ -82,6 +88,10 @@ def start_run(ctx, v: dict):
     ctx.job_ids.append(job.id)
     ctx.stale_from = None
     debug.event("run_started", job_id=job.id, steps=[RS.step_name(s) for s in v["recipe"]["steps"]])
+    try:
+        ctx.sync_hash()        # the job id goes into the URL so a reload re-attaches (critique r1 P1)
+    except Exception:
+        log.exception("sync_hash failed")
     return job, None
 
 
@@ -101,6 +111,12 @@ class ChainView:
         self.undo_steps = None
         self.throw = ctx.query.get("throw") == "1"
         self.uncaught = ctx.query.get("uncaught") == "1"
+        self.throw_row = ctx.query.get("throw") == "row"      # loud-failure evidence: step row 02's renderer raises (caught per row)
+        pm = str(ctx.query.get("poll_ms", "200"))
+        self.poll_ms = max(50, int(pm)) if pm.isdigit() else 200   # test affordance: a slow poll makes a stale "■ Cancel" reproducible
+        self.run_mode = "run"              # what the Run button is SHOWING: run | cancel (critique r1 P0 stale-cancel)
+        self.run_mode_prev = "run"
+        self.run_mode_at = 0.0
         self.rows_col = pn.Column(sizing_mode="stretch_width", margin=0)
         self.notice = pn.Row(sizing_mode="stretch_width", margin=0)
         self.popover = pn.Column(visible=False, width=560, css_classes=["popover"], margin=(0, 20, 6, 0), styles={"padding": "10px 12px"})
@@ -153,10 +169,11 @@ class ChainView:
         self.run_btn = pn.widgets.Button(name="Run chain", css_classes=["btn-primary"], width=150, margin=(4, 3))
         self.run_btn_classes = ["t-run"]
         self.run_reason = pn.pane.HTML("", margin=(0, 20, 0, 0), sizing_mode="stretch_width")
-        self.history_btn.on_click(lambda e: self.toggle_popover("history"))
-        self.import_btn.on_click(lambda e: self.toggle_popover("import"))
-        self.save_btn.on_click(self.save_template)
-        self.run_btn.on_click(self.on_run)
+        g = self.ctx.guard
+        self.history_btn.on_click(g("History", lambda e: self.toggle_popover("history")))
+        self.import_btn.on_click(g("Import", lambda e: self.toggle_popover("import")))
+        self.save_btn.on_click(g("Save template", self.save_template))
+        self.run_btn.on_click(g("Run / Cancel", self.on_run))
         self.toolbar = pn.Column(
             pn.Row(self.name_chip, self.source_chip, pn.layout.HSpacer(), self.surrogate,
                    pn.pane.HTML('<span class="mono small muted" title="surrogate nulls are not in this slice">surrogate · off</span>', margin=(12, 8, 0, 2)),
@@ -176,15 +193,23 @@ class ChainView:
         job = self.job()
         stale = self.ctx.stale_from
         if est:
-            tail = f"{stale + 1:02d} → {len(self.steps):02d}" if stale is not None else ("all cached" if all(r["status"] == "cached" for r in rows) else "full run")
-            self.estimate_chip.object = f'<span class="chip amber" data-testid="estimate-chip">≈ {RS.fmt_timing(est["total_s"]) or "0 s"} · {tail}</span>'
+            all_cached = stale is None and bool(rows) and all(r["status"] == "cached" for r in rows)
+            tail = f"{stale + 1:02d} → {len(self.steps):02d}" if stale is not None else ("all cached" if all_cached else "full run")
+            cls = "amber" if v.get("over_ceiling") else "grey"      # amber only when it needs attention (critique r1 P2)
+            est_txt = ("0 s" if all_cached else "no core estimate" if not est.get("total_s") else "≤ " + RS.fmt_timing(est["total_s"]) + " core est.")
+            self.estimate_chip.object = (f'<span class="chip {cls}" data-testid="estimate-chip" title="the core cost model\'s upper estimate, not a measurement">'
+                                         f'{est_txt} · {tail}</span>')
         else:
             self.estimate_chip.object = '<span class="chip grey">≈ – </span>'
         running = job is not None and job.status == "running"
         n_invalid = sum(1 for j in v.get("junctions", []) if not j["ok"])
         reason = ""
         self.run_btn.css_classes = ["btn-primary", "t-run"]
-        if running:
+        if running and job.cancel_event.is_set():
+            self.run_btn.name, self.run_btn.disabled = "■ Cancelling…", True
+            self.run_btn.css_classes = ["btn-danger", "t-run"]
+            reason = "cancel requested · stops before the next step"
+        elif running:
             self.run_btn.name, self.run_btn.disabled = "■ Cancel", False
             self.run_btn.css_classes = ["btn-danger", "t-run"]
             cur = job.current_step
@@ -196,6 +221,8 @@ class ChainView:
             reason = f'{n_invalid} invalid junction{"s" if n_invalid > 1 else ""} · fix the red junction to run'
         elif v.get("held_out"):
             self.run_btn.name, self.run_btn.disabled, reason = "Run chain", True, "the source is held out (M4)"
+        elif v.get("recipe_error"):
+            self.run_btn.name, self.run_btn.disabled, reason = "Run chain", True, v["recipe_error"]
         elif v.get("over_ceiling"):
             o = v["over_ceiling"][0]
             self.run_btn.name, self.run_btn.disabled = "Run chain", True
@@ -208,6 +235,9 @@ class ChainView:
             self.run_btn.name, self.run_btn.disabled = f"↻ Re-run from {stale + 1:02d}", False
         else:
             self.run_btn.name, self.run_btn.disabled = "▶ Run chain", False
+        mode = "cancel" if running else "run"
+        if mode != self.run_mode:
+            self.run_mode_prev, self.run_mode, self.run_mode_at = self.run_mode, mode, time.time()
         note = ('no span sent from Explore · using the example span (CH4_A2 · 276.4–278.4 h)' if self.is_example else "")
         self.run_reason.object = (f'<div class="mono small" style="display:flex;justify-content:space-between;min-height:14px;margin-left:20px">'
                                   f'<span class="muted">{esc(note)}</span><span data-testid="run-reason" style="color:#b3262b">{esc(reason)}</span></div>')
@@ -215,10 +245,21 @@ class ChainView:
     # ------------------------------------------------------------------ actions --
     def on_run(self, _=None):
         job = self.job()
-        if job is not None and job.status == "running":
-            ok = self.ctx.manager.cancel(job)
-            self.ctx.toast("cancel requested · the core checks it before the next step" if ok else "the run had already finished")
+        live = job is not None and job.status in ("running", "queued")
+        # FIX (critique r1 P0): a click is read by what the button was SHOWING. A click that lands on a "■ Cancel"
+        # the 200 ms poll has not repainted yet (or within 600 ms of it turning back into Run) must never start a
+        # second run — that wrote duplicate detections.
+        showed_cancel = self.run_mode == "cancel" or (self.run_mode_prev == "cancel" and time.time() - self.run_mode_at < 0.6)
+        if live:
+            ok = self.ctx.manager.cancel(job) if job.status == "running" else False
+            self.ctx.toast("cancel requested · the core checks it before the next step" if ok else "the run is queued · cancel it once it starts")
             debug.event("cancel", job_id=job.id, accepted=ok)
+            self.refresh()
+            return
+        if showed_cancel:
+            self.ctx.toast("run already finished · nothing was cancelled and no new run was started", "warning", 4000)
+            debug.event("stale_cancel", job_id=job.id if job is not None else None, status=job.status if job is not None else None)
+            self.refresh()
             return
         v = self.validation(force=True)
         job, why = start_run(self.ctx, v)
@@ -232,7 +273,7 @@ class ChainView:
 
     def start_poll(self):
         if self.poll is None:
-            self.poll = pn.state.add_periodic_callback(self.tick, period=200)
+            self.poll = pn.state.add_periodic_callback(self.tick, period=self.poll_ms)
 
     def stop_poll(self):
         if self.poll is not None:
@@ -243,6 +284,14 @@ class ChainView:
             self.poll = None
 
     def tick(self):
+        try:
+            self._tick()
+        except Exception as exc:     # critique r1 P1: a failing poll stops and says so, never a frozen "running"
+            self.stop_poll()
+            from .main import error_card
+            self.notice.objects = [error_card("run poll (this page stopped following the job; reload to re-attach)", exc, testid="poll-error", margin=(4, 20))]
+
+    def _tick(self):
         job = self.job()
         if job is None:
             self.stop_poll()
@@ -292,12 +341,13 @@ class ChainView:
                                       '<div class="mono small muted">replaces the chain\'s stages; the source stays</div>'))
             for t in RS.templates(self.ctx):
                 b = pn.widgets.Button(name="Import", css_classes=["btn"], width=70, margin=(2, 4))
-                b.on_click(lambda e, t=t: self.apply_steps(t["steps"], t["name"].split(" ·")[0]))
+                b.css_classes = ["btn", "t-import-" + t["id"].split(":")[-1]]
+                b.on_click(self.ctx.guard("Import template", lambda e, t=t: self.apply_steps(t["steps"], t["name"].split(" ·")[0])))
                 items.append(pn.Row(pn.pane.HTML(f'<div class="mono small" style="padding-top:6px">{esc(t["name"])}'
                                                  f'{"" if t["builtin"] else " <span class=muted>· saved</span>"}</div>', sizing_mode="stretch_width"),
                                     b, sizing_mode="stretch_width", margin=0))
         close = pn.widgets.Button(name="close", css_classes=["btn-link"], width=60, margin=(0, 0))
-        close.on_click(lambda e: setattr(self.popover, "visible", False))
+        close.on_click(self.ctx.guard("close", lambda e: setattr(self.popover, "visible", False)))
         self.popover.objects = items + [close]
         self.popover.visible = True
 
@@ -305,8 +355,8 @@ class ChainView:
         b = pn.widgets.Button(name="Apply to source", css_classes=["btn"], width=130, margin=(2, 4),
                               disabled=recipe is None, description=None if recipe else "recipe unreadable")
         if recipe is not None:
-            b.on_click(lambda e: self.apply_steps([{"stage": s["stage"], "algorithm": s["algorithm"], "params": s.get("params") or {},
-                                                    "side_inputs": s.get("side_inputs") or {}} for s in recipe["steps"]], None))
+            b.on_click(self.ctx.guard("Apply to source", lambda e: self.apply_steps([{"stage": s["stage"], "algorithm": s["algorithm"], "params": s.get("params") or {},
+                                                    "side_inputs": s.get("side_inputs") or {}} for s in recipe["steps"]], None)))
         return pn.Row(pn.pane.HTML(f'<div class="mono small" style="padding-top:2px">{esc(title)}</div><div class="mono small muted">{esc(sub)}</div>',
                                    sizing_mode="stretch_width"), b, sizing_mode="stretch_width", margin=(2, 0))
 
@@ -323,7 +373,7 @@ class ChainView:
         name = RS.page_name(self.steps[i])
         steps = [s for k, s in enumerate(self.steps) if k != i]
         undo = pn.widgets.Button(name="Undo", css_classes=["btn"], width=70, margin=(0, 6))
-        undo.on_click(lambda e: (self.set_steps(self.undo_steps, i), setattr(self.notice, "objects", [])))
+        undo.on_click(self.ctx.guard("Undo", lambda e: (self.set_steps(self.undo_steps, i), setattr(self.notice, "objects", []))))
         self.notice.objects = [pn.pane.HTML(f'<div class="mono small" style="padding:7px 0 0 20px">{i + 1:02d} {esc(name)} deleted</div>'), undo]
         self.set_steps(steps, i)
 
@@ -358,9 +408,10 @@ class ChainView:
         b_byp = pn.widgets.Button(name="⊘", css_classes=["icon-btn"], width=26, margin=(0, 2), disabled=True, description="bypass · not in this slice")
         b_dup = pn.widgets.Button(name="⧉", css_classes=["icon-btn"], width=26, margin=(0, 2), description="duplicate")
         b_del = pn.widgets.Button(name="✕", css_classes=["icon-btn"], width=26, margin=(0, 2), description="delete")
-        b_set.on_click(lambda e: self.ctx.navigate(f"analyse/block/{i}"))
-        b_dup.on_click(lambda e: self.duplicate_step(i))
-        b_del.on_click(lambda e: self.delete_step(i))
+        g = self.ctx.guard
+        b_set.on_click(g(f"open settings {i + 1:02d}", lambda e: self.ctx.navigate(f"analyse/block/{i}")))
+        b_dup.on_click(g(f"duplicate {i + 1:02d}", lambda e: self.duplicate_step(i)))
+        b_del.on_click(g(f"delete {i + 1:02d}", lambda e: self.delete_step(i)))
         for b, k in ((b_set, "settings"), (b_dup, "duplicate"), (b_del, "delete")):
             b.css_classes = b.css_classes + [f"t-{k}-step-{i + 1}"]
         return pn.Row(b_set, b_byp, b_dup, b_del, margin=(6, 0, 0, 0))
@@ -393,6 +444,8 @@ class ChainView:
                    "blocked": "blocked · an earlier step failed, so this one never ran",
                    "invalid": f"invalid junction · {row.get('invalid_reason') or ''}",
                    "new": "not run yet · Run chain to see this block's result"}.get(st, "no result")
+            if st == "cached" and row.get("cache_only"):
+                msg = "in the step cache · no run attached to this view · Run chain reads it back in ~0 s"
             if row.get("over_ceiling"):
                 msg = "over the local ceiling for this span · would route to HPC (out of slice scope)"
             info["type"] = st
@@ -426,9 +479,9 @@ class ChainView:
         def show_log(e):
             log_pane.object = f'<pre class="mono" style="font-size:10.5px;max-height:220px;overflow:auto;white-space:pre-wrap;color:#7f1d1d">{esc(chr(10).join(job.log_lines) or err.get("traceback") or "no log lines")}</pre>'
             log_pane.visible = not log_pane.visible
-        view_log.on_click(show_log)
-        open_set.on_click(lambda e: self.ctx.navigate(f"analyse/block/{i}"))
-        retry.on_click(self.on_run)
+        view_log.on_click(self.ctx.guard("View log", show_log))
+        open_set.on_click(self.ctx.guard("Open settings", lambda e: self.ctx.navigate(f"analyse/block/{i}")))
+        retry.on_click(self.ctx.guard("Retry", self.on_run))
         info["type"] = "failed"
         return pn.Column(
             pn.pane.HTML(f'<div data-testid="error-card"><div style="font-weight:600;color:#b3262b">{i + 1:02d} {esc(RS.page_name(self.steps[i]))} failed after {el:.1f} s</div>'
@@ -438,18 +491,24 @@ class ChainView:
             pn.Row(view_log, open_set, retry, margin=0), log_pane,
             sizing_mode="stretch_width", margin=0, styles={"background": "#fff7f7", "border-radius": "8px", "padding": "8px 10px"})
 
+    # Row geometry (horizontal): card margin 20 + 1 px border | left column LEFT_W, margin 12/6 | plot column margin 4/12.
+    # The footer axis is built through _frame() too, so its plot frame lines up with every row's (critique r1 P1).
+    def _frame(self, left_objs, plot, *, vpad=8, css=("card",), styles=None):
+        left = pn.Column(*left_objs, width=LEFT_W, margin=(vpad, 6, vpad, 12))
+        return pn.Row(left, pn.Column(plot, sizing_mode="stretch_width", margin=(vpad, 12, vpad, 4)), sizing_mode="stretch_width",
+                      css_classes=list(css), margin=(0, 20), styles=styles or {})
+
     def _row(self, label_num, title, badge, sig, caption, icons, plot, testid, failed=False, invalid=False):
-        left = pn.Column(pn.pane.HTML(f'<div class="row-left" data-testid="{testid}"><h4><span class="num">{label_num}</span>{esc(title)}</h4>'
-                                      f'<div style="margin-top:4px">{badge}<span class="sig">{esc(sig)}</span></div>'
-                                      f'<div class="cap" data-testid="{testid}-caption">{esc(caption)}</div></div>', sizing_mode="stretch_width", margin=0),
-                         *( [icons] if icons is not None else []), width=LEFT_W, margin=(8, 6, 8, 12))
-        styles = {"border": "1.5px solid #e5484d"} if (failed or invalid) else {}
-        return pn.Row(left, pn.Column(plot, sizing_mode="stretch_width", margin=(8, 12, 8, 4)), sizing_mode="stretch_width",
-                      css_classes=["card"], margin=(0, 20), styles=styles)
+        head = pn.pane.HTML(f'<div class="row-left" data-testid="{testid}"><h4><span class="num">{label_num}</span>{esc(title)}</h4>'
+                            f'<div style="margin-top:4px">{badge}<span class="sig">{esc(sig)}</span></div>'
+                            f'<div class="cap" data-testid="{testid}-caption">{esc(caption)}</div></div>', sizing_mode="stretch_width", margin=0)
+        # the failed/invalid outline is drawn as an inset shadow so the border width (and the plot frame) never shifts
+        styles = {"box-shadow": "inset 0 0 0 1.5px #e5484d", "border-color": "#e5484d"} if (failed or invalid) else {}
+        return self._frame([head] + ([icons] if icons is not None else []), plot, styles=styles)
 
     def _pill(self, position, label="+ insert"):
         b = pn.widgets.Button(name=label, css_classes=["pill-insert", f"t-insert-{position}"], width=150 if "end" in label else 90, margin=(3, 0))
-        b.on_click(lambda e: self.open_insert(position))
+        b.on_click(self.ctx.guard("insert stage", lambda e: self.open_insert(position)))
         return pn.Row(pn.layout.HSpacer(), b, pn.layout.HSpacer(), sizing_mode="stretch_width", margin=0)
 
     def _junction(self, i, j):
@@ -462,10 +521,10 @@ class ChainView:
                               f'{esc(prev)} emits {esc(str(prod))}</span>', margin=(4, 6))]
         if first:
             b = pn.widgets.Button(name=f"+ Insert {RS.catalog()[first]['page_name']} here", css_classes=["btn"], width=260, margin=(2, 4))
-            b.on_click(lambda e: self.insert_step(i, first))
+            b.on_click(self.ctx.guard("insert stage", lambda e: self.insert_step(i, first)))
             items.append(b)
         show = pn.widgets.Button(name="Show blocks that fit", css_classes=["btn"], width=160, margin=(2, 4))
-        show.on_click(lambda e: self.open_insert(i))
+        show.on_click(self.ctx.guard("show blocks that fit", lambda e: self.open_insert(i)))
         items.append(show)
         return pn.Row(pn.layout.HSpacer(), *items, pn.layout.HSpacer(), sizing_mode="stretch_width", margin=(4, 0))
 
@@ -519,7 +578,16 @@ class ChainView:
                     objs.append(cached[1]); debug_rows.append(cached[2]); objs.append(self._pill(i + 1, "+ insert · end of chain" if i == len(self.steps) - 1 else "+ insert"))
                     continue
                 info = {}
-                plot = self._plot(i, row, rows, src_payload, info)
+                try:     # critique r1 P1: every step row's renderer is caught per row, not only the Source row's
+                    if self.throw_row and i == 1:
+                        raise RuntimeError("deliberate render failure (?throw=row) inside step row 02's renderer")
+                    plot = self._plot(i, row, rows, src_payload, info)
+                except Exception as exc:
+                    if self.uncaught:
+                        raise
+                    from .main import error_card
+                    plot = error_card(f"{i + 1:02d} {RS.page_name(step)} renderer", exc, margin=0)
+                    info = {"type": "render-error", "error": f"{type(exc).__name__}: {exc}"}
                 caption = (payload.get("summary") if payload and row["status"] in ("cached", "stale") else None) or RS.param_caption(step)
                 badge = badge_html(row, f"row-badge-{i + 1}")
                 view = self._row(f"{i + 1:02d}", spec.get("page_name", RS.step_name(step)), badge, spec.get("signature", "?"), caption,
@@ -547,13 +615,14 @@ class ChainView:
         C.time_axis(ax)
         self.footer_text = pn.pane.HTML("", sizing_mode="stretch_width", margin=0)
         self.export_btn = pn.widgets.Button(name="⤓ Export run", css_classes=["btn"], width=120, margin=(0, 4))
-        self.export_btn.on_click(self.export)
+        self.export_btn.on_click(self.ctx.guard("Export run", self.export))
         handoff1 = pn.widgets.Button(name="→ Analyse events", css_classes=["btn"], width=150, margin=(0, 4), disabled=True, description="not in this slice")
         self.handoff2 = pn.widgets.Button(name="→ Pass to Review", css_classes=["btn-primary"], width=170, margin=(0, 4), disabled=True,
                                           description="Review is outside this slice")
+        self.axis_pane = pn.pane.Bokeh(ax, sizing_mode="stretch_width", margin=0)
         self.footer = pn.Column(
-            pn.Row(pn.pane.HTML('<div class="mono small muted" style="padding-top:4px">all rows share this time axis</div>', width=LEFT_W, margin=(0, 6, 0, 32)),
-                   pn.pane.Bokeh(ax, sizing_mode="stretch_width", margin=(0, 36, 0, 4)), sizing_mode="stretch_width", margin=0),
+            self._frame([pn.pane.HTML('<div class="mono small muted" style="padding-top:4px" data-testid="shared-axis">all rows share this time axis</div>',
+                                      sizing_mode="stretch_width", margin=0)], self.axis_pane, vpad=0, css=("card", "axis-row")),
             pn.Row(self.footer_text, self.export_btn, handoff1, self.handoff2, sizing_mode="stretch_width", css_classes=["card"],
                    margin=(4, 20, 24, 20), styles={"padding": "10px 14px"}),
             sizing_mode="stretch_width", margin=0)
@@ -584,7 +653,7 @@ class ChainView:
                 self.handoff2.name = f'→ Pass {last.get("n", 0)} to Review'
         self.footer_text.object = (f'<div style="display:flex;gap:18px;align-items:center" data-testid="footer-terminal">'
                                    f'<span class="chip {kind}">{esc(chip)}</span><div style="border-left:1px solid var(--border);padding-left:16px">{line}</div></div>')
-        self.export_btn.disabled = job is None or job.status == "running"
+        self.export_btn.disabled = job is None or job.status == "running" or bool(n_invalid)
 
     def export(self, _=None):
         job = self.job()
@@ -592,7 +661,7 @@ class ChainView:
             return
         path = RS.export_job(self.ctx, job)
         debug.put("last_export", {"path": path, "job_id": job.id})
-        self.ctx.toast(f"exported run to {path}", "success", 6000)
+        self.ctx.toast(f"exported run to exports/{os.path.basename(path)}", "success", 6000)
 
 
 def chain_page(ctx):

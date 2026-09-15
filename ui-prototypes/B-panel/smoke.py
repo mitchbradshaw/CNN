@@ -44,6 +44,37 @@ INK_ALL = "(() => {" + DEEP + """
 })()"""
 BLANK = 4
 
+# Bokeh view geometry: every plot's frame left/right in page pixels + its x_range id (critique r1: shared-axis drift)
+PLOTS = """() => {
+ const out=[]; const seen=new Set();
+ const walk=(v)=>{ if(!v||seen.has(v))return; seen.add(v);
+   if(v.frame && v.frame.bbox && v.el){ const r=v.el.getBoundingClientRect(); const b=v.frame.bbox;
+     let xr=null; try{ xr=v.model.x_range.id; }catch(e){}
+     out.push({y:r.y,h:r.height,fl:r.x+b.left,fr:r.x+b.right,xr}); }
+   try{ for(const c of v.child_views) walk(c);}catch(e){}
+   try{ for(const c of (v.children? v.children():[])) walk(c);}catch(e){} };
+ const idx = Bokeh.index; const roots = idx && idx.roots ? idx.roots : Object.values(idx||{});
+ for(const v of roots) walk(v);
+ return out; }"""
+
+# per chain row: the max canvas ink inside the row's band, plus HTML renders (model card, error cards) found there
+ROW_PAINT = "(() => {" + DEEP + """
+  const heads = deepAll('.row-left').map(e => ({id: e.getAttribute('data-testid'), top: e.getBoundingClientRect().top}))
+                 .filter(h => h.id).sort((a, b) => a.top - b.top);
+  const canv = deepAll('canvas').filter(c => c.width > 50 && c.height > 20).map(c => {
+    const r = c.getBoundingClientRect(); let d; try { d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; } catch (e) { return null; }
+    const counts = {}; for (let i = 0; i < d.length; i += 4 * 17) counts[(d[i] << 16) | (d[i+1] << 8) | d[i+2]] = 1;
+    return {x: r.x, cy: r.y + r.height / 2, distinct: Object.keys(counts).length}; }).filter(Boolean);
+  const html = (sel) => deepAll(sel).map(e => { const r = e.getBoundingClientRect(); return {x: r.x, cy: r.y + Math.min(r.height, 40) / 2}; });
+  const kv = html('.kv'), errs = html('[data-testid="render-error"], [data-testid="payload-error"], [data-testid="error-card"]');
+  return heads.map((h, k) => {
+    const lo = h.top - 14, hi = k + 1 < heads.length ? heads[k + 1].top - 14 : h.top + 150;
+    const inb = (o) => o.cy >= lo && o.cy < hi && o.x > 320;
+    const ink = canv.filter(inb).reduce((m, c) => Math.max(m, c.distinct), 0);
+    return {row: h.id, ink, model_card: kv.some(inb), error_card: errs.some(inb)};
+  });
+})()"""
+
 
 class Smoke:
     def __init__(self, url, run_chain):
@@ -162,6 +193,28 @@ class Smoke:
         self.check(len(stats) >= 6, f"per-viewport refetch recorded {len(stats)} fetches over a 12-step wheel sequence from the full channel")
         self.check(len(srv) >= len(stats), f"round trips synced back to Python (/b/debug zoom_stats has {len(srv)})")
         self.shot(page, "explore-2-signal-zoomed")
+        # ---- critique r1: wheel zoom must stop at the 30 s minimum (it used to collapse to 0 h and paint blank) ----
+        n1 = len(self.debug().get("zoom_stats", []))
+        for _ in range(40):
+            page.mouse.wheel(0, -300)
+            page.wait_for_timeout(50)
+        page.wait_for_timeout(1500)
+        z = self.debug().get("zoom_stats", [])[n1:]
+        widths = [(s["t1_h"] - s["t0_h"]) * 3600 for s in z]
+        ink2 = self.ink(page)
+        span2 = max(ink2, key=lambda c: c["h"]) if ink2 else None
+        self.evidence["min_span"] = {"fetches": len(z), "min_width_s": round(min(widths), 3) if widths else None,
+                                     "ink": span2 and span2["distinct"], "send_span_disabled": self.btn(page, re.compile("^Send span to Analyse")).first.is_disabled()}
+        self.check(bool(widths) and min(widths) >= 29.99, f"40 more wheel steps: the viewport never went below 30 s (min {self.evidence['min_span']['min_width_s']} s)")
+        self.check(span2 is not None and span2["distinct"] > BLANK, f"span viewport still painted at the minimum span ({span2 and span2['distinct']} colours)")
+        self.shot(page, "explore-2-signal-min-span")
+        self.btn(page, "fit", exact=True).first.click()      # back to the same 12-step view as before (the cancel test doubles it to ~22 h)
+        page.wait_for_timeout(1200)
+        page.mouse.move(cx, cy)
+        for _ in range(12):
+            page.mouse.wheel(0, -200)
+            page.wait_for_timeout(180)
+        page.wait_for_timeout(1200)
         self.btn(page, "›", exact=True).first.click()
         page.wait_for_timeout(1500)
         self.check(page.locator('[data-testid="signal-motif"]').count() == 1, "motif tier shows the selected motif")
@@ -222,7 +275,9 @@ class Smoke:
         self.evidence["first_run_timings"] = r.get("step_timings")
         b = self.badges(page)
         self.evidence["badges_after_run"] = b
-        self.check(len(b) == 3 and all("cached" in x for x in b), f"all rows completed: {b}")
+        st0 = r.get("step_timings") or {}
+        honest = len(b) == 3 and all((("cached" in x) == (st0.get(str(i)) == 0.0)) and ("cached" in x or "computed" in x) for i, x in enumerate(b))
+        self.check(honest, f"all rows completed and badged honestly (cached only when the core timing is 0.0): {b} · timings {st0}")
         types = [x.get("type") for x in (r.get("rows") or [])]
         self.check(types[:4] == ["signal", "signal", "scores", "spanset"], f"renderer seam drew {types}")
         ink = self.ink(page)
@@ -352,6 +407,145 @@ class Smoke:
         self.check(r.get("job_status") == "cancelled", f"cancel accepted → job {r.get('job_status')} (cooperative: checked before the next step)")
         self.shot(page, "chain-cancelled")
 
+    # ------------------------------------------------------------ critique round 1 --
+    def run_and_wait(self, page, timeout_s=120):
+        before = self.debug().get("rows", {}).get("job")
+        page.locator(".t-run button").first.click()
+        r = self.wait_job(page, before, timeout_s)
+        page.wait_for_timeout(2200)
+        return self.debug().get("rows", {})
+
+    def import_template(self, page, key):
+        page.locator(".t-history").first.wait_for(state="attached")
+        self.btn(page, "Import", exact=True).first.click()
+        page.wait_for_timeout(1200)
+        page.locator(f".t-import-{key} button").first.click()
+        page.wait_for_timeout(1800)
+
+    def templates(self, page):
+        """Every built-in template on a ≤5000-sample span: each row type paints, zero page errors (gramian blanked the page)."""
+        print("[templates]")
+        want = {"mp_threshold": ["signal", "signal", "scores", "spanset"], "dsax": ["signal", "signal", "encoding"],
+                "windows_model": ["signal", "windowset", "grouping", "model"], "gramian": ["signal", "signal", "encoding"]}
+        self.goto(page, "analyse/chain?rid=4&s0=995040&s1=998640", 3000)      # 3,600 samples at 1 Hz
+        self.evidence["templates"] = {}
+        for key, types in want.items():
+            n_err = len(self.errors)
+            self.import_template(page, key)
+            r = self.run_and_wait(page, 120)
+            rows = r.get("rows") or []
+            paint = page.evaluate(ROW_PAINT)
+            got = [x.get("type") for x in rows]
+            ok_rows = []
+            for k, (x, pr) in enumerate(zip(rows, paint)):
+                t = x.get("type")
+                ok_rows.append(bool(pr["model_card"]) if t == "model" else (pr["ink"] > BLANK and not pr["error_card"]))
+            ev = {"job_status": r.get("job_status"), "types": got, "paint": paint, "badges": self.badges(page), "errors": self.errors[n_err:],
+                  "step_timings": r.get("step_timings")}
+            if key == "gramian":
+                ev["not_time_aligned_text"] = page.locator("text=not time-aligned").count()
+            if key == "mp_threshold":       # shared axis alignment through Bokeh view geometry
+                plots = page.evaluate(PLOTS)
+                axis = next((p_ for p_ in plots if 20 <= p_["h"] <= 32), None)
+                shared = [p_ for p_ in plots if axis and p_["xr"] == axis["xr"] and p_ is not axis]
+                ev["axis"] = {"axis": axis and [round(axis["fl"], 1), round(axis["fr"], 1)], "rows": [[round(p_["fl"], 1), round(p_["fr"], 1)] for p_ in shared]}
+                self.check(axis is not None and len(shared) >= 4 and all(abs(p_["fl"] - axis["fl"]) <= 1 and abs(p_["fr"] - axis["fr"]) <= 1 for p_ in shared),
+                           f"shared axis frame {ev['axis']['axis']} matches every row frame within 1 px: {ev['axis']['rows']}")
+            self.evidence["templates"][key] = ev
+            self.check(r.get("job_status") == "completed", f"template {key}: job {r.get('job')} {r.get('job_status')}")
+            self.check(got == types, f"template {key}: seam drew {got}")
+            self.check(len(paint) == len(types) and all(ok_rows), f"template {key}: every row painted {[(p_['row'], p_['ink'], p_['model_card']) for p_ in paint]}")
+            self.check(not self.errors[n_err:], f"template {key}: 0 page/console errors ({self.errors[n_err:][:2]})")
+            self.shot(page, f"chain-template-{key}")
+
+    def stale_cancel(self, page):
+        """A click on a '■ Cancel' that the poll has not repainted after the job finished must not start a run."""
+        print("[stale cancel]")
+        s0 = 700000 + (int(time.time()) % 997) * 60      # a fresh 20 h span every smoke run → the MP is really computed
+        self.goto(page, f"analyse/chain?rid=4&s0={s0}&s1={s0 + 72000}&poll_ms=8000", 3000)
+        self.import_template(page, "mp_threshold")
+        jobs0 = len(self.debug().get("jobs", []))
+        page.locator(".t-run button").first.click()
+        t = time.time()
+        done = False
+        while time.time() - t < 7.0:
+            js = self.debug().get("jobs", [])
+            if len(js) > jobs0 and js[-1]["status"] in ("completed", "failed", "cancelled"):
+                done = True
+                break
+            page.wait_for_timeout(150)
+        label = page.locator(".t-run button").first.inner_text()
+        jobs1 = len(self.debug().get("jobs", []))
+        if done and "Cancel" in label:
+            page.locator(".t-run button").first.click()
+            page.wait_for_timeout(1500)
+            jobs2 = len(self.debug().get("jobs", []))
+            ev = [e["msg"] for e in self.debug().get("events", [])][-3:]
+            self.evidence["stale_cancel"] = {"label_at_click": label, "job_done_s": round(time.time() - t, 2), "jobs": [jobs0, jobs1, jobs2], "events": ev}
+            self.check(jobs2 == jobs1 and "stale_cancel" in ev, f"stale '■ Cancel' click after the job finished started no run (jobs {jobs1} → {jobs2}, events {ev})")
+            self.shot(page, "chain-stale-cancel-refused")
+        else:
+            self.evidence["stale_cancel"] = {"label": label, "done": done}
+            self.check(False, f"could not stage a stale Cancel (job done={done}, label {label!r})")
+        # badge honesty on this fresh span: the MP row was computed, never "cached"
+        page.wait_for_timeout(8500)
+        b = self.badges(page)
+        self.evidence["stale_cancel"]["badges"] = b
+        self.check(len(b) == 3 and b[1].startswith("✓ computed") and "cached" not in b[1], f"a freshly computed MP row reads computed, not cached: {b}")
+
+    def url_state(self, page, browser):
+        """Reload / second tab re-attaches from the hash; an empty span cannot be run."""
+        print("[url state]")
+        url = page.url
+        self.evidence["url_state"] = {"url": url}
+        self.check("job=" in url and "rid=" in url, f"the chain page's URL carries the span and job: {url}")
+        tab = browser.new_page(viewport={"width": 1440, "height": 900})
+        errs = []
+        tab.on("pageerror", lambda e: errs.append(str(e)))
+        tab.goto(url, wait_until="networkidle")
+        tab.wait_for_timeout(4000)
+        foot = tab.locator('[data-testid="footer-terminal"]').inner_text()
+        src = tab.locator('[data-testid="source-chip"]').inner_text()
+        self.evidence["url_state"].update(second_tab_footer=foot, second_tab_source=src, second_tab_badges=[tab.locator(f'[data-testid="row-badge-{i}"]').first.inner_text()
+                                                                                                         for i in range(1, 4) if tab.locator(f'[data-testid="row-badge-{i}"]').count()])
+        self.check("last run" in foot or "Cancelled" in foot, f"a second tab on the same URL re-attaches to the job: {foot.splitlines()[:2]}")
+        tab.screenshot(path=os.path.join(SHOTS, f"{self.n + 1:02d}-chain-second-tab-reattached.png"))
+        self.n += 1
+        self.shots.append(f"{self.n:02d}-chain-second-tab-reattached.png")
+        tab.goto(self.url + "/#analyse/chain?rid=4&s0=995040&s1=995040", wait_until="networkidle")
+        tab.wait_for_timeout(3500)
+        dis = tab.locator(".t-run button").first.is_disabled()
+        why = tab.locator('[data-testid="run-reason"]').inner_text()
+        self.evidence["url_state"].update(empty_run_disabled=dis, empty_reason=why, errors=errs)
+        self.check(dis and "empty" in why, f"a zero-length span: Run disabled with reason {why!r}")
+        tab.close()
+
+    def modal_and_font(self, page):
+        print("[modal + font]")
+        self.goto(page, "analyse/chain?rid=4&s0=995040&s1=998640", 2500)
+        f = page.evaluate("""async()=>{await document.fonts.ready; return {inter: document.fonts.check('12px Inter')}}""")
+        f["header"] = page.locator('[data-testid="header"] .ws').evaluate("e=>getComputedStyle(e).fontFamily")
+        f["caption"] = page.locator('[data-testid="chain-row-1-caption"]').evaluate("e=>getComputedStyle(e).fontFamily")
+        self.evidence["font"] = f
+        self.check(f["header"].startswith("Inter") and "Geist Mono" in f["caption"], f"UI text is Inter, mono stays mono: {f}")
+        page.locator(".t-insert-1 button").first.click()
+        page.wait_for_timeout(2200)
+        m = page.evaluate("(() => {" + DEEP + """
+          const cards = deepAll('.bk-btn').filter(b => b.getRootNode().host && b.getRootNode().host.classList.contains('card-btn'));
+          const over = cards.filter(b => b.scrollHeight > b.clientHeight + 1).length;
+          const det = deepAll('[data-testid="modal-detail"]')[0]; let spill = null;
+          if (det) { const hr = det.getRootNode().host.getBoundingClientRect(); let mx = 0;
+            for (const el of det.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.width) mx = Math.max(mx, r.right); }
+            spill = mx - hr.right; }
+          return {cards: cards.length, overflowing: over, detail_spill_px: spill}; })()""")
+        self.evidence["modal_overflow"] = m
+        self.check(m["cards"] >= 20 and m["overflowing"] == 0 and m["detail_spill_px"] is not None and m["detail_spill_px"] <= 0.5,
+                   f"insert modal: no clipped card text and the detail panel stays in its column: {m}")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(1200)
+        vis = page.locator('[data-testid="insert-modal"]').count() and page.locator('[data-testid="insert-modal"]').first.is_visible()
+        self.check(not vis, "Escape closes the insert modal")
+
     def loud_failure(self, page):
         print("[loud failure]")
         n_err = len(self.errors)
@@ -359,6 +553,11 @@ class Smoke:
         self.check(page.locator('[data-testid="render-error"]').count() >= 1, "?throw=1: the thrown renderer error shows as a red card in the row")
         self.evidence["throw_caught_console"] = self.errors[n_err:]
         self.shot(page, "loud-failure-render-error")
+        self.goto(page, "analyse/chain?throw=row", 3000)     # critique r1: a STEP row's renderer is caught per row too
+        paint = page.evaluate(ROW_PAINT)
+        self.evidence["throw_row"] = paint
+        self.check(len(paint) >= 3 and paint[2]["error_card"] and paint[0]["ink"] > BLANK, f"?throw=row: row 02 shows its own error card, the Source row still paints: {paint}")
+        self.shot(page, "loud-failure-step-row")
         self.goto(page, "explore/corpus", 3000)       # start from a different page so a stale view is unmistakable
         n_err = len(self.errors)
         self.goto(page, "analyse/chain?throw=1&uncaught=1", 3000)
@@ -384,14 +583,17 @@ class Smoke:
             page.on("console", lambda m: self.errors.append(f"console.{m.type}: {m.text[:400]}") if m.type == "error" else None)
             page.on("pageerror", lambda e: self.errors.append(f"pageerror: {e}"))
             page.on("requestfailed", lambda r: self.errors.append(f"requestfailed: {r.url}") if "fonts.g" not in r.url else None)
-            for step in (self.corpus, self.signal, self.m4, self.analyse, self.loud_failure):
+            steps = (self.corpus, self.signal, self.m4, self.analyse, self.templates, self.stale_cancel, lambda pg: self.url_state(pg, browser),
+                     self.modal_and_font, self.loud_failure)
+            for step in steps:
                 try:
                     step(page)
                 except Exception as e:
-                    self.failures.append(f"{step.__name__}: {type(e).__name__}: {e}")
-                    print("  EXC:", step.__name__, e)
+                    nm = getattr(step, "__name__", "step").replace("<lambda>", "url_state")
+                    self.failures.append(f"{nm}: {type(e).__name__}: {e}")
+                    print("  EXC:", nm, e)
                     try:
-                        self.shot(page, f"{step.__name__}-exception")
+                        self.shot(page, f"{nm}-exception")
                     except Exception:
                         pass
             browser.close()
@@ -400,7 +602,7 @@ class Smoke:
             with open(log_path, encoding="utf-8", errors="replace") as f:
                 f.seek(log_start)
                 tail = f.read()
-        allowed = ("deliberate", "failed at step", "render error in Source row renderer", "must be shorter")
+        allowed = ("deliberate", "failed at step", "render error in Source row renderer", "render error in 02 ", "must be shorter")
         err_lines, unexpected, last_err = [], [], ""
         for l in tail.splitlines():
             if " ERROR " in l:

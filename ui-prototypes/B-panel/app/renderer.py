@@ -148,14 +148,20 @@ def _encoding(p, x_range, height, ghost, info):
         ch = int(p.get("channels", 1))
         u8 = np.frombuffer(base64.b64decode(p["pixels_b64"]), dtype=np.uint8)
         img = u8.reshape(h, w, ch)[:, :, 0] if ch > 1 else u8.reshape(h, w)
-        # blue ramp LUT → RGBA uint32 (the image is data, not a waveform; its own colour scale is labelled)
-        lut = np.array([int(0xFF000000 | (int(255 - 245 * t) & 0xFF) << 16 | (int(255 - 145 * t) & 0xFF) << 8 | 255)
-                        for t in np.linspace(0, 1, 256)], dtype=np.uint32)
-        rgba = lut[img[::-1]]   # bokeh images origin bottom-left
+        # blue ramp LUT → RGBA uint32 (the image is data, not a waveform; its own colour scale is labelled).
+        # FIX (critique r1 P0): BokehJS reads each uint32 little-endian as A<<24 | B<<16 | G<<8 | R, and
+        # image_rgba wants a list of 2-D uint32 arrays. The first build packed R and B swapped (an orange ramp)
+        # and passed a 3-D (h, w, 4) uint8 view — Python accepted it, /b/debug said "drawn", and BokehJS threw
+        # "expected a 2D array, not 3D", taking every chain row down with it.
+        r = np.round(255 - 245 * np.linspace(0, 1, 256)).astype(np.uint32)
+        g = np.round(255 - 145 * np.linspace(0, 1, 256)).astype(np.uint32)
+        lut = (np.uint32(0xFF) << np.uint32(24)) | (np.uint32(255) << np.uint32(16)) | (g << np.uint32(8)) | r
+        rgba = np.ascontiguousarray(lut[img[::-1]], dtype=np.uint32)   # bokeh images origin bottom-left
+        assert rgba.ndim == 2 and rgba.shape == (h, w), f"image_rgba needs a 2-D (h, w) uint32 array, got {rgba.shape}"
         side = max(40, height - 8)
         f = C.base_figure(height=height, width=int(side * w / h) + 20, x_range=Range1d(0, w), y_range=Range1d(0, h),
                           x_axis=False, y_axis=False, grid=False)
-        f.image_rgba(image=[rgba.view(np.uint8).reshape(h, w, 4)], x=0, y=0, dw=w, dh=h)
+        f.image_rgba(image=[rgba], x=0, y=0, dw=w, dh=h)
         info["image"] = [int(h), int(w)]
         cap = pn.pane.HTML(f'<div class="mono small muted" style="padding:8px">{esc(p.get("summary", ""))}<br>not time-aligned · '
                            f'value range {p.get("value_range")}</div>', width=260)

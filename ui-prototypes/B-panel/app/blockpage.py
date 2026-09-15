@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import html
 import logging
+import time
 
 import numpy as np
 import panel as pn
@@ -50,22 +51,26 @@ class BlockView:
         self.thr_src = None
         self.spec = RS.catalog()[RS.step_name(self.step)]
         self.back = pn.widgets.Button(name="‹ full chain", css_classes=["btn-link", "t-back"], width=100, margin=(6, 0))
-        self.back.on_click(lambda e: ctx.navigate("analyse/chain"))
+        self.back.on_click(ctx.guard("‹ full chain", lambda e: ctx.navigate("analyse/chain")))
+        self.run_mode, self.run_mode_prev, self.run_mode_at = "run", "run", 0.0
         self.chips = pn.pane.HTML("", margin=(4, 4))
         self.rerun = pn.widgets.Button(name="↻ Re-run", css_classes=["btn-primary", "t-rerun"], width=160, margin=(4, 3))
-        self.rerun.on_click(self.on_rerun)
+        self.rerun.on_click(ctx.guard("Re-run", self.on_rerun))
         self.ribbon = pn.Row(sizing_mode="stretch_width", margin=(6, 20, 4, 20), css_classes=["card"], styles={"padding": "6px 8px"})
         self.process = pn.Column(sizing_mode="stretch_width", css_classes=["card"], margin=(6, 12, 6, 20))
         self.params = pn.Column(width=340, css_classes=["card"], margin=(6, 20, 6, 0))
+        # critique r1 P2: padding set through `styles` lands on the pane's host while its inner container keeps the full
+        # width, so the hatched body spilled past the card; the padding lives inside the markup now (border-box).
         self.null_card = pn.pane.HTML(
-            '<div class="card-title">This parameter against the null</div><div class="waits" style="height:90px;margin-top:8px;padding:0 10px;text-align:center">'
-            'no surrogate runs in this slice (the surrogate toggle is off) · a sweep of this parameter against its null would be drawn here</div>',
-            width=340, css_classes=["card"], margin=(6, 20, 6, 0), styles={"padding": "10px 12px"})
+            '<div style="padding:10px 12px;box-sizing:border-box;width:100%"><div class="card-title">This parameter against the null</div>'
+            '<div class="waits" style="height:90px;margin-top:8px;padding:0 10px;text-align:center;box-sizing:border-box">'
+            'no surrogate runs in this slice (the surrogate toggle is off) · a sweep of this parameter against its null would be drawn here</div></div>',
+            width=340, css_classes=["card"], margin=(6, 20, 6, 0))
         self.footer = pn.pane.HTML("", sizing_mode="stretch_width", margin=0)
         self.revert = pn.widgets.Button(name="Revert", css_classes=["btn", "t-revert"], width=90, margin=(0, 4))
-        self.revert.on_click(self.on_revert)
+        self.revert.on_click(ctx.guard("Revert", self.on_revert))
         self.rerun2 = pn.widgets.Button(name="↻ Re-run", css_classes=["btn-primary", "t-rerun2"], width=170, margin=(0, 4))
-        self.rerun2.on_click(self.on_rerun)
+        self.rerun2.on_click(ctx.guard("Re-run", self.on_rerun))
         self.widgets: dict = {}
         sub = "set the cut against the scores · spans are what the next stage receives" if self.is_threshold() else "settings and output together"
         self.page = pn.Column(
@@ -152,7 +157,7 @@ class BlockView:
                     finally:
                         self._guard = False
                 self.set_param(pname, e.new)
-            w.param.watch(on_change, "value")
+            w.param.watch(self.ctx.guard(f"parameter {p['name']}", on_change), "value")
             items += [w, marker]
         if not self.spec["params"]:
             items.append(pn.pane.HTML('<div class="mono small muted" style="margin:4px 12px">this block has no parameters</div>'))
@@ -168,6 +173,14 @@ class BlockView:
 
     # ---------------------------------------------------------------- process --
     def build_process(self):
+        try:     # critique r1 P1: the block page's process/threshold build draws a red card instead of a blank card
+            self._build_process()
+        except Exception as exc:
+            from .main import error_card
+            self.thr_src = None
+            self.process.objects = [error_card(f"{self.spec['page_name']} process view", exc, margin=(10, 14))]
+
+    def _build_process(self):
         job = self.job()
         payload = job.payloads.get(self.i) if (job is not None and self.applied_params() is not None) else None
         upstream = job.payloads.get(self.i - 1) if (job is not None and self.i > 0) else None
@@ -258,7 +271,7 @@ class BlockView:
             finally:
                 self._guard = False
             self.set_param("threshold", ny)
-        self.thr_src.on_change("data", on_drag)
+        self.thr_src.on_change("data", self.ctx.guard("threshold drag", on_drag))
         pn.state.cache["block_fig"] = self   # geometry for the smoke test's drag (read by debug.snapshot)
         return [
             pn.pane.HTML(f'<div style="margin:10px 14px 0"><b>Scores with the cut</b> <span class="mono small muted" style="margin-left:10px">'
@@ -304,12 +317,12 @@ class BlockView:
         rows = RS.derive_rows(self.ctx.chain["steps"], job, self.ctx.stale_from, v)
         items = [pn.pane.HTML('<span class="mono small muted" style="padding:8px 6px 0 4px;display:inline-block">chain</span>', margin=0)]
         src_btn = pn.widgets.Button(name="● Source · cached", css_classes=["btn"], width=140, margin=(2, 3))
-        src_btn.on_click(lambda e: self.ctx.navigate("analyse/chain"))
+        src_btn.on_click(self.ctx.guard("ribbon", lambda e: self.ctx.navigate("analyse/chain")))
         items.append(src_btn)
         for k, (s, r) in enumerate(zip(self.ctx.chain["steps"], rows)):
             b = pn.widgets.Button(name=f"{k + 1:02d} {RS.page_name(s)} · {r['status']}", width=250, margin=(2, 3),
                                   css_classes=["btn-primary" if k == self.i else "btn", f"t-ribbon-{k + 1}"])
-            b.on_click(lambda e, k=k: self.ctx.navigate(f"analyse/block/{k}"))
+            b.on_click(self.ctx.guard("ribbon", lambda e, k=k: self.ctx.navigate(f"analyse/block/{k}")))
             items.append(b)
         self.ribbon.objects = items
         s = self.src
@@ -322,9 +335,13 @@ class BlockView:
         running = job is not None and job.status == "running"
         k = stale if stale is not None else self.i
         label = "■ Cancel" if running else (f"↻ Re-run from {k + 1:02d}" if job is not None else "▶ Run chain")
+        mode = "cancel" if running else "run"
+        if mode != self.run_mode:
+            self.run_mode_prev, self.run_mode, self.run_mode_at = self.run_mode, mode, time.time()
         for b in (self.rerun, self.rerun2):
             b.name = label
-            b.disabled = (not v.get("ok_to_run")) and not running
+            b.disabled = ((not v.get("ok_to_run")) and not running) or bool(running and job.cancel_event.is_set())
+            b.description = (v.get("recipe_error") or None) if not running else None
         applied = self.applied_params()
         cur = self.current_params()
         if "__error__" in cur:
@@ -374,8 +391,16 @@ class BlockView:
 
     def on_rerun(self, _=None):
         job = self.job()
-        if job is not None and job.status == "running":
-            self.ctx.manager.cancel(job)
+        if job is not None and job.status in ("running", "queued"):
+            ok = self.ctx.manager.cancel(job) if job.status == "running" else False
+            self.ctx.toast("cancel requested · the core checks it before the next step" if ok else "the run is queued · cancel it once it starts")
+            self.refresh()
+            return
+        # critique r1 P0: a click that landed on a stale "■ Cancel" never starts a second run
+        if self.run_mode == "cancel" or (self.run_mode_prev == "cancel" and time.time() - self.run_mode_at < 0.6):
+            self.ctx.toast("run already finished · nothing was cancelled and no new run was started", "warning", 4000)
+            debug.event("stale_cancel", job_id=job.id if job is not None else None, page="block")
+            self.refresh()
             return
         v = RS.validate_full(self.ctx, self.ctx.chain["steps"])
         job, why = start_run(self.ctx, v)
@@ -399,6 +424,14 @@ class BlockView:
             self.poll = None
 
     def tick(self):
+        try:
+            self._tick()
+        except Exception as exc:     # critique r1 P1: stop following and say so
+            self.stop_poll()
+            from .main import error_card
+            self.process.objects = [error_card("run poll (this page stopped following the job; reload to re-attach)", exc, testid="poll-error", margin=(10, 14))] + list(self.process.objects)
+
+    def _tick(self):
         job = self.job()
         if job is None or job.status != "running":
             self.stop_poll()

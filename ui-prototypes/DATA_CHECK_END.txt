@@ -1,0 +1,28 @@
+FAIL DATA/db sqlite or step_cache differ from the START snapshot:
+5,8c5,8
+< 1788495173.3734808000 17385 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/features.parquet
+< 1788495171.0366506000 588 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/windowset.npz
+< 1788495155.2907731000 8575 DATA/derived/step_cache/0a00dbd38655d9083fa3a375a43131a698ffd8744b773146784ca95ebaf99ae4/0/scores.npz
+< 1788494892.1593902000 31295 DATA/derived/step_cache/2a42e965b8a5c70d410f3c0a8e56cf342e9c1ba5b4c4d795bd5e1407899a02fb/0/scores.npz
+---
+> 1789457786.9505231000 17385 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/features.parquet
+> 1789457786.6205034000 588 DATA/derived/step_cache/0111ee82fdd4302165cda63db09acee06db7db2696161bdb6e9df05c09ee38d0/0/windowset.npz
+> 1789457799.0715222000 8575 DATA/derived/step_cache/0a00dbd38655d9083fa3a375a43131a698ffd8744b773146784ca95ebaf99ae4/0/scores.npz
+> 1789457815.3695331000 31295 DATA/derived/step_cache/2a42e965b8a5c70d410f3c0a8e56cf342e9c1ba5b4c4d795bd5e1407899a02fb/0/scores.npz
+10c10
+< 1788495474.4962673000 1030 DATA/derived/step_cache/bf50caf24febd94b8b8d57fb6434cadd370097266fe33fdfaf76afb6d696d9f9/0/scores.npz
+---
+> 1789457795.0598990000 1030 DATA/derived/step_cache/bf50caf24febd94b8b8d57fb6434cadd370097266fe33fdfaf76afb6d696d9f9/0/scores.npz
+NEWER files under DATA/ or Results/ since the snapshot:
+  UNEXPECTED: DATA/derived/encodings/UNITTEST_encoding_view/CH00/sax_csax/51c72fd8.txt
+  UNEXPECTED: DATA/derived/encodings/UNITTEST_encoding_view/CH00/sax_csax/643d2cbd.txt
+  UNEXPECTED: DATA/derived/encodings/UNITTEST_encoding_view/CH00/sax_csax/64d04805.txt
+  UNEXPECTED: DATA/derived/encodings/UNITTEST_encoding_view_dsax/CH00/sax_csax/64d04805.txt
+  UNEXPECTED: DATA/derived/encodings/UNITTEST_encoding_view_dsax/CH00/sax_dsax/c0c3bf2b.txt
+  known stray (reported, not deleted): DATA/derived/models/catalogue_classifier_153815b9dea451b2.joblib
+  UNEXPECTED: DATA/derived/models/catalogue_classifier_16750c76ade64016.joblib
+  UNEXPECTED: DATA/derived/models/catalogue_classifier_31895944e26935a4.joblib
+  UNEXPECTED: DATA/derived/models/catalogue_classifier_3d7fd04e0904dcc5.joblib
+  UNEXPECTED: DATA/derived/models/catalogue_classifier_ad10caaed29d1ad4.joblib
+  UNEXPECTED: DATA/derived/models/catalogue_classifier_f918586712c715e2.joblib
+exit 1

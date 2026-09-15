@@ -296,7 +296,26 @@ box is 3.7 px wide with no grips and a move-drag makes a new selection.
 - *In B's favour.* No transport to design (0 new service-layer lines), in-process cancel, no build step,
   and a shared axis that is conceptually one object.
 
-**Fix pass.** (in progress — see below)
+**Fix pass (one, then stop).** Both P0s and all eight P1s fixed; B's smoke test green afterwards
+(73 checks, 28 screenshots, 0 console/page errors). The image row now passes Bokeh a 2-D uint32 array
+with the correct ABGR packing; a stale Cancel is refused ("run already finished"); computed steps read
+"✓ computed" and only core timing 0.0 reads "cached"; every Panel callback, row renderer, poll tick and
+viewport fetch now goes through a hand-written guard that draws a red card; zoom clamps at 30 s in the
+browser and in Python; empty spans disable Run; the footer axis shares the rows' frame wrapper (0 px
+drift); modal cards no longer clip; Inter applies through Bokeh's `--bokeh-base-font` variable; source
+span and job id live in the URL hash so a reload or second tab re-attaches. **Left open:** RangeTool
+grips and move-drag (stack limit), modal cards as rich cards (Panel has no clickable rich card),
+whole-line threshold drag, row thumbnails versus the §6.8 type table, corpus rail details,
+per-session debug evidence, icon buttons' accessible names.
+
+The fix pass is itself stack evidence. Its agent reported that Panel 1.9 has no hook that surfaces
+callback exceptions in the browser, so *every* `on_click`, `param.watch`, `on_change` and periodic
+callback had to be wrapped by hand; `Range1d.min_interval` is not honoured by Bokeh 3.9's wheel zoom;
+Panel `styles` pad the outer host while the inner shadow container keeps its width, so content spills
+silently (two bugs); Bokeh's `:host` font rule overrides the page font; a click is judged against
+server-side widget state that a poll repaints, so buttons cannot be disabled on click without extra JS;
+and there is no per-browser storage primitive, so the URL hash had to carry state.
+
 
 ## 5. Deviations from the pages/spec, with justification
 

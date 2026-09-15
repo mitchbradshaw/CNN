@@ -63,8 +63,12 @@ def insert_modal(view, position: int):
     # FRICTION: GridBox(height=…, scroll=True) still painted its last row over the footer; a scrolling Column around it clips
     grid = pn.GridBox(ncols=4, sizing_mode="stretch_width", margin=0)
     grid_scroll = pn.Column(grid, height=500, scroll=True, sizing_mode="stretch_width", margin=0)
-    detail = pn.pane.HTML("", width=300, margin=(0, 0, 0, 12), styles={"border": "1px solid #e5e7eb", "border-radius": "10px", "padding": "12px",
-                                                                       "background": "#fafbfc", "min-height": "420px"})
+    # critique r1 P1: the detail panel's text and tiles spilled 13 px past its edge — Panel applies `styles` (border,
+    # padding) to the pane's HOST while the inner shadow container still takes the full 300 px. The frame is drawn
+    # inside the markup instead (border-box, 100 %), so nothing can exceed the column.
+    detail = pn.pane.HTML("", width=300, margin=(0, 0, 0, 12))
+    DETAIL_BOX = ('<div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafbfc;min-height:420px;'
+                  'box-sizing:border-box;width:100%;max-width:100%;overflow:hidden;overflow-wrap:anywhere">{}</div>')
     selected = {"name": next((n for n, r in rows.items() if r["ok"]), None)}
     insert = pn.widgets.Button(name="+ Insert", css_classes=["btn"], width=100, margin=(0, 4))
     insert_open = pn.widgets.Button(name="→ Insert and open settings", css_classes=["btn-primary"], width=220, margin=(0, 4))
@@ -80,19 +84,19 @@ def insert_modal(view, position: int):
     def paint_detail():
         name = selected["name"]
         if not name:
-            detail.object = '<div class="mono small muted">no block fits at this point</div>'
+            detail.object = DETAIL_BOX.format('<div class="mono small muted">no block fits at this point</div>')
             insert.disabled = insert_open.disabled = True
             return
         c = cat[name]
         r = rows[name]
         defaults = "".join(f'<span class="k">{esc(p["name"])}</span><span>{esc(str(p["default"]))}</span>' for p in c["params"][:8]) or '<span class="k">no parameters</span><span></span>'
         stale = f"{position + 1:02d}–{len(steps):02d} go stale · 00–{position:02d} stay cached" if position < len(steps) else "inserting at the end changes the terminal type"
-        detail.object = (f'<div data-testid="modal-detail"><div style="font-size:15px;font-weight:600">{esc(c["page_name"])}</div>'
+        detail.object = DETAIL_BOX.format(f'<div data-testid="modal-detail" style="max-width:100%;box-sizing:border-box"><div style="font-size:15px;font-weight:600">{esc(c["page_name"])}</div>'
                          f'<div class="mono small" style="color:var(--blue)">{esc(c["signature"])}</div>'
-                         f'<div style="margin:10px 0;background:#fff;border:1px solid var(--border);border-radius:8px;display:flex;justify-content:center">{glyph(c["category"], 272, 96)}</div>'
+                         f'<div style="margin:10px 0;background:#fff;border:1px solid var(--border);border-radius:8px;display:flex;justify-content:center">{glyph(c["category"], 240, 86)}</div>'
                          f'<div class="small" style="line-height:1.45">{esc(c["description"][:260])}</div>'
                          f'<div class="card-title" style="margin-top:10px">defaults</div><div class="kv" style="margin-top:4px">{defaults}</div>'
-                         f'<div style="display:flex;gap:6px;margin-top:10px"><div class="tile"><div class="k">est. cost</div><div class="v">{esc(est.get(name, "–"))}</div></div>'
+                         f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-width:100%"><div class="tile"><div class="k">est. cost</div><div class="v">{esc(est.get(name, "–"))}</div></div>'
                          f'<div class="tile"><div class="k">null</div><div class="v" style="font-size:13px">not declared</div></div>'
                          f'<div class="tile"><div class="k">side-inputs</div><div class="v" style="font-size:13px">{len(c["side_inputs"]) or "none"}</div></div></div>'
                          f'<div class="chip amber" style="margin-top:10px;height:auto;white-space:normal;padding:4px 10px">◷ {esc(stale)}</div>'
@@ -123,22 +127,22 @@ def insert_modal(view, position: int):
                 continue
             if n not in card_btns:
                 b = pn.widgets.Button(name=card_label(n), icon=glyph(c["category"]), icon_size="26px", disabled=not rows[n]["ok"],
-                                      css_classes=["card-btn", f"t-modal-card-{n.replace('.', '-')}"], height=100, sizing_mode="stretch_width",
+                                      css_classes=["card-btn", f"t-modal-card-{n.replace('.', '-')}"], min_height=100, sizing_mode="stretch_width",
                                       margin=(4, 4), description=None if rows[n]["ok"] else rows[n]["reason"])
-                b.on_click(lambda e, n=n: select(n))
+                b.on_click(view.ctx.guard("select block", lambda e, n=n: select(n)))
                 card_btns[n] = b
             out.append(card_btns[n])
         grid.objects = out
 
     for w in (search, tabs, show_inc):
-        w.param.watch(paint_grid, "value")
+        w.param.watch(view.ctx.guard("filter blocks", paint_grid), "value")
 
     def do_insert(open_settings):
         if selected["name"] and rows[selected["name"]]["ok"]:
             modal.open = False
             view.insert_step(position, selected["name"], open_settings=open_settings)
-    insert.on_click(lambda e: do_insert(False))
-    insert_open.on_click(lambda e: do_insert(True))
+    insert.on_click(view.ctx.guard("Insert", lambda e: do_insert(False)))
+    insert_open.on_click(view.ctx.guard("Insert and open settings", lambda e: do_insert(True)))
     cancel.on_click(lambda e: setattr(modal, "open", False))
 
     ribbon = " › ".join(["● Source"] + [f"{k + 1:02d} {RS.page_name(s)}" for k, s in enumerate(steps[:position])] +

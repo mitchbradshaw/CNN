@@ -60,6 +60,10 @@ def validate_full(ctx, steps: list[dict]) -> dict:
             out["ok_to_run"] = False
             return out
         span = (int(src["start_idx"]), int(src["end_idx"]))
+        if span[1] - span[0] <= 0:          # FIX (critique r1 P1): an empty span is not a source
+            out["recipe_error"] = f"the source span is empty ({max(0, span[1] - span[0])} samples) · send a span of at least 30 s from Explore"
+            out["ok_to_run"] = False
+            return out
         try:
             recipe = chain_mod.build_recipe(src["recording_id"], span, steps)
         except ValueError as e:
@@ -101,7 +105,7 @@ def _same(a: dict | None, b: dict | None) -> bool:
 
 
 def derive_rows(steps: list[dict], job, stale_from: int | None, v: dict) -> list[dict]:
-    """One RowInfo per step: status ∈ new | cached | stale | running | waiting | failed | blocked | cancelled | invalid | error."""
+    """One RowInfo per step: status ∈ new | cached | computed | stale | running | waiting | failed | blocked | cancelled | invalid | error."""
     live = job is not None and job.status in ("running", "queued")
     rows = []
     for i, step in enumerate(steps):
@@ -118,12 +122,15 @@ def derive_rows(steps: list[dict], job, stale_from: int | None, v: dict) -> list
                     cached_predicted=bool((jstep or {}).get("cached_predicted")) or bool(cache_row and cache_row["cached"]),
                     invalid_reason=invalid, over_ceiling=any(o["index"] == i for o in v.get("over_ceiling") or []),
                     started_at=(jstep or {}).get("started_at"))
+        # FIX (critique r1 P1): "cached" means the core's prefix cache was hit — jstep["cached"] is true or the core's
+        # own step timing is exactly 0.0. Anything else that finished was computed and says so.
+        done_st = "cached" if (bool((jstep or {}).get("cached")) or core_t == 0.0) else "computed"
         err_payload = has and bool(payload.get("error"))
         if err_payload and not (live and jstep and jstep["status"] == "running"):
             rows.append(dict(base, status="error")); continue
         if live and jstep and matches:
             s = jstep["status"]
-            rows.append(dict(base, status={"running": "running", "pending": "waiting", "done": "cached", "failed": "failed",
+            rows.append(dict(base, status={"running": "running", "pending": "waiting", "done": done_st, "failed": "failed",
                                            "blocked": "blocked", "cancelled": "cancelled"}.get(s, "new"))); continue
         if invalid:
             rows.append(dict(base, status="invalid")); continue
@@ -136,13 +143,14 @@ def derive_rows(steps: list[dict], job, stale_from: int | None, v: dict) -> list
         if job is not None and matches and jstep:
             st = job.status
             if st == "completed":
-                rows.append(dict(base, status="cached" if (has or jstep["status"] == "done") else "new")); continue
+                rows.append(dict(base, status=done_st if (has or jstep["status"] == "done") else "new")); continue
             if st == "failed":
-                rows.append(dict(base, status={"done": "cached", "failed": "failed", "blocked": "blocked"}.get(jstep["status"], "new"))); continue
+                rows.append(dict(base, status={"done": done_st, "failed": "failed", "blocked": "blocked"}.get(jstep["status"], "new"))); continue
             if st == "cancelled":
-                rows.append(dict(base, status={"done": "cached", "cancelled": "cancelled"}.get(jstep["status"], "new"))); continue
+                rows.append(dict(base, status={"done": done_st, "cancelled": "cancelled"}.get(jstep["status"], "new"))); continue
         if cache_row and cache_row["cached"]:
-            rows.append(dict(base, status="cached")); continue
+            # critique r1: a step-cache hit with no job attached (reload, another span's run) has no result in this view
+            rows.append(dict(base, status="cached", cache_only=not has)); continue
         rows.append(dict(base, status="new"))
     return rows
 
@@ -239,6 +247,8 @@ def history(ctx, recording_id: int | None, limit: int = 12) -> list[dict]:
         out = []
         for row in rows:
             d = dict(row)
+            if d.get("status") == "failed" and str(d.get("error_text") or "").startswith("Cancelled"):
+                d["status"] = "cancelled"      # the core stores a cancel as failed + "Cancelled before step N" (critique r1 P2)
             try:
                 recipe = load_recipe(conn, d["config_id"])
                 d["steps"] = [f"{s['stage']}.{s['algorithm']}" for s in recipe["steps"]]

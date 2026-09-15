@@ -216,7 +216,7 @@ def corpus_page(ctx):
         ri = source.data["row"][new[0]]
         st["channel_id"] = state["cov"]["rows"][ri]["id"]
         redraw(state["cov"])
-    source.selected.on_change("indices", on_tap)
+    source.selected.on_change("indices", ctx.guard("select channel", on_tap))
 
     def update_bottom():
         cov = state["cov"]
@@ -234,13 +234,13 @@ def corpus_page(ctx):
         open_btn.disabled, open_btn.name = False, f'Open {row["name"]} →'
         cross_btn.name = f'Cross-channel from {row["name"]}'
 
-    open_btn.on_click(lambda e: st.get("channel_id") is not None and ctx.navigate(f"explore/signal/{st['channel_id']}"))
+    open_btn.on_click(ctx.guard("Open channel", lambda e: st.get("channel_id") is not None and ctx.navigate(f"explore/signal/{st['channel_id']}")))
 
     def on_page(delta):
         files = [r["source_file"] for r in recs]
         rec_select.value = files[(files.index(rec_select.value) + delta) % len(files)]
-    prev_btn.on_click(lambda e: on_page(-1))
-    next_btn.on_click(lambda e: on_page(1))
+    prev_btn.on_click(ctx.guard("previous recording", lambda e: on_page(-1)))
+    next_btn.on_click(ctx.guard("next recording", lambda e: on_page(1)))
 
     def on_colour(*_):
         st["colour_by"] = colour.value
@@ -248,13 +248,13 @@ def corpus_page(ctx):
         if state["cov"]:
             redraw(state["cov"])
     for w in (colour, show_ann, show_det):
-        w.param.watch(on_colour, "value")
+        w.param.watch(ctx.guard("colour by", on_colour), "value")
 
     def on_refetch(*_):
         st["bins"] = int(bins_select.value)
         compute()
     for w in (bins_select, rec_select, *verdict_boxes.values()):
-        w.param.watch(on_refetch, "value")
+        w.param.watch(ctx.guard("coverage refetch", on_refetch), "value")
 
     compute()
     return page

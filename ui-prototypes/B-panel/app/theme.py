@@ -71,7 +71,8 @@ THEME_CSS += r"""
 :host(.icon-btn) .bk-btn:hover { background: var(--grey-200) !important; color: var(--text) !important; }
 :host(.pill-insert) .bk-btn { border-radius: 999px !important; height: 22px; font-size: 11px !important; padding: 0 12px; background: #fff !important; color: var(--muted) !important; border: 1px solid var(--border) !important; box-shadow: none !important; }
 :host(.pill-insert) .bk-btn:hover { color: var(--blue) !important; border-color: var(--blue-200) !important; }
-:host(.card-btn) .bk-btn { white-space: pre-line !important; text-align: left !important; height: 96px; width: 100%; display: flex; flex-direction: row; align-items: flex-start !important; justify-content: flex-start !important; line-height: 1.5; padding: 10px 10px !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 10px !important; color: var(--text) !important; font-size: 11px !important; box-shadow: none !important; overflow: hidden; }
+:host(.card-btn) .bk-btn { white-space: pre-line !important; overflow-wrap: anywhere; text-align: left !important; min-height: 96px; height: auto !important; width: 100%; display: flex; flex-direction: row; align-items: flex-start !important; justify-content: flex-start !important; line-height: 1.5; padding: 10px 10px !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 10px !important; color: var(--text) !important; font-size: 11px !important; box-shadow: none !important; overflow: visible; }
+:host(.card-btn) { height: auto !important; min-height: 100px; }
 :host(.card-btn) .bk-btn:hover { border-color: var(--blue-200) !important; }
 :host(.card-btn.sel) .bk-btn { border: 1.5px solid var(--blue) !important; background: #f3f8ff !important; }
 :host(.card-btn) .bk-btn[disabled] { opacity: .55; background: #fafafa !important; color: var(--muted) !important; cursor: not-allowed; }
@@ -94,4 +95,13 @@ THEME_CSS += r"""
 .kv .k { color: var(--muted); }
 .popover { background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgba(17,24,39,.14); }
 .tile { background: var(--grey-100); border-radius: 8px; padding: 8px 10px; } .tile .k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); } .tile .v { font-size: 17px; font-weight: 600; }
+/* ---- critique round 1 fixes ---- */
+/* Inter never applied: Bokeh's :host stylesheet sets font-family: var(--bokeh-base-font, Helvetica, Arial, sans-serif) on
+   every shadow host, which beats body{}. Set the variable (inherits into shadow roots) and the :host rule itself. */
+:root { --bokeh-base-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+:host { font-family: var(--font-ui); }
+.card.axis-row { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+.badge.computed { background: #ffffff; color: #15794f; box-shadow: inset 0 0 0 1px #9fd8bb; }
+:host(.btn) .bk-btn:focus-visible, :host(.btn-primary) .bk-btn:focus-visible, :host(.icon-btn) .bk-btn:focus-visible,
+:host(.pill-insert) .bk-btn:focus-visible, :host(.card-btn) .bk-btn:focus-visible { outline: 2px solid var(--blue) !important; outline-offset: 2px; }
 """

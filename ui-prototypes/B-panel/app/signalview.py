@@ -31,6 +31,7 @@ from . import debug
 log = logging.getLogger("protoB.signal")
 esc = html.escape
 BAND_CAP = 600       # bands drawn per viewport; beyond this the viewport shows caps only (and says so)
+MIN_SPAN_S = 30.0    # the tier-2 viewport never collapses below this (Range1d.min_interval is ignored by Bokeh 3.9's wheel zoom)
 
 
 def _fmt_h(h: float, span_h: float) -> str:
@@ -78,9 +79,9 @@ def signal_page(ctx, channel_id: int):
     # ------------------------------------------------------------------ header + breadcrumb --
     header = ctx.header("Explore", "Signal", f"{name} · {summary['annotations']:,} annotations · {summary['detections']:,} detections")
     back_btn = pn.widgets.Button(name="‹ back to corpus", css_classes=["btn-link"], margin=(4, 0), width=140)
-    back_btn.on_click(lambda e: ctx.navigate("explore/corpus"))
+    back_btn.on_click(ctx.guard("‹ back to corpus", lambda e: ctx.navigate("explore/corpus")))
     mode = pn.widgets.RadioButtonGroup(options=["Signal", "Cross-channel"], value="Signal", css_classes=["seg"], disabled=False, margin=(0, 8))
-    mode.param.watch(lambda e: (setattr(mode, "value", "Signal"), ctx.toast("Cross-channel view is outside this slice")) if e.new != "Signal" else None, "value")
+    mode.param.watch(ctx.guard("mode", lambda e: (setattr(mode, "value", "Signal"), ctx.toast("Cross-channel view is outside this slice")) if e.new != "Signal" else None), "value")
     crumbs = pn.Row(
         pn.pane.HTML(f'<div class="mono small" style="padding-top:8px"><a href="#explore/corpus" style="color:var(--muted);text-decoration:none">Corpus</a>'
                      f' <span class="muted">›</span> <span class="muted">{esc(rec["source_file"])}</span> <span class="muted">›</span> <b>{esc(name)}</b></div>', width=380),
@@ -127,25 +128,44 @@ def signal_page(ctx, channel_id: int):
     # FRICTION (silent): a ColumnDataSource that no renderer uses is NOT serialised into the browser document, so
     # Python writes to it vanish and its js_on_change never fires — no error anywhere. Referencing it from a
     # callback that IS reachable (this one, attached to the x_range) is what pulls it into the document.
-    js_range = CustomJS(args=dict(r=span_x, meta=meta_src), code="""
+    # FIX (critique r1 P1): Range1d(min_interval=…) is NOT honoured by WheelZoomTool in Bokeh 3.9 — the viewport
+    # collapsed to 0 h and painted blank. Clamp in the browser first (no blank frame), and again in Python (fetch).
+    # FIX (critique r1 P2): round trips are matched through a per-request sequence queue; a matched request and every
+    # older one it superseded are dropped, so a repeated viewport can never be timed against a stale stamp.
+    js_range = CustomJS(args=dict(r=span_x, meta=meta_src, minw=MIN_SPAN_S / 3600.0, dur=dur_h), code="""
+        if (r.end - r.start < minw - 1e-9) {
+            if (r.__clamping) return;
+            r.__clamping = true;
+            const c = (r.start + r.end) / 2;
+            let a = c - minw / 2, b = c + minw / 2;
+            if (a < 0) { a = 0; b = minw; }
+            if (b > dur) { b = dur; a = dur - minw; }
+            r.setv({start: a, end: b});
+            r.__clamping = false;
+            return;
+        }
         const k = r.start.toFixed(5) + '|' + r.end.toFixed(5);
-        const m = (window.__bReq = window.__bReq || {});
-        if (!(k in m)) m[k] = performance.now();
+        const q = (window.__bReqQ = window.__bReqQ || []);
+        window.__bSeq = (window.__bSeq || 0) + 1;
+        const last = q.length ? q[q.length - 1] : null;
+        if (!last || last.k !== k) q.push({seq: window.__bSeq, k: k, t: performance.now()});
     """)
     span_x.js_on_change("start", js_range)
     span_x.js_on_change("end", js_range)
     meta_src.js_on_change("data", CustomJS(args=dict(meta=meta_src, rt=rt_div, stat=stat_div), code="""
         const d = meta.data; const i = d.seq.length - 1; if (i < 0) return;
         const k = d.t0[i].toFixed(5) + '|' + d.t1[i].toFixed(5);
-        const m = (window.__bReq = window.__bReq || {});
+        const q = (window.__bReqQ = window.__bReqQ || []);
         const now = performance.now();
-        const rtt = (k in m) ? now - m[k] : null;
-        for (const kk in m) if (now - m[kk] > 15000) delete m[kk];
-        const rec = {seq: d.seq[i], t0_h: d.t0[i], t1_h: d.t1[i], px: d.px[i], n_points: d.n_points[i],
+        let rtt = null, req = null;
+        for (let j = q.length - 1; j >= 0; j--) { if (q[j].k === k) { req = q[j]; break; } }
+        if (req) { rtt = now - req.t; window.__bReqQ = q.filter(e => e.seq > req.seq); }
+        const rec = {seq: d.seq[i], req_seq: req ? req.seq : null, t0_h: d.t0[i], t1_h: d.t1[i], px: d.px[i], n_points: d.n_points[i],
                      decimate_ms: d.decimate_ms[i], server_ms: d.server_ms[i], round_trip_ms: rtt};
         (window.__zoomStats = window.__zoomStats || []).push(rec);
-        stat.text = d.n_points[i].toLocaleString() + ' pts · server ' + d.decimate_ms[i].toFixed(1) + ' ms decimate / ' +
+        const tip = d.n_points[i].toLocaleString() + ' pts · server ' + d.decimate_ms[i].toFixed(1) + ' ms decimate / ' +
                     d.server_ms[i].toFixed(1) + ' ms total' + (rtt === null ? '' : ' · round trip ' + rtt.toFixed(0) + ' ms');
+        stat.text = '<span title="' + tip + '" style="cursor:help" data-testid="zoom-timing">ⓘ timing</span>';
         rt.text = JSON.stringify(rec);
     """))
 
@@ -156,11 +176,39 @@ def signal_page(ctx, channel_id: int):
             return
         debug.append("zoom_stats", rec_, cap=400)
 
-    rt_div.on_change("text", on_rt)
+    rt_div.on_change("text", ctx.guard("zoom timing sync", on_rt))
 
     # ------------------------------------------------------------------ fetch per viewport --
+    fetch_err = pn.Column(sizing_mode="stretch_width", margin=0)
+
+    def clamp_view() -> bool:
+        """Python side of the minimum-span clamp; True when it had to move the range (a new fetch follows)."""
+        a, b = float(span_x.start), float(span_x.end)
+        minw = MIN_SPAN_S / 3600.0
+        if b - a >= minw - 1e-9:
+            return False
+        c = (a + b) / 2
+        a, b = c - minw / 2, c + minw / 2
+        if a < 0:
+            a, b = 0.0, minw
+        if b > dur_h:
+            a, b = dur_h - minw, dur_h
+        span_x.update(start=a, end=b)
+        return True
+
     def fetch():
         state["pending"] = False
+        try:     # critique r1 P1: a failing viewport fetch shows a red card in the span tier
+            if clamp_view():
+                return
+            _fetch()
+            if fetch_err.objects:
+                fetch_err.objects = []
+        except Exception as exc:
+            from .main import error_card
+            fetch_err.objects = [error_card("span viewport fetch", exc, testid="fetch-error", margin=(4, 14))]
+
+    def _fetch():
         state["window_until"] = time.perf_counter() + 0.06
         t0h, t1h = float(span_x.start), float(span_x.end)
         if t1h <= t0h:
@@ -206,7 +254,8 @@ def signal_page(ctx, channel_id: int):
                              decimate_ms=[float(w["decimate_ms"])], server_ms=[server_ms])
         views[channel_id] = (t0h, t1h)
         span_title.object = (f'<span class="card-title">Span</span><span class="mono small" style="margin-left:14px">'
-                             f'{_fmt_h(t0h, t1h - t0h)} – {_fmt_h(t1h, t1h - t0h)} h · {(t1h - t0h):.2f} h</span>')
+                             f'{_fmt_h(t0h, t1h - t0h)} – {_fmt_h(t1h, t1h - t0h)} h · '
+                             f'{(f"{(t1h - t0h) * 3600:.0f} s" if (t1h - t0h) * 3600 < 600 else f"{(t1h - t0h):.2f} h")}</span>')
         update_actions()
         update_nav()
 
@@ -224,8 +273,9 @@ def signal_page(ctx, channel_id: int):
             state["pending"] = True
             doc.add_timeout_callback(fetch, max(1, int((state["window_until"] - now) * 1000)))
 
-    span_x.on_change("start", schedule)
-    span_x.on_change("end", schedule)
+    schedule_g = ctx.guard("span viewport", schedule)
+    span_x.on_change("start", schedule_g)
+    span_x.on_change("end", schedule_g)
 
     # ------------------------------------------------------------------ tier 1 (channel) --
     fover = C.base_figure(height=92, x_range=Range1d(0, dur_h), y_range=Range1d(*C.padded(ylo, yhi, 0.05)), grid=False,
@@ -261,7 +311,8 @@ def signal_page(ctx, channel_id: int):
     tier1 = pn.Column(
         pn.pane.HTML(f'<div style="display:flex;justify-content:space-between"><div><span class="card-title">Channel</span>'
                      f'<span class="mono small" style="margin-left:14px">0 – {dur_h:.0f} h</span></div>'
-                     f'<span class="mono small muted" data-testid="overview-stat">{overview["envelope"]["n_points"]:,} pts · full channel · server {overview_ms:.1f} ms</span></div>',
+                     f'<span class="mono small muted" data-testid="overview-stat" style="cursor:help" '
+                     f'title="{overview["envelope"]["n_points"]:,} pts · full channel · server {overview_ms:.1f} ms">ⓘ timing</span></div>',
                      sizing_mode="stretch_width", margin=(10, 14, 0, 14)),
         pn.pane.Bokeh(_stack([fover, fcov, fden]), sizing_mode="stretch_width", margin=(2, 8, 4, 8)),
         pn.pane.HTML('<div class="mono small muted" style="margin:0 14px 8px">drag the blue box or its edges to choose the span below · '
@@ -286,9 +337,9 @@ def signal_page(ctx, channel_id: int):
     def zoom(f):
         c, w = (span_x.start + span_x.end) / 2, (span_x.end - span_x.start) * f
         set_view(c - w / 2, c + w / 2)
-    zoom_in.on_click(lambda e: zoom(0.5))
-    zoom_out.on_click(lambda e: zoom(2.0))
-    zoom_fit.on_click(lambda e: set_view(0.0, dur_h))
+    zoom_in.on_click(ctx.guard("zoom in", lambda e: zoom(0.5)))
+    zoom_out.on_click(ctx.guard("zoom out", lambda e: zoom(2.0)))
+    zoom_fit.on_click(ctx.guard("fit", lambda e: set_view(0.0, dur_h)))
 
     def select(i, recentre=False):
         if not motifs:
@@ -307,8 +358,8 @@ def signal_page(ctx, channel_id: int):
         update_nav()
         draw_motif()
 
-    nav_prev.on_click(lambda e: select((state["sel"] if state["sel"] is not None else 0) - 1, recentre=True))
-    nav_next.on_click(lambda e: select((state["sel"] + 1) if state["sel"] is not None else first_in_view(), recentre=True))
+    nav_prev.on_click(ctx.guard("previous motif", lambda e: select((state["sel"] if state["sel"] is not None else 0) - 1, recentre=True)))
+    nav_next.on_click(ctx.guard("next motif", lambda e: select((state["sel"] + 1) if state["sel"] is not None else first_in_view(), recentre=True)))
 
     def first_in_view():
         a, b = span_x.start * 3600, span_x.end * 3600
@@ -326,8 +377,8 @@ def signal_page(ctx, channel_id: int):
             if i >= 0:
                 select(i)
         return cb
-    ann_src.selected.on_change("indices", on_tap(ann_src))
-    det_src.selected.on_change("indices", on_tap(det_src))
+    ann_src.selected.on_change("indices", ctx.guard("select motif", on_tap(ann_src)))
+    det_src.selected.on_change("indices", ctx.guard("select motif", on_tap(det_src)))
 
     def draw_selection():
         i = state["sel"]
@@ -340,7 +391,7 @@ def signal_page(ctx, channel_id: int):
 
     def update_nav():
         cur = "–" if state["sel"] is None else f'{state["sel"] + 1:,}'
-        nav_label.object = f'<span class="mono small" data-testid="motif-nav">‹ {cur} / {len(motifs):,} ›</span>'
+        nav_label.object = f'<span class="mono small" data-testid="motif-nav">{cur} / {len(motifs):,}</span>'
 
     legend = pn.pane.HTML(
         f'<div class="mono small muted" style="display:flex;gap:16px;align-items:center;margin:0 14px 10px">'
@@ -353,6 +404,7 @@ def signal_page(ctx, channel_id: int):
     tier2 = pn.Column(
         pn.Row(span_title, pn.pane.Bokeh(_stack([stat_div, rt_div]), margin=(12, 8, 0, 8), width=460), pn.layout.HSpacer(),
                nav_prev, nav_label, nav_next, zoom_out, zoom_in, zoom_fit, sizing_mode="stretch_width", margin=(0, 8, 0, 0)),
+        fetch_err,
         pn.pane.Bokeh(fspan, sizing_mode="stretch_width", margin=(2, 8, 4, 8)),
         legend, sizing_mode="stretch_width", css_classes=["card"], margin=(4, 20, 4, 20))
 
@@ -410,19 +462,24 @@ def signal_page(ctx, channel_id: int):
                               f'<span class="mono small muted" style="margin-left:14px">context ±20 s</span>')
         motif_meta.object = (f'<div class="mono small muted" style="padding-top:8px">nearest family — · tagged {esc(m.get("tag") or "—")} · '
                              f'{"run #" + str(m["run_id"]) if m.get("run_id") else "source " + esc(str(m.get("source") or "—"))} · onset and end are the stored span edges</div>')
-        send_motif.disabled = False
+        short = (s1 - s0) < MIN_SPAN_S
+        send_motif.disabled = short
+        send_motif.description = f"motif is {s1 - s0:.1f} s · shorter than the {MIN_SPAN_S:.0f} s minimum source span" if short else None
 
     def send_motif_cb(e):
         i = state["sel"]
         if i is None:
             return
         m = motifs[i]
+        if m["end_s"] - m["start_s"] < MIN_SPAN_S:
+            ctx.toast(f"motif shorter than {MIN_SPAN_S:.0f} s · not sent", "warning")
+            return
         ctx.source = {"recording_id": channel_id, "channel_name": name, "source_file": rec["source_file"], "fs": fs,
                       "start_idx": int(round(m["start_s"] * fs)), "end_idx": int(round(m["end_s"] * fs)),
                       "label": f'motif {m["kind"][:3]}-{m["id"]}'}
         ctx.stale_from = None
         ctx.navigate("analyse/chain")
-    send_motif.on_click(send_motif_cb)
+    send_motif.on_click(ctx.guard("Send motif to Analyse", send_motif_cb))
 
     # ------------------------------------------------------------------ span actions --
     actions_line = pn.pane.HTML("", sizing_mode="stretch_width", margin=(10, 14, 2, 14))
@@ -434,19 +491,27 @@ def signal_page(ctx, channel_id: int):
 
     def update_actions():
         a, b = span_x.start, span_x.end
+        short = (b - a) * 3600 < MIN_SPAN_S - 1e-6
+        send_span.disabled = short
+        send_span.description = f"span shorter than {MIN_SPAN_S:.0f} s" if short else None
+        why = f' &nbsp;<span style="color:#b3262b" data-testid="send-span-reason">send disabled · span shorter than {MIN_SPAN_S:.0f} s</span>' if short else ""
+        dur_txt = f"{(b - a) * 3600:.0f} s" if (b - a) * 3600 < 600 else f"{b - a:.2f} h"
         actions_line.object = (f'<div class="mono small muted" data-testid="span-actions">Selected span {_fmt_h(a, b - a)} – {_fmt_h(b, b - a)} h · '
-                               f'{b - a:.2f} h · {state["in_view"]} motifs in view &nbsp;&nbsp; tags <span class="chip" style="height:20px">+ tag</span></div>')
+                               f'{dur_txt} · {state["in_view"]} motifs in view &nbsp;&nbsp; tags <span class="chip" style="height:20px">+ tag</span>{why}</div>')
 
-    save_btn.on_click(lambda e: ctx.toast("Save span is a stub in this slice: nothing was written (tags and note only, never a verdict)", "warning"))
+    save_btn.on_click(ctx.guard("Save span", lambda e: ctx.toast("Save span is a stub in this slice: nothing was written (tags and note only, never a verdict)", "warning")))
 
     def send_span_cb(e):
         a, b = float(span_x.start), float(span_x.end)
+        if (b - a) * 3600 < MIN_SPAN_S - 1e-6:
+            ctx.toast(f"span shorter than {MIN_SPAN_S:.0f} s · not sent", "warning")
+            return
         ctx.source = {"recording_id": channel_id, "channel_name": name, "source_file": rec["source_file"], "fs": fs,
                       "start_idx": int(round(a * 3600 * fs)), "end_idx": int(round(b * 3600 * fs)), "label": "span from Explore"}
         ctx.stale_from = None
         debug.event("send_span", source=ctx.source)
         ctx.navigate("analyse/chain")
-    send_span.on_click(send_span_cb)
+    send_span.on_click(ctx.guard("Send span to Analyse", send_span_cb))
 
     actions = pn.Column(
         actions_line,
