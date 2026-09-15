@@ -26,6 +26,9 @@ every decision: `DECISIONS.md`. Checklist: `CHECKLIST.md`.
 | 7 Export run (simple report) | partial — JSON export of recipe + timings + payloads under `runtime/<stamp>/exports/`; no rendered figures | partial — same JSON export |
 | 8 Cross-channel view | missing (button present, inert, labelled out of scope) | missing (inert) |
 
+**Decision (2026-09-15, after review):** you chose **A**. §8 has the head-to-head scorecard that went
+with that choice, including load, memory and size measurements taken after the overnight run.
+
 ## 2. Why A ranked first (and what building taught)
 
 **Pre-build ranking** (DECISIONS.md §2): React + TypeScript + d3-in-SVG over a FastAPI bridge first,
@@ -431,3 +434,110 @@ Open questions for you:
    which is out of slice scope. Confirm refusal is the right interim.
 5. **Progress granularity.** Only `window_matrix` reports within-step progress. If the running
    frame's "64 % · 0.2 s left" matters, adapters need to accept `on_progress`.
+
+
+## 8. Head-to-head scorecard (added 2026-09-15, after review)
+
+Written because the two prototypes' differences were not obvious from §1–§7, which are organised by
+evidence type rather than by the quality a reader cares about. The scores (out of 10) are judgement,
+each anchored to a measurement or observation in this report. The rows are not equally weighted,
+so no total is given: a silent-failure row outweighs a disk-space row. **You chose A on this basis.**
+
+### 8.1 New measurements behind the scorecard
+
+§3 measured zoom and run latency but not page load, memory or footprint. These were taken after the
+overnight run with `ui-prototypes/bench_ab.py`, which writes `bench_result.json`.
+
+- **Method.** Both servers were started on spare ports (8775/8776) against their own runtime DB copies.
+  Headless Chromium at 1440 × 900 ran 3 runs per prototype, each in a fresh browser context (empty cache).
+  Then the same page was reloaded (warm cache), and the app navigated in place from Corpus to Signal
+  (channel 4, 721 h). Both servers were stopped afterwards, and no port was left open.
+- **"Painted" means different things per prototype.**
+  - For A, it means ≥ 448 heatmap cells in the DOM, or ≥ 1 path in the signal overview.
+  - For B, it means the Python side reports 912 heatmap rects and a canvas is attached, or the Signal page's text and ≥ 2 canvases are present.
+  - B's check is coarser: it does not wait for pixels. **B's times are therefore, if anything, flattering to B.**
+
+| measure | A | B |
+|---|---|---|
+| server start → first HTTP 200 | 3.8 s | 7.1 s |
+| Corpus page, empty cache → painted (3 runs) | 624 / 624 / 603 ms (median 624) | 1,091 / 903 / 869 ms (median 903) |
+| Corpus page, reload with warm cache | median 213 ms | median 435 ms |
+| in-app navigation Corpus → Signal (721 h) | median 109 ms | median 544 ms |
+| bytes to the browser on the first visit | 571 kB over HTTP | 3,074 kB over HTTP + 691 kB over the websocket |
+| browser JS heap after the three pages | 9.5 MB | 31.6 MB |
+| server memory (process tree), idle → after 3 runs | 388 → 507 MB | 488 → 521 MB |
+
+**Both** prototypes still take the ~30 s STUMPY JIT warm-up on the first matrix-profile run of a server
+process (§3). The startup numbers above do not include it.
+
+**Footprint on disk.**
+
+| | A | B |
+|---|---|---|
+| new installs | `client/node_modules` 97 MB (development only) + `.venv` 20 MB (FastAPI/uvicorn on top of conda via `--system-site-packages`) | none (Panel 1.9.3 + Bokeh 3.9.2 already in the conda env; the two packages occupy ~150 MB there) |
+| what is served to the browser | `client/dist`: 457 kB JS + 33 kB CSS (130 kB JS gzip); the 1.7 MB source map is not needed at runtime | Bokeh + Panel bundles, ~3 MB on the first visit (table above) |
+| source written | ~5,300 lines TypeScript/CSS + ~1,660 lines Python bridge | ~2,900 lines Python (plus the parts of A's service layer it imports) |
+| runtime copy per server start | 4.2 MB DB copy; grows with step caches (one 20 h matrix-profile session reached 285 MB) | same (two sessions reached 100 MB) |
+
+The runtime directories are never cleaned up. At this point they hold 772 MB for A and 502 MB for B.
+The rebuilt app will need a retention policy for them.
+
+### 8.2 Scorecard
+
+**Plotting and large data**
+
+| quality | A | B | evidence |
+|---|---|---|---|
+| 721 h signal (2.6 M samples) | 9 | 8 | Both use the same server-side min/max decimation to ≈ 2,500 points per view, and both are interactive at every zoom. |
+| headroom for very dense plots (tens of thousands of marks at once) | 6 | 9 | A draws SVG, which degrades past roughly 10–20k elements; canvas/WebGL would have to be added by hand. Bokeh draws to canvas, with WebGL built in. Untested at that density in either prototype. |
+| zoom/pan lag | 9 | 7 | Median round trip is A 9–20 ms and B 23 ms (§3). A moves the old path instantly with a CSS transform during the gesture; B waits for the websocket reply. |
+
+**Speed and size**
+
+| quality | A | B | evidence |
+|---|---|---|---|
+| server start | 9 | 7 | 3.8 s vs 7.1 s |
+| first page load | 8 | 6 | 0.62 s vs 0.90 s |
+| reload | 9 | 6 | 0.21 s vs 0.44 s |
+| page switch | 9 | 5 | 0.11 s vs 0.54 s |
+| download per first visit | 9 | 5 | 0.57 MB vs 3.8 MB |
+| browser memory | 9 | 7 | JS heap 9.5 MB vs 31.6 MB; server memory similar |
+| disk space for installs | 5 | 9 | 117 MB of project-local installs vs none |
+| amount of code | 5 | 7 | ~7,000 lines vs ~2,900 (+ borrowed modules) |
+
+**Frontend design features**
+
+| quality | A | B | evidence |
+|---|---|---|---|
+| match to the concept pages | 9 | 5 | A drew every designed component. B approximated cards, grips, popovers and fonts with widgets (§4, B round 1). |
+| custom interactions (drag handles, draggable threshold, crosshair) | 9 | 6 | B's span box has no grips, and B's threshold value lands only on release, with an x snap-back round trip. |
+| one time axis shared across rows | 8 | 9 | B's is one `Range1d`; A synchronises the rows by hand (it works). |
+| all seven interchange types drawn | 9 | 8 | Both draw all seven. B's gramian image row blanked the whole chain until the fix pass. |
+
+**Reliability and development**
+
+| quality | A | B | evidence |
+|---|---|---|---|
+| errors are visible (never a silent blank) | 9 | 3 | The decisive row (§2, §3). B is loud only where each callback is wrapped by hand. |
+| survives reload / a second tab | 8 | 5 | B needed the URL hash to carry state. |
+| automated tests catch breakage | 8 | 5 | A's Playwright gate fails on any console error. B's errors never reach the browser, so its gate needs `/b/debug` plus `server.log`. |
+| plumbing to the core | 5 | 9 | A needs its own bridge (SSE with a polling fallback, cancel, reload replay, meta sidecar). B calls the core in-process. |
+| toolchain simplicity | 5 | 9 | A adds Node, npm, TypeScript and a build step. B is pure Python. |
+| fit with the existing repo | 4 | 9 | `UI/`, `tests/ui`, `scripts/dev_serve.py` and CLAUDE.md all assume Panel. A means a new tree and new test gates. |
+
+**Reading the scorecard.** A wins on what the person using the app sees and feels: speed, fidelity
+to the pages, and failures that show. B wins on what the person maintaining it carries: one language,
+no bridge, the existing repo's shape, and dense-plot headroom. The cost of choosing A is concentrated
+in the last three rows. Two of them are one-off: the bridge is written, and the tree move is a single
+merge. The third is permanent: a second toolchain. #12's weighting down-weights exactly that cost.
+
+**Additional findings from this pass.**
+- **Dense plotting is A's one real technical ceiling.** If a future page must draw tens of thousands of
+  marks at once (e.g. every detection across a recording as a scatter, or a large recurrence matrix),
+  A's renderer for that page should draw to `<canvas>`. Examples: a library such as uPlot or regl, or a
+  hand-written canvas layer like A's image rows. Keep the same seam: one renderer per interchange type.
+- **Runtime directories accumulate** (see 8.1). Decide a retention policy when the bridge graduates
+  from prototype.
+- **Old servers can linger on the default ports.** The benchmark found 8765 and 8766 already occupied
+  by manually started prototype servers. Start scripts should fail loudly on a busy port rather than
+  appear to start.

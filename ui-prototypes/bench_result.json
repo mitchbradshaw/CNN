@@ -1,0 +1,55 @@
+{
+ "A": {
+  "server_start_s": 3.8,
+  "rss_idle_mb": 388,
+  "rss_after_mb": 507,
+  "corpus_cold_ms": [
+   624,
+   624,
+   603
+  ],
+  "corpus_cold_median_ms": 624,
+  "corpus_warm_ms": [
+   193,
+   238,
+   213
+  ],
+  "corpus_warm_median_ms": 213,
+  "corpus_to_signal_ms": [
+   126,
+   109,
+   108
+  ],
+  "corpus_to_signal_median_ms": 109,
+  "first_load_http_kb": 571,
+  "first_load_ws_kb": 0,
+  "js_heap_mb": 9.5
+ },
+ "B": {
+  "server_start_s": 7.1,
+  "rss_idle_mb": 488,
+  "rss_after_mb": 521,
+  "corpus_cold_ms": [
+   1091,
+   903,
+   869
+  ],
+  "corpus_cold_median_ms": 903,
+  "corpus_warm_ms": [
+   448,
+   424,
+   435
+  ],
+  "corpus_warm_median_ms": 435,
+  "corpus_to_signal_ms": [
+   727,
+   544,
+   535
+  ],
+  "corpus_to_signal_median_ms": 544,
+  "first_load_http_kb": 3074,
+  "first_load_ws_kb": 691,
+  "js_heap_mb": 31.6
+ },
+ "ports_still_open": []
+}

@@ -405,3 +405,15 @@ templates so the image path is exercised), then B stops.
 - pytest: run once (1296 passed / 41 pre-existing failures, DECISIONS §10); deliberately not re-run at
   the very end because it writes into the real DATA through the junction.
 - Issue #12: one summary comment (tracker write 2 of 2). Issue left open.
+
+
+## 15. Post-review (2026-09-15): scorecard, benchmark, your choice
+
+- You asked for a quality-by-quality comparison. REPORT §8 now holds the scorecard and a new
+  benchmark (`bench_ab.py` → `bench_result.json`): page load, reload, in-app navigation, bytes
+  downloaded, JS heap, server memory and install footprint. Scores are judgement anchored to
+  measurements; no total, because rows are not equally weighted.
+- The benchmark ran on spare ports 8775/8776 because 8765/8766 were occupied by prototype servers
+  started by hand at 23:11/23:12. Those were left running; only the benchmark's own processes were
+  stopped (none left listening).
+- **You chose A.**
