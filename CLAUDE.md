@@ -26,18 +26,24 @@ describes the chain builder as a vertical staged list, which is exactly what Par
 | `Working/` | The UI-free core: config, execution, recipes, database, detection, catalogue, HPC |
 | `Working/database/` | Plain-SQL layer. `schema.py` holds the whole schema and its migrations |
 | `Adapters/` | The analysis block registry. `base.py` is the adapter contract |
-| `UI/` | Panel/HoloViews surfaces. The only place a UI library may be imported |
+| `webui/` | **The web UI** (ADR `docs/adr/0001-web-ui-stack.md`): `client/` React + TypeScript + Vite, `server/` FastAPI bridge over the untouched core, `run_server.py`, `start.ps1`/`start.sh`, `smoke.py`. See "Web UI" below |
+| `UI/` | **Legacy** Panel/HoloViews app. Frozen, kept importable and green, not developed. Nothing in `webui/` may import it |
+| `ui-prototypes/` | Frozen evidence archive of the stack prototypes (`REPORT.md` is the decision evidence). Not maintained; B no longer runs |
 | `tests/` | pytest, headless. The default gate; `pytest.ini` excludes `-m ui` from it |
-| `tests/ui/` | Browser-driven Panel tests (`pytest -m ui`). See `docs/UI_VERIFICATION.md` |
-| `scripts/` | Dev tooling, not imported by the app. `dev_serve.py` serves the UI off a throwaway database |
+| `tests/ui/` | **Legacy** browser-driven Panel tests (`pytest -m ui`). See `docs/UI_VERIFICATION.md` |
+| `scripts/` | Dev tooling, not imported by the app. `dev_serve.py` serves the **legacy** Panel UI off a throwaway database |
 | `docs/` | PRD, coding standards, ticket backlog, `UI_VERIFICATION.md` |
 | `DATA/`, `MODELS/`, `MATRICES/`, `Plots/` | Gitignored. Provisioned into your worktree, not committed |
 | `DATA/library_seed/` | The **exception**: tracked on purpose. Irreplaceable inputs to the library importer — its generator was deleted. See its `PROVENANCE.md` |
 
 ## The rules that are not negotiable
 
-1. **No module below `UI/` may import Panel, HoloViews, Bokeh or matplotlib.** This is what makes
-   cluster execution, headless tests and the reproducibility claim possible. It is enforced by a test.
+1. **UI libraries stay in the UI trees.** Panel, HoloViews, Bokeh and matplotlib may be imported only
+   under the legacy `UI/`; React, d3 and every other browser library live only in `webui/client/`;
+   FastAPI/uvicorn only in `webui/server/` and `webui/run_server.py` (which import none of the Panel
+   family either). `Working/`, `Adapters/` and `Pipelines/` import none of them and must never know a
+   browser exists. This is what makes cluster execution, headless tests and the reproducibility claim
+   possible. The Panel-family rule is enforced by a test.
 2. **The suite must pass with no regressions.** `pytest` from your worktree root: 1049 tests as of
    2026-08-31, about six minutes serial (`pytest -n auto` — needs `pytest-xdist`, see Environment —
    cuts this to about five; most of the wall-clock is Panel/HoloViews/numpy/aeon import cost paid
@@ -89,11 +95,42 @@ same day, on the same sign-off, for the browser suite in `tests/ui/`. Both are d
 under `UI/`, `Working/`, `Adapters/` or `Pipelines/` may import either, and the headless suite must
 keep passing on a machine where neither is present.
 
+The web UI adds a second toolchain, signed off with the stack choice on 2026-09-15 (ADR 0001): Node + npm
+for `webui/client` (project-local `node_modules`, never `npm -g`) and a project-local `webui/.venv` for
+FastAPI/uvicorn. Neither touches the conda environment.
+
 Run tests with `pytest` from your worktree root. Your worktree has its own `DATA/` fixture database;
 it is not the real one and you cannot reach the real one. That is deliberate.
 
-## Panel surfaces
+## Web UI (`webui/`)
 
+**Start it** (from the repo root, in the main checkout — it needs `DATA/db/annotations.sqlite`):
+
+    webui\start.ps1            # builds the client once, serves http://127.0.0.1:8765
+    webui\start.ps1 -Dev       # bridge on 8765 + Vite dev server with HMR on 5173
+
+(`webui/start.sh [port]` from Git Bash.) The first start creates `webui/.venv` (`--system-site-packages`,
+fastapi + uvicorn) and runs `npm install` in `webui/client`; both are project-local and gitignored. The
+bridge copies the database into `webui/runtime/<stamp>/` and redirects `STEP_CACHE_ROOT`, both adapter
+`RESULTS_DIR`s and the classifier `MODEL_ROOT` there before any run, refuses to start if one escapes, and
+refuses a busy port. `M4_aug_concat_fs1.mat` is refused on every route. **Never point it, pytest or an
+adapter at a junction to the real `DATA/`.**
+
+**The UI gate.** A change under `webui/` is done when all three pass:
+
+1. `npx tsc -b` in `webui/client` (type-check) and `npm run build` (production build);
+2. `"/c/ProgramData/anaconda3/python.exe" webui/smoke.py --url http://127.0.0.1:8765` against a running
+   bridge — Playwright via the conda python; it fails on any browser console or page error, any pane that
+   did not paint, any unexpected server traceback, and a broken core flow, and writes screenshots to
+   `webui/screenshots/`;
+3. the headless `pytest` suite, if the change touched anything Python outside `webui/`.
+
+Loud failure is structural here: a render error is a red card plus a console error; a server error is a
+500 with the traceback. Keep it that way — never catch an error into a blank.
+
+## Panel surfaces (legacy `UI/` only)
+
+`UI/` is frozen and no longer developed; this section applies only if a ticket must touch it.
 If your ticket renders a Panel surface, know the failure mode this codebase has hit twice: a broken
 dynamic map renders as a **silently blank pane**, not an error. Tests pass, review passes, the feature
 is missing. Your acceptance criteria therefore include a headless construction test asserting the
