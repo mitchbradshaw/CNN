@@ -45,7 +45,9 @@ def header_html(workspace: str, page: str, subtitle: str = "", need_you: int = 0
 
 
 def rail_pane(active: str, live_jobs: int = 0) -> pn.pane.HTML:
-    return pn.pane.HTML(rail_html(active, live_jobs), sizing_mode="fixed", width=64, margin=0)
+    # stretch_height (not fixed): a fixed-size pane without a height triggers Bokeh's FIXED_SIZING_MODE warning
+    return pn.pane.HTML(rail_html(active, live_jobs), sizing_mode="stretch_height", width=64, min_height=640, margin=0,
+                        styles={"position": "sticky", "top": "0", "align-self": "flex-start", "height": "100vh"})
 
 
 def header_pane(workspace: str, page: str, subtitle: str = "", need_you: int = 0) -> pn.pane.HTML:

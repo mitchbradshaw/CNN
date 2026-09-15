@@ -51,3 +51,47 @@ body { font-family: var(--font-ui); font-size: 13px; color: var(--text); backgro
 .bk-btn, .bk-input, select.bk-input { font-family: var(--font-mono) !important; font-size: 12px !important; border-radius: 8px !important; }
 .bk-btn-primary { background: var(--blue) !important; border-color: var(--blue) !important; }
 """
+
+# ---- B builder additions: Panel/Bokeh widgets live in shadow roots. raw_css is injected into every
+# component's shadow root, so a class set with css_classes=[...] on the widget is only reachable from
+# inside that root as :host(.cls). Every styled control below needed that trick.
+THEME_CSS += r"""
+:host(.seg) .bk-btn-group { background: var(--grey-100); border-radius: 8px; padding: 2px; gap: 2px; }
+:host(.seg) .bk-btn { border: none !important; background: transparent !important; color: var(--text-2) !important; font-size: 11.5px !important; height: 26px; padding: 0 11px; border-radius: 6px !important; box-shadow: none !important; }
+:host(.seg) .bk-btn.bk-active { background: #fff !important; color: var(--text) !important; box-shadow: 0 1px 2px rgba(17,24,39,.10) !important; }
+:host(.btn) .bk-btn { background: #fff !important; border: 1px solid var(--border-strong) !important; color: var(--text) !important; height: 30px; padding: 0 12px; font-size: 12px !important; box-shadow: none !important; }
+:host(.btn) .bk-btn:hover { background: var(--grey-100) !important; }
+:host(.btn-primary) .bk-btn { background: var(--blue) !important; border: 1px solid var(--blue) !important; color: #fff !important; height: 30px; padding: 0 14px; font-size: 12px !important; box-shadow: none !important; }
+:host(.btn-primary) .bk-btn:hover { background: var(--blue-600) !important; }
+:host(.btn-danger) .bk-btn { background: #fff !important; border: 1px solid #f7c1c3 !important; color: #b3262b !important; height: 30px; font-size: 12px !important; }
+:host(.btn-link) .bk-btn { background: transparent !important; border: none !important; color: var(--blue) !important; font-size: 12px !important; box-shadow: none !important; padding: 0 4px; }
+:host(.btn) .bk-btn[disabled], :host(.btn-primary) .bk-btn[disabled] { opacity: .45 !important; cursor: not-allowed; }
+:host(.icon-btn) .bk-btn { width: 24px; min-width: 24px; height: 22px; padding: 0 !important; font-size: 12px !important; background: var(--grey-100) !important; border: none !important; color: var(--muted) !important; border-radius: 5px !important; box-shadow: none !important; }
+:host(.icon-btn.on) .bk-btn { background: var(--blue-100) !important; color: var(--blue) !important; }
+:host(.icon-btn) .bk-btn:hover { background: var(--grey-200) !important; color: var(--text) !important; }
+:host(.pill-insert) .bk-btn { border-radius: 999px !important; height: 22px; font-size: 11px !important; padding: 0 12px; background: #fff !important; color: var(--muted) !important; border: 1px solid var(--border) !important; box-shadow: none !important; }
+:host(.pill-insert) .bk-btn:hover { color: var(--blue) !important; border-color: var(--blue-200) !important; }
+:host(.card-btn) .bk-btn { white-space: pre-line !important; text-align: left !important; height: 96px; width: 100%; display: flex; flex-direction: row; align-items: flex-start !important; justify-content: flex-start !important; line-height: 1.5; padding: 10px 10px !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 10px !important; color: var(--text) !important; font-size: 11px !important; box-shadow: none !important; overflow: hidden; }
+:host(.card-btn) .bk-btn:hover { border-color: var(--blue-200) !important; }
+:host(.card-btn.sel) .bk-btn { border: 1.5px solid var(--blue) !important; background: #f3f8ff !important; }
+:host(.card-btn) .bk-btn[disabled] { opacity: .55; background: #fafafa !important; color: var(--muted) !important; cursor: not-allowed; }
+:host(.card-btn) .bk-btn .bk-TablerIcon, :host(.card-btn) .bk-btn svg { flex: none; margin-right: 8px; }
+:host(.chk) .bk-input-group label, :host(.chk) label { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+:host(.chk) input[type=checkbox] { accent-color: var(--blue); }
+:host(.sel-mono) select, :host(.sel-mono) input { font-family: var(--font-mono) !important; font-size: 12px !important; height: 30px; border-radius: 8px !important; border: 1px solid var(--border-strong) !important; }
+:host(.sel-mono) label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.pb-toolbar { display: flex; align-items: center; gap: 8px; }
+.row-left h4 { margin: 0; font-size: 13.5px; font-weight: 600; } .row-left .num { font-family: var(--font-mono); color: var(--muted); font-size: 11px; margin-right: 4px; font-weight: 400; }
+.row-left .sig { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-left: 6px; }
+.row-left .cap { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); margin-top: 4px; line-height: 1.4; }
+.junction { border: 1px solid #f7c1c3; background: var(--red-100); color: #b3262b; border-radius: 999px; padding: 4px 12px; font-family: var(--font-mono); font-size: 11.5px; display: inline-block; }
+.runbar { height: 3px; background: var(--blue-100); overflow: hidden; border-radius: 2px; position: relative; }
+.runbar::after { content: ''; position: absolute; left: -40%; width: 40%; height: 100%; background: var(--blue); animation: pbslide 1.1s infinite linear; }
+@keyframes pbslide { from { left: -40%; } to { left: 100%; } }
+.waits { height: 100%; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); background: repeating-linear-gradient(135deg, #fafbfc, #fafbfc 8px, #f3f4f6 8px, #f3f4f6 16px); border-radius: 6px; border: 1px dashed var(--border); }
+.legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-family: var(--font-mono); font-size: 11.5px; }
+.kv .k { color: var(--muted); }
+.popover { background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgba(17,24,39,.14); }
+.tile { background: var(--grey-100); border-radius: 8px; padding: 8px 10px; } .tile .k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); } .tile .v { font-size: 17px; font-weight: 600; }
+"""
