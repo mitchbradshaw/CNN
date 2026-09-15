@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, getChannel, getRecordings, getSpans, type Channel, type Spans } from '../api'
 import type { BandKind } from '../charts/primitives'
 import { useSize } from '../charts/useSize'
+import { ErrorBoundary } from '../shell/ErrorBoundary'
 import { Header } from '../shell/Header'
 import { useToast } from '../shell/Toast'
 import { navigate, useApp } from '../state'
@@ -13,6 +14,7 @@ import { LockedCard } from './LockedCard'
 import { MotifView } from './MotifView'
 import { Overview } from './Overview'
 import { Ribbons } from './Ribbons'
+import { RunsChip } from './RunsChip'
 import { SpanActions } from './SpanActions'
 import { SpanView, type Band } from './SpanView'
 import { useViewport } from './useViewport'
@@ -129,23 +131,34 @@ function SignalBody({ ch }: { ch: Channel }) {
             <button className="on">Signal</button>
             <button className="inert" title="out of slice scope">Cross-channel</button>
           </div>
-          <span className="chip">detections <b>{ch.summary.detection_runs} run{ch.summary.detection_runs === 1 ? '' : 's'}</b> ▾</span>
-          <span className="chip inert" title="out of slice scope">display <b>raw</b> ▾</span>
+          <RunsChip recordingId={ch.id} channelName={ch.name} nDetectionRuns={ch.summary.detection_runs} nDetections={ch.summary.detections} />
+          <span className="chip inert" title="display mode is out of slice scope · raw mV is what is drawn" aria-disabled data-testid="display-chip">display <b>raw</b> ▾</span>
           <span className="grow" />
           <a className="ex-back" onClick={() => navigate('explore/corpus')} data-testid="back-to-corpus">‹ back to corpus</a>
         </div>
 
         {allErr && <ErrorCard error={allErr} title="span list for the whole channel failed" />}
 
-        <Overview ch={ch} view={vp.view} onView={vp.setView} />
-        <SpanView ch={ch} vp={vp} plotRef={plotRef} width={plotSize.width} bands={bands} selected={sel} onBandClick={m => setSel(m)}
-          nav={{ index, total: motifs.length, capped, prev, next }} />
-        <MotifView ch={ch} motif={sel} onSend={m => send(m.start_s, m.end_s, `MOTIF ${m.id} · ${ch.name}`)} />
-        <SpanActions view={vp.view} nInView={inView.length} onSend={() => send(vp.view[0], vp.view[1], `${ch.name} · ${fmtRangeH(vp.view[0], vp.view[1])}`)} />
-        <Ribbons annotations={vp.spans?.annotations ?? []} detections={vp.spans?.detections ?? []}
-          totals={{ annotations: ch.summary.annotations, detections: ch.summary.detections }}
-          capped={{ annotations: !!vp.spans?.annotations_capped, detections: !!vp.spans?.detections_capped }}
-          selected={sel} onSelect={m => setSel(m)} />
+        {/* one boundary per tier (critique r1: a bad payload in one tier took the whole workspace down) */}
+        <ErrorBoundary label="overview tier">
+          <Overview ch={ch} view={vp.view} onView={vp.setView} />
+        </ErrorBoundary>
+        <ErrorBoundary label="span tier">
+          <SpanView ch={ch} vp={vp} plotRef={plotRef} width={plotSize.width} bands={bands} selected={sel} onBandClick={m => setSel(m)}
+            nav={{ index, total: motifs.length, capped, prev, next }} />
+        </ErrorBoundary>
+        <ErrorBoundary label="motif tier">
+          <MotifView ch={ch} motif={sel} onSend={m => send(m.start_s, m.end_s, `MOTIF ${m.id} · ${ch.name}`)} />
+        </ErrorBoundary>
+        <ErrorBoundary label="span actions">
+          <SpanActions view={vp.view} nInView={inView.length} onSend={() => send(vp.view[0], vp.view[1], `${ch.name} · ${fmtRangeH(vp.view[0], vp.view[1])}`)} />
+        </ErrorBoundary>
+        <ErrorBoundary label="ribbons">
+          <Ribbons annotations={vp.spans?.annotations ?? []} detections={vp.spans?.detections ?? []}
+            totals={{ annotations: ch.summary.annotations, detections: ch.summary.detections }}
+            capped={{ annotations: !!vp.spans?.annotations_capped, detections: !!vp.spans?.detections_capped }}
+            selected={sel} onSelect={m => setSel(m)} />
+        </ErrorBoundary>
       </div></div>
     </>
   )

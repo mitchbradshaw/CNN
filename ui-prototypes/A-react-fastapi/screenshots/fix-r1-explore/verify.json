@@ -1,0 +1,263 @@
+{
+ "results": {
+  "legend says quantiles": {
+   "ok": true,
+   "detail": "low\nhigh \u00b7 quantiles"
+  },
+  "heatmap data-ramp=quantile": {
+   "ok": true,
+   "detail": ""
+  },
+  "ramp uses >= 4 distinct non-zero levels": {
+   "ok": true,
+   "detail": "{'1': 201, '5': 169, '2': 182, '3': 205, '4': 155}"
+  },
+  "no single level holds > 60% of cells": {
+   "ok": true,
+   "detail": "205/912"
+  },
+  "CH1_A1 detections row shows several shades": {
+   "ok": true,
+   "detail": "{'1': 1, '5': 1, '3': 1}"
+  },
+  "caption defines disagree": {
+   "ok": true,
+   "detail": "each cell counts spans whose start falls in that bin \u00b7 shade = quantile rank among the non-zero cells (five bins, ties share a shade) \u00b7 click a row to select th"
+  },
+  "CH8_B2 (no detections) disagree row is blank": {
+   "ok": true,
+   "detail": "{'0'}"
+  },
+  "CH1_A1 (both sources) disagree row is drawn": {
+   "ok": true,
+   "detail": "{'4', '5', '1', '3', '2'}"
+  },
+  "CH8_B2 cell tooltip explains the blank": {
+   "ok": true,
+   "detail": "CH8_B2 \u00b7 38\u201351 h \u00b7 disagree \u2014 (no detections on this channel)"
+  },
+  "bottom bar CH8_B2 says '\u2014 disagree (no detections)'": {
+   "ok": true,
+   "detail": "710 annotations \u00b7 0 detections \u00b7 \u2014 disagree (no detections) \u00b7 16 % reviewed"
+  },
+  "bottom bar tooltip carries the definition": {
+   "ok": true,
+   "detail": ""
+  },
+  "bottom bar CH1_A1 shows a numeric disagree": {
+   "ok": true,
+   "detail": "708 annotations \u00b7 75 detections \u00b7 754 disagree \u00b7 18 % reviewed"
+  },
+  "Enter on a focused heatmap row selects it": {
+   "ok": true,
+   "detail": "CH3_A2"
+  },
+  "focused heatmap row shows a 2px outline": {
+   "ok": true,
+   "detail": "solid 2px"
+  },
+  "initial span is 2 h": {
+   "ok": true,
+   "detail": "0.0 \u2013 2.0 h \u00b7 2.0 h"
+  },
+  "'display raw' chip has title + aria-disabled": {
+   "ok": true,
+   "detail": "display mode is out of slice scope \u00b7 raw mV is what is drawn"
+  },
+  "'Send motif' disabled with title 'select a motif first'": {
+   "ok": true,
+   "detail": "select a motif first"
+  },
+  "medoid overlay renamed (no F-03)": {
+   "ok": true,
+   "detail": "overlay family medoid \u00b7 no families in this database"
+  },
+  "ribbon filters has a title": {
+   "ok": true,
+   "detail": "out of slice scope \u00b7 opens a note saying so"
+  },
+  "ribbon shortcuts has a title": {
+   "ok": true,
+   "detail": "the shortcut list is out of slice scope \u00b7 opens a note with what works today"
+  },
+  "ribbon annotations has a title": {
+   "ok": true,
+   "detail": "annotations in the current viewport"
+  },
+  "ribbon detections has a title": {
+   "ok": true,
+   "detail": "detections in the current viewport"
+  },
+  "Cross-channel keeps its title": {
+   "ok": true,
+   "detail": ""
+  },
+  "runs chip is a button with a title": {
+   "ok": true,
+   "detail": "runs that wrote detections on CH1_A1 \u00b7 click to list every run on this channel"
+  },
+  "runs popover lists runs (or says none)": {
+   "ok": true,
+   "detail": "10 rows, empty=0"
+  },
+  "chip aria-expanded=true while open": {
+   "ok": true,
+   "detail": ""
+  },
+  "Escape closes the runs popover": {
+   "ok": true,
+   "detail": ""
+  },
+  "click-outside closes the runs popover": {
+   "ok": true,
+   "detail": ""
+  },
+  "right grip has role=slider + aria-valuenow": {
+   "ok": true,
+   "detail": "7200"
+  },
+  "ArrowRight nudges the end by one bucket": {
+   "ok": true,
+   "detail": "7200.0 -> 15852.0, bucket 8652"
+  },
+  "Shift+ArrowRight nudges by ten buckets": {
+   "ok": true,
+   "detail": "15852.0 -> 102372.0"
+  },
+  "focused grip shows a 2px solid outline": {
+   "ok": true,
+   "detail": "solid 2px rgb(10, 132, 255) fv=true"
+  },
+  "span range grew after the nudges": {
+   "ok": true,
+   "detail": "0.0 \u2013 28.4 h \u00b7 28.4 h"
+  },
+  "left grip ArrowRight moves the start by one bucket": {
+   "ok": true,
+   "detail": "0.0 -> 8652.0"
+  },
+  "span box is a focusable slider": {
+   "ok": true,
+   "detail": ""
+  },
+  "span svg is focusable (tabindex=0)": {
+   "ok": true,
+   "detail": ""
+  },
+  "'+' on the focused plot zooms to the 60 s floor": {
+   "ok": true,
+   "detail": "0.992 \u2013 1.008 h \u00b7 60 s"
+  },
+  "ArrowRight on the plot pans right by a tenth (6 s)": {
+   "ok": true,
+   "detail": "3570 -> 3576"
+  },
+  "focused span plot shows a 2px solid outline": {
+   "ok": true,
+   "detail": "solid 2px"
+  },
+  "60 s y labels are distinct values": {
+   "ok": true,
+   "detail": "['-0.12538 mV', '-0.12562 mV', '-0.12587 mV'] digits=5"
+  },
+  "y labels group has pointer-events none": {
+   "ok": true,
+   "detail": ""
+  },
+  "y labels not dim once settled": {
+   "ok": true,
+   "detail": ""
+  },
+  "immediately after fit: skeleton with data-reason=stale-transform": {
+   "ok": true,
+   "detail": "stale-transform"
+  },
+  "immediately after fit: no stretched path": {
+   "ok": true,
+   "detail": ""
+  },
+  "immediately after fit: y labels dimmed": {
+   "ok": true,
+   "detail": ""
+  },
+  "immediately after fit: stat chip dimmed": {
+   "ok": true,
+   "detail": ""
+  },
+  "immediately after fit: 'fetching\u2026' shown": {
+   "ok": true,
+   "detail": ""
+  },
+  "the window fetch was actually held": {
+   "ok": true,
+   "detail": "1"
+  },
+  "after the fetch lands: path back, not transformed": {
+   "ok": true,
+   "detail": ""
+  },
+  "after the fetch lands: labels + stat undimmed": {
+   "ok": true,
+   "detail": ""
+  },
+  "moderate zoom keeps the transformed path": {
+   "ok": true,
+   "detail": ""
+  },
+  "moderate zoom: stat chip dimmed while the view is ahead of the data": {
+   "ok": true,
+   "detail": ""
+  },
+  "a motif is selected and labelled": {
+   "ok": true,
+   "detail": ""
+  },
+  "selected band touches the left edge (x0 = 0)": {
+   "ok": true,
+   "detail": "0"
+  },
+  "motif label starts at x >= 64 (clear of the y labels)": {
+   "ok": true,
+   "detail": "74.0"
+  },
+  "motif label does not overlap any y label": {
+   "ok": true,
+   "detail": "{'hit': False, 'ymax': 58, 'mx': 74}"
+  },
+  "Send motif enabled once a motif is selected": {
+   "ok": true,
+   "detail": ""
+  },
+  "envelope=null: ErrorCards shown, no render-error, workspace intact": {
+   "ok": true,
+   "detail": "2 error cards"
+  },
+  "render throw is caught by the overview tier boundary only": {
+   "ok": true,
+   "detail": "\u26a0 overview tier failed to render"
+  },
+  "span tier, motif tier and ribbons survive": {
+   "ok": true,
+   "detail": ""
+  },
+  "null span entries are skipped, no render error": {
+   "ok": true,
+   "detail": ""
+  },
+  "held-out channel renders the locked card, no render error": {
+   "ok": true,
+   "detail": ""
+  }
+ },
+ "console_errors": [
+  [
+   "allowed",
+   "%o\n\n%s\n\n%s\n TypeError: Cannot read properties of null (reading 'forEach')\n    at Overview (http://127.0.0.1:5173/src/explore/Overview.tsx:132:14)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=58fc52be:14142:12)\n    at renderWithHooks (htt"
+  ],
+  [
+   "allowed",
+   "[render error in overview tier] TypeError: Cannot read properties of null (reading 'forEach')\n    at Overview (http://127.0.0.1:5173/src/explore/Overview.tsx:132:14)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=58fc52be:14142:12)\n    at "
+  ]
+ ],
+ "page_errors": []
+}

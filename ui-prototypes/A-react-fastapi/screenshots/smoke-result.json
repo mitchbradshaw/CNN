@@ -5,8 +5,8 @@
     "heatmap_cells": 912,
     "heatmap_distinct_fills": 5,
     "envelope_path_lengths": [
-      28996,
-      33073
+      28973,
+      27561
     ],
     "span_bands": 4,
     "zoom_stats": [
@@ -15,40 +15,40 @@
         "t0": 995040,
         "t1": 1002240,
         "px": 1304,
-        "n_points": 2880,
-        "decimate_ms": 0.7117000059224665,
-        "round_trip_ms": 8.799999982118607,
-        "paint_ms": 14.400000005960464
+        "n_points": 2400,
+        "decimate_ms": 0.301499996567145,
+        "round_trip_ms": 7.0999999940395355,
+        "paint_ms": 13.700000017881393
       },
       {
         "seq": 2,
         "t0": 996168.1605153364,
         "t1": 1001316.3874163145,
         "px": 1304,
-        "n_points": 3434,
-        "decimate_ms": 2.3241000017151237,
-        "round_trip_ms": 25,
-        "paint_ms": 9.199999988079071
+        "n_points": 2576,
+        "decimate_ms": 0.5038999952375889,
+        "round_trip_ms": 10.900000005960464,
+        "paint_ms": 8.800000011920929
       },
       {
         "seq": 3,
         "t0": 996974.8308366804,
         "t1": 1000655.9753122295,
         "px": 1304,
-        "n_points": 3682,
-        "decimate_ms": 0.5750000127591193,
-        "round_trip_ms": 15.099999994039536,
-        "paint_ms": 6.799999982118607
+        "n_points": 2456,
+        "decimate_ms": 0.37220001104287803,
+        "round_trip_ms": 8.5,
+        "paint_ms": 11.299999982118607
       },
       {
         "seq": 4,
         "t0": 997551.6255378698,
         "t1": 1000183.7598455653,
         "px": 1304,
-        "n_points": 2634,
-        "decimate_ms": 0.3939000016544014,
-        "round_trip_ms": 21.5,
-        "paint_ms": 15.300000011920929
+        "n_points": 1756,
+        "decimate_ms": 0.301499996567145,
+        "round_trip_ms": 10.099999994039536,
+        "paint_ms": 14
       },
       {
         "seq": 5,
@@ -56,9 +56,9 @@
         "t1": 999846.1109054906,
         "px": 1304,
         "n_points": 1883,
-        "decimate_ms": 0.2896999940276146,
-        "round_trip_ms": 20.600000023841858,
-        "paint_ms": 16.19999998807907
+        "decimate_ms": 0.2869000018108636,
+        "round_trip_ms": 7.300000011920929,
+        "paint_ms": 11.699999988079071
       },
       {
         "seq": 6,
@@ -66,9 +66,9 @@
         "t1": 999604.6812726601,
         "px": 1304,
         "n_points": 1347,
-        "decimate_ms": 0.1813999842852354,
-        "round_trip_ms": 7.700000017881393,
-        "paint_ms": 12.399999976158142
+        "decimate_ms": 0.2825999981723726,
+        "round_trip_ms": 8.400000005960464,
+        "paint_ms": 18
       },
       {
         "seq": 7,
@@ -76,9 +76,9 @@
         "t1": 999432.0514767669,
         "px": 1304,
         "n_points": 964,
-        "decimate_ms": 0.1894999877549708,
-        "round_trip_ms": 5.9000000059604645,
-        "paint_ms": 8.099999994039536
+        "decimate_ms": 0.2069000038318336,
+        "round_trip_ms": 6.700000017881393,
+        "paint_ms": 12
       },
       {
         "seq": 8,
@@ -86,9 +86,9 @@
         "t1": 999308.6157324438,
         "px": 1304,
         "n_points": 689,
-        "decimate_ms": 0.14139999984763563,
-        "round_trip_ms": 91.69999998807907,
-        "paint_ms": 11.699999988079071
+        "decimate_ms": 0.1244999875780195,
+        "round_trip_ms": 6.600000023841858,
+        "paint_ms": 14
       },
       {
         "seq": 9,
@@ -96,9 +96,9 @@
         "t1": 999220.3552852954,
         "px": 1304,
         "n_points": 493,
-        "decimate_ms": 0.13699999544769526,
-        "round_trip_ms": 20.099999994039536,
-        "paint_ms": 15.099999994039536
+        "decimate_ms": 0.12179999612271786,
+        "round_trip_ms": 6.399999976158142,
+        "paint_ms": 13.399999976158142
       },
       {
         "seq": 10,
@@ -106,17 +106,17 @@
         "t1": 999295.8099973138,
         "px": 1304,
         "n_points": 493,
-        "decimate_ms": 0.1689000055193901,
-        "round_trip_ms": 5.5,
-        "paint_ms": 14
+        "decimate_ms": 0.13290002243593335,
+        "round_trip_ms": 6.200000017881393,
+        "paint_ms": 12.299999982118607
       }
     ],
     "zoom_round_trip_ms": {
-      "min": 5.5,
-      "max": 91.69999998807907,
-      "median": 20.099999994039536
+      "min": 6.200000017881393,
+      "max": 10.900000005960464,
+      "median": 7.300000011920929
     },
-    "run_wall_s": 31.94,
+    "run_wall_s": 31.91,
     "badges_after_run": [
       "cached",
       "cached",
@@ -143,7 +143,7 @@
       "core step time 0.000 s"
     ],
     "server_log_error_lines": [
-      "2026-09-15 04:31:25,598 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
+      "2026-09-15 10:07:10,947 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
     ]
   },
   "screenshots": [

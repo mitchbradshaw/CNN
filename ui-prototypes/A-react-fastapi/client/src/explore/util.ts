@@ -133,8 +133,9 @@ export interface Motif {
 }
 export function toMotifs(s: Spans): Motif[] {
   const out: Motif[] = []
-  for (const a of s.annotations) out.push({ key: `a:${a.id}`, kind: 'annotated', id: a.id, start_s: a.start_s, end_s: a.end_s, verdict: a.verdict, tag: a.tag, note: a.note, source: a.source })
-  for (const d of s.detections) out.push({ key: `d:${d.id}`, kind: 'detected', id: d.id, start_s: d.start_s, end_s: d.end_s, run_id: d.run_id, score: d.score })
+  // a malformed entry (null, a string) is skipped: toMotifs runs in SignalBody, above every tier boundary
+  for (const a of s.annotations) if (a && typeof a === 'object') out.push({ key: `a:${a.id}`, kind: 'annotated', id: a.id, start_s: a.start_s, end_s: a.end_s, verdict: a.verdict, tag: a.tag, note: a.note, source: a.source })
+  for (const d of s.detections) if (d && typeof d === 'object') out.push({ key: `d:${d.id}`, kind: 'detected', id: d.id, start_s: d.start_s, end_s: d.end_s, run_id: d.run_id, score: d.score })
   out.sort((p, q) => p.start_s - q.start_s || p.end_s - q.end_s || p.id - q.id)
   return out
 }

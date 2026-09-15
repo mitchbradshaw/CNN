@@ -42,11 +42,15 @@ export function HistoryPopover({ source, onApply, onClose }: Props) {
             )
           })}
           {data.db_runs.map(r => {
+            // the core records a cancellation as status 'failed' + error_text 'Cancelled …'; the bridge
+            // flags it as cancelled so it is not shown as a failure (critique r1)
+            const cancelled = !!(r as DbRun & { cancelled?: boolean }).cancelled
+            const shown = cancelled ? 'cancelled' : r.status
             const canApply = !!source && !!r.recipe && r.recipe.recording_id === source.recording_id
             const reason = !r.recipe ? 'recipe not stored' : !source ? 'no source' : r.recipe.recording_id !== source.recording_id ? 'different recording' : null
             return (
               <div className="hist-row" key={r.id} data-testid={`history-run-${r.id}`}>
-                <div><div className="name">{r.name ?? `run #${r.id}`}</div><div className="id"><span className={`badge ${r.status === 'completed' ? 'cached' : r.status === 'failed' ? 'failed' : r.status === 'running' ? 'running' : 'cancelled'}`}>{r.status}</span> · #{r.id} · {r.started_at.slice(0, 10)}</div></div>
+                <div><div className="name">{r.name ?? `run #${r.id}`}</div><div className="id"><span className={`badge ${shown === 'completed' ? 'cached' : shown === 'failed' ? 'failed' : shown === 'running' ? 'running' : 'cancelled'}`} title={cancelled ? r.error_text ?? 'cancelled between steps' : r.error_text ?? undefined}>{shown}</span> · #{r.id} · {r.started_at.slice(0, 10)}</div></div>
                 <div className="steps">{r.steps.map((s, i) => <span key={i} title={s}>{s.split('.').pop()}</span>).reduce<React.ReactNode[]>((acc, el, i) => (i ? [...acc, <i key={`s${i}`}>›</i>, el] : [el]), [])}</div>
                 <div>{spanText(r.span_start, r.span_end, fs)}</div>
                 <div>{r.duration_s != null ? fmtDuration(r.duration_s) : '—'}</div>

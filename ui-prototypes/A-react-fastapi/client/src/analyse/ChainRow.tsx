@@ -1,7 +1,7 @@
 /* One chain row (frame chain-1): left panel 210 px — grip, number + name, badge + mono
    signature, one-line caption, icon row — and the result plot on the shared time axis.
    The row shows the result only (P5); the block page shows the process. */
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { CrosshairLayer } from '../charts/primitives'
 import { makeX, type XScale } from '../charts/scale'
 import { useSize } from '../charts/useSize'
@@ -43,16 +43,24 @@ export function ChainRow(p: ChainRowProps) {
   const w = Math.max(10, size.width)
   const x = makeX(p.t0, p.t1, w)
   const label = `row ${p.num ?? 'source'}`
+  // a renderer throw is lifted out of the ErrorBoundary into the row's own badge and border (critique r1:
+  // a green "cached" badge sat beside a red "failed to render" card); a new result clears it
+  const [renderFailed, setRenderFailed] = useState<string | null>(null)
+  useEffect(() => { setRenderFailed(null) }, [p.badge, p.caption, p.badgeText])
+  const badge = renderFailed ? 'error' : p.badge
+  const badgeText = renderFailed ? 'render failed' : p.badge === 'error' ? 'payload error' : p.badgeText ?? (p.badge === 'source-cached' ? 'cached' : p.badge)
+  const badgeTitle = renderFailed ? `the renderer threw: ${renderFailed}` : p.badge === 'error' ? 'the bridge could not serialise this result, or its fetch failed — see the card' : p.badgeTitle
+  const rowClass = renderFailed || p.badge === 'error' ? 'error' : p.rowClass ?? ''
   return (
-    <div className={`an-row ${p.rowClass ?? ''}`} data-testid={`chain-row-${p.testIndex}`} data-status={p.badge}>
+    <div className={`an-row ${rowClass}`} data-testid={`chain-row-${p.testIndex}`} data-status={badge}>
       <div className="an-row-left">
         <div className="an-row-title">
-          <span className="grip" title="drag to reorder · out of slice scope">⋮⋮</span>
+          <span className="grip" title="drag to reorder · out of slice scope" aria-disabled="true">⋮⋮</span>
           {p.num ? <span className="num">{p.num}</span> : <span style={{ color: 'var(--muted)', fontSize: 10 }}>●</span>}
-          <span title={p.title} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</span>
+          <span className="ttl" title={p.title}>{p.title}</span>
         </div>
         <div className="an-row-meta">
-          <span className={`badge ${p.badge === 'source-cached' ? 'cached' : p.badge === 'waiting' ? 'pending' : p.badge}`} data-testid={`row-badge-${p.testIndex}`} title={p.badgeTitle}>{p.badgeText ?? (p.badge === 'source-cached' ? 'cached' : p.badge)}</span>
+          <span className={`badge ${badge === 'source-cached' ? 'cached' : badge === 'waiting' ? 'pending' : badge}`} data-testid={`row-badge-${p.testIndex}`} title={badgeTitle}>{badgeText}</span>
           {p.timingText && <span className="timing" title="core step time · 0 s means restored from the prefix cache">{p.timingText}</span>}
           <span title="type signature">{p.signature}</span>
         </div>
@@ -68,7 +76,7 @@ export function ChainRow(p: ChainRowProps) {
         <div data-testid={`row-plot-${p.testIndex}`}>{p.replace}</div>
       ) : (
         <div className="plot-surface an-plot" ref={ref} data-testid={`row-plot-${p.testIndex}`}>
-          <ErrorBoundary label={label}>
+          <ErrorBoundary label={label} onError={e => setRenderFailed(e.message)}>
             {size.width > 0 && p.plot(x, w, PLOT_H)}
           </ErrorBoundary>
           {p.overlay}

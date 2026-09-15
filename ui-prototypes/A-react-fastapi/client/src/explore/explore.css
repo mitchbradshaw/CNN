@@ -16,6 +16,18 @@
 .inert { cursor: not-allowed !important; opacity: 0.7; }
 
 .ex-topbar { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11.5px; }
+.ex-runs { position: relative; }
+.ex-runs-chip { cursor: pointer; font: inherit; }
+.ex-runs-chip:hover { border-color: var(--border-strong); }
+.ex-runs-pop { top: 30px; left: 0; min-width: 520px; max-width: 720px; }
+.ex-runs-pop .ex-table td, .ex-runs-pop .ex-table th { white-space: nowrap; }
+.ex-runs-pop .ex-table tbody tr { cursor: default; }
+
+/* ---- keyboard focus (critique r1: grips, the span box, the span plot and heatmap rows were mouse-only) ----
+   SVG targets get the same 2 px blue ring as HTML ones; the span plot's ring sits inside because .ex-plot clips. */
+.ex-focusable:focus-visible, .ex-heat svg g:focus-visible, .ex-ribbon:focus-visible, .ex-runs-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.ex-plot svg:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ex-plot svg:focus:not(:focus-visible) { outline: none; }
 .ex-crumb { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .ex-crumb a { color: var(--muted); cursor: pointer; }
 .ex-crumb a:hover { color: var(--blue); }

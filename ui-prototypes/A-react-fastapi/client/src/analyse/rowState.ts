@@ -3,7 +3,10 @@
    latest validation. Output: one RowInfo per step. */
 import type { JobSnapshot, Payload, Step, Validation } from '../api'
 
-export type RowStatus = 'new' | 'cached' | 'stale' | 'running' | 'waiting' | 'failed' | 'blocked' | 'cancelled' | 'invalid'
+export type RowStatus = 'new' | 'cached' | 'stale' | 'running' | 'waiting' | 'failed' | 'blocked' | 'cancelled' | 'invalid' | 'error'
+
+/** A payload the page cannot draw: the bridge's serialisation error card or a failed client fetch. */
+export const isErrorPayload = (p: Payload | null | undefined): boolean => !!p && 'error' in p && !!(p as { error?: unknown }).error
 
 export interface RowInfo {
   status: RowStatus
@@ -41,6 +44,8 @@ export function deriveRows(steps: Step[], job: JobSnapshot | null, payloads: Rec
     const timing = coreT !== undefined ? coreT : (jstep?.elapsed_s ?? null)
     const base: Omit<RowInfo, 'status'> = { payload, hasResult, timing, timingIsCore: coreT !== undefined, cachedPredicted: !!jstep?.cached_predicted || !!v?.cache?.[i]?.cached, invalidReason, overCeiling }
 
+    // an undrawable payload is an error row whatever the job says — the badge and the plot must agree (critique r1)
+    if (isErrorPayload(payload) && !(live && jstep?.status === 'running')) return { ...base, status: 'error' }
     if (live && jstep && matches) {
       const s = jstep.status
       const status: RowStatus = s === 'running' ? 'running' : s === 'pending' ? 'waiting' : s === 'done' ? 'cached' : s === 'failed' ? 'failed' : s === 'blocked' ? 'blocked' : s === 'cancelled' ? 'cancelled' : 'new'

@@ -19,9 +19,9 @@ import { InsertStageModal } from './InsertStageModal'
 import { renderByType } from './Renderer'
 import { deriveRows, firstStale, fmtTiming, jobForSource, sameStep, terminalWording } from './rowState'
 import { RunLogModal } from './RunLogModal'
-import { attachRun, cancelCurrent, clearStale, markStale, resetRun, startRun, stepElapsed, useAnalyseStore } from './store'
+import { attachRun, cancelCurrent, clearStale, dropUndo, markStale, popUndo, pushUndo, resetRun, startRun, stepElapsed, syncToSource, useAnalyseStore, type UndoEntry } from './store'
 import { shortName, TemplatesPopover } from './TemplatesPopover'
-import { EstimateChip, EXAMPLE_SOURCE, NameChip, SourceChip, SurrogateToggle, t0Of, t1Of, useSourceEnvelope } from './toolbar'
+import { EstimateChip, EXAMPLE_SOURCE, isHeldOut, NameChip, Popwrap, RunErrorCard, SourceChip, SurrogateToggle, t0Of, t1Of, useSourceEnvelope } from './toolbar'
 import { pad2, stepName, useAdapters } from './useAdapters'
 import { spanOf, useValidation } from './useValidation'
 
@@ -37,7 +37,9 @@ export function ChainPage() {
   const steps = chain.steps
   const val = useValidation(steps, source)
   const { env, error: envError, status: envStatus } = useSourceEnvelope(source)
-  const locked = envStatus === 423
+  const locked = envStatus === 423 || isHeldOut(source)
+  // the bridge refused POST /api/runs (422: invalid chain, a stage over its local ceiling, a recipe that cannot build)
+  const [refused, setRefused] = useState<{ message: string; over: { index: number; name: string; max_span_samples: number | null }[] } | null>(null)
   const [modalPos, setModalPos] = useState<number | null>(route.params.insert !== undefined ? Number(route.params.insert) : null)
   const [pop, setPop] = useState<'history' | 'import' | 'source' | null>(null)
   const [logOpen, setLogOpen] = useState(false)
@@ -51,8 +53,16 @@ export function ChainPage() {
   const running = job?.status === 'running' || job?.status === 'queued'
   const rows = useMemo(() => deriveRows(steps, job, payloads, st.staleFrom, val.v), [steps, job, payloads, st.staleFrom, val.v])
   const invalid = val.v ? val.v.junctions.filter(j => !j.ok).length : 0
-  const stale = firstStale(rows, st.staleFrom)
+  // nothing is "stale" relative to a job that is not this source's (critique r1: the index leaked across sources)
+  const stale = job ? firstStale(rows, st.staleFrom) : null
   const failedStep = job?.status === 'failed' ? job.error?.step ?? null : null
+  const over = val.v?.over_ceiling ?? []
+  const overFirst = over.length ? over[0] : null
+  const overAd = overFirst !== null && steps[overFirst] ? adapters.byName.get(stepName(steps[overFirst])) : undefined
+
+  /* a source change forgets a job (and stale index) that belongs to another recording/span */
+  const sourceKey = source ? `${source.recording_id}:${source.start_idx}:${source.end_idx}` : ''
+  useEffect(() => { syncToSource(source); setRefused(null) }, [sourceKey])   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* re-attach after a reload (jobs live in server memory; the SSE stream replays) */
   useEffect(() => {
@@ -90,17 +100,41 @@ export function ChainPage() {
     setBusy(true)
     try {
       const snap = await startRun(source.recording_id, spanOf(source), steps, 1200)
+      setRefused(null)
       setChain(c => ({ ...c, lastRunJobId: snap.job_id }))
-    } catch (e) { toast.push({ kind: 'error', text: `run refused · ${errText(e)}` }) } finally { setBusy(false) }
+    } catch (e) {
+      // a 422 carries {message, over_ceiling:[{index,name,max_span_samples}]}: shown as a card, not just a toast
+      const d = e instanceof ApiError ? (e.detail as { over_ceiling?: { index: number; name: string; max_span_samples: number | null }[] } | null) : null
+      setRefused({ message: e instanceof ApiError ? e.message : String(e), over: d?.over_ceiling ?? [] })
+      toast.push({ kind: 'error', text: `run refused · ${e instanceof ApiError ? e.message : String(e)}` })
+    } finally { setBusy(false) }
   }
   const cancel = async () => { try { const note = await cancelCurrent(); toast.push({ text: `cancel requested · ${note ?? 'no run'}` }) } catch (e) { toast.push({ kind: 'error', text: errText(e) }) } }
+  const restore = (u: UndoEntry) => { dropUndo(u); setChain(c => ({ ...c, saved: false, steps: u.steps })); markStale(u.staleIndex) }
   const deleteStep = (i: number) => {
-    const prev = steps
     const name = adapters.byName.get(stepName(steps[i]))?.page_name ?? steps[i].algorithm
+    const entry: UndoEntry = { steps, staleIndex: i, label: `${pad2(i + 1)} ${name}` }
+    pushUndo(entry)
     setChain(c => ({ ...c, saved: false, steps: c.steps.filter((_, k) => k !== i) }))
     markStale(i)
-    toast.push({ text: `${pad2(i + 1)} ${name} deleted`, action: { label: 'Undo', onClick: () => { setChain(c => ({ ...c, steps: prev })); markStale(i) } } })
+    toast.push({ text: `${pad2(i + 1)} ${name} deleted`, action: { label: 'Undo', hint: 'Ctrl Z', onClick: () => restore(entry) } })
   }
+  /* Ctrl/Cmd+Z restores the last deleted stage (frame chain-1e); ignored while typing in a field or during a run */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (running) return
+      const u = popUndo()
+      if (!u) return
+      e.preventDefault()
+      setChain(c => ({ ...c, saved: false, steps: u.steps })); markStale(u.staleIndex)
+      toast.push({ text: `${u.label} restored` })
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [running, setChain, toast])
   const insertStep = (p: number, step: Step, open: boolean) => {
     setChain(c => ({ ...c, saved: false, steps: [...c.steps.slice(0, p), step, ...c.steps.slice(p)] }))
     markStale(p)
@@ -136,7 +170,10 @@ export function ChainPage() {
   /* ---- toolbar derivations ---- */
   const n = steps.length
   const perStep = val.v?.estimate?.per_step_s ?? null
-  const estFrom = (from: number) => perStep ? perStep.slice(from).reduce((a, b) => a + b, 0) : null
+  // a step predicted in the prefix cache (with every predecessor cached too) costs nothing (critique r1)
+  const prefixCached = (i: number) => { for (let k = 0; k <= i; k++) if (!val.v?.cache?.[k]?.cached) return false; return true }
+  const allCachedFrom = (from: number) => n > from && Array.from({ length: n - from }, (_, k) => prefixCached(from + k)).every(Boolean)
+  const estFrom = (from: number) => perStep ? perStep.slice(from).reduce((a, b, k) => a + (prefixCached(from + k) ? 0 : b), 0) : null
   const fmtEst = (s: number | null) => s === null ? '≈ —' : s < 0.05 ? '≈ <0.1 s' : `≈ ${fmtDuration(s)}`
   let est: { text: string; kind: 'amber' | 'blue' | 'red' | 'green' }
   if (running && job) {
@@ -145,13 +182,17 @@ export function ChainPage() {
   } else if (invalid) est = { text: `${invalid} invalid junction${invalid > 1 ? 's' : ''}`, kind: 'red' }
   else if (failedStep !== null && st.staleFrom === null) est = { text: `failed at ${pad2(failedStep + 1)} · ${failedStep > 1 ? `01–${pad2(failedStep)} cached` : failedStep === 1 ? '01 cached' : 'nothing cached'}`, kind: 'red' }
   else if (!source) est = { text: 'no source · nothing to estimate', kind: 'amber' }
-  else if (stale !== null) est = { text: `${fmtEst(estFrom(stale))} · ${pad2(stale + 1)} → ${pad2(n)}`, kind: 'amber' }
+  else if (stale !== null) est = allCachedFrom(stale) ? { text: '≈ <0.1 s · all in the step cache', kind: 'green' } : { text: `${fmtEst(estFrom(stale))} · ${pad2(stale + 1)} → ${pad2(n)}`, kind: 'amber' }
   else if (job?.status === 'completed') est = { text: `${fmtEst(0)} · all cached`, kind: 'green' }
+  else if (allCachedFrom(0)) est = { text: '≈ <0.1 s · all in the step cache', kind: 'green' }
   else est = { text: `${fmtEst(estFrom(0))} · 01 → ${pad2(n)}`, kind: 'amber' }
-  if (val.v?.over_ceiling?.length && !running) est = { ...est, text: `${est.text} · ${val.v.over_ceiling.length} over the local ceiling` }
+  if (over.length && !running) est = { ...est, text: `${est.text} · ${over.length} over the local ceiling`, kind: 'red' }
 
-  const runLabel = failedStep !== null && st.staleFrom === null ? `↻ Retry from ${pad2(failedStep + 1)}` : stale !== null ? `↻ Re-run from ${pad2(stale + 1)}` : '▶ Run chain'
-  const canRun = !!source && !invalid && n > 0 && !busy && !locked
+  const runLabel = failedStep !== null && (st.staleFrom === null || !job) ? `↻ Retry from ${pad2(failedStep + 1)}` : stale !== null ? `↻ Re-run from ${pad2(stale + 1)}` : '▶ Run chain'
+  // spec §9.6 / P4: a stage over its local ceiling is never run locally — the button is gated, the row explains
+  const overTitle = overFirst !== null ? `stage ${pad2(overFirst + 1)} exceeds its local ceiling (${overAd?.max_span_samples?.toLocaleString() ?? '?'} samples) · shorten the span or use HPC (out of slice scope)` : null
+  const canRun = !!source && !invalid && n > 0 && !busy && !locked && !over.length
+  const runTitle = !source ? 'no source' : locked ? 'the held-out recording cannot be run' : invalid ? 'fix the red junction first' : !n ? 'add a stage' : overTitle ?? undefined
 
   /* ---- footer ---- */
   const term = val.v ? terminalWording(val.v.terminal_kind, val.v.terminal_label) : { chip: val.error ? 'terminal — validation refused' : 'terminal — validating…', kind: 'grey' as const }
@@ -162,11 +203,11 @@ export function ChainPage() {
   if (running && job) { headline = `Running ${pad2((job.current_step ?? 0) + 1)} of ${pad2(job.n_steps)}`; sub = 'stages land as they finish · cancel checks between steps, never mid-step' }
   else if (invalid) { headline = 'Chain is invalid'; sub = 'fix the red junction · validation runs on every edit' }
   else if (job?.status === 'failed') { headline = 'No result'; sub = `run ${job.db_run_id ? `#${job.db_run_id}` : `job ${job.job_id}`} failed at ${pad2((job.error?.step ?? 0) + 1)} · nothing was written to detections` }
-  else if (job?.status === 'cancelled') { const at = job.steps.findIndex(s => s.status === 'cancelled'); headline = 'Cancelled'; sub = `stopped before ${pad2((at >= 0 ? at : (job.error?.step ?? 0)) + 1)} · ${job.steps.filter(s => s.status === 'done').length} of ${job.n_steps} stages kept · cancel is checked between steps` }
+  else if (job?.status === 'cancelled') { const at = job.steps.findIndex(s => s.status === 'cancelled'); headline = 'Cancelled'; sub = `run ${job.db_run_id ? `#${job.db_run_id}` : `job ${job.job_id}`} stopped before ${pad2((at >= 0 ? at : (job.error?.step ?? 0)) + 1)} · ${job.steps.filter(s => s.status === 'done').length} of ${job.n_steps} stages kept · cancel is checked between steps` }
   else if (job?.status === 'completed') {
     headline = `last run · ${terminalPayload?.summary ?? job.steps[job.n_steps - 1]?.summary ?? 'done'}`
     const core = job.step_timings ? Object.values(job.step_timings).reduce((a, b) => a + b, 0) : null
-    sub = `job ${job.job_id} · db run #${job.db_run_id ?? '—'} · ${job.detections_written ?? 0} written to detections · ${core !== null ? fmtTiming(core) + ' core' : ''} · ${fmtDuration(job.elapsed_s)} wall${stale !== null ? ` · ${pad2(stale + 1)} → ${pad2(n)} stale` : ''}`
+    sub = `job ${job.job_id} · db run #${job.db_run_id ?? '—'} · ${job.detections_written ?? 0} written to detections · ${core !== null ? fmtTiming(core) + ' core' : ''} · ${fmtDuration(job.elapsed_s)} wall · no null${stale !== null ? ` · ${pad2(stale + 1)} → ${pad2(n)} stale` : ''}`
   } else { headline = 'No result yet'; sub = source ? 'run the chain to see every intermediate' : 'send a span from Explore or use the example span' }
 
   /* ---- rows ---- */
@@ -237,7 +278,7 @@ export function ChainPage() {
           <div className="acts">
             <button className="btn" onClick={() => setLogOpen(true)} data-testid="view-log">View log</button>
             <button className="btn" onClick={() => navigate(`analyse/block/${i}`)}>Open settings</button>
-            <button className="btn primary" onClick={run} disabled={!canRun}>↻ Retry {pad2(i + 1)}</button>
+            <button className="btn primary" onClick={run} disabled={!canRun} title={runTitle}>↻ Retry {pad2(i + 1)}</button>
           </div>
         </div>
       )
@@ -246,10 +287,10 @@ export function ChainPage() {
       replace = (
         <div className="an-hpc" data-testid="hpc-card">
           <div>
-            <div className="t">⛭ this span exceeds the local ceiling → HPC</div>
-            <div className="s">{nSamples.toLocaleString()} samples · {title} caps local runs at {ad?.max_span_samples?.toLocaleString() ?? '?'} samples · the stage pauses here and its result re-enters through the manifest inbox (P4, P24)</div>
+            <div className="t">⛭ this run would fail locally at {pad2(i + 1)} · the span exceeds the local ceiling → HPC</div>
+            <div className="s">{nSamples.toLocaleString()} samples · {title} caps local runs at {ad?.max_span_samples?.toLocaleString() ?? '?'} samples · Run is disabled (§9.6) · on the cluster the stage pauses here and its result re-enters through the manifest inbox (P4, P24)</div>
           </div>
-          <div className="row"><button className="btn" disabled title="out of slice scope">Create SLURM script</button><button className="btn" disabled title="out of slice scope">Upload computed artifact</button></div>
+          <div className="row"><button className="btn" disabled aria-disabled="true" title="create a SLURM script for this stage · out of slice scope">Create SLURM script</button><button className="btn" disabled aria-disabled="true" title="upload the stage's computed artifact · out of slice scope">Upload computed artifact</button></div>
         </div>
       )
     }
@@ -292,13 +333,20 @@ export function ChainPage() {
       <div className="page"><div className="page-inner" data-testid="chain-page">
         {adapters.error && <div className="error-card"><h3>adapter registry failed to load</h3><pre>{adapters.error}</pre></div>}
         {val.error && <div className="error-card"><h3>validation failed</h3><pre>{val.error}</pre></div>}
-        {st.run.error && <div className="error-card" style={{ padding: '8px 12px' }}><h3>last run could not be re-attached</h3><div className="mono small">{st.run.error}</div></div>}
+        {st.run.error && <RunErrorCard error={st.run.error} kind={st.run.errorKind} />}
         {val.v?.recipe_error && <div className="error-card" style={{ padding: '8px 12px' }}><h3>recipe cannot be built</h3><div className="mono small">{val.v.recipe_error}</div></div>}
+        {refused && (
+          <div className="error-card" style={{ padding: '8px 12px' }} data-testid="run-refused-card">
+            <h3>run refused by the bridge (422)</h3>
+            <div className="mono small">{refused.message}</div>
+            {refused.over.length > 0 && <div className="mono small" style={{ marginTop: 4, color: 'var(--muted)' }}>{refused.over.map(o => `${pad2(o.index + 1)} ${adapters.byName.get(o.name)?.page_name ?? o.name} · ceiling ${o.max_span_samples?.toLocaleString() ?? '?'} samples`).join(' · ')}</div>}
+          </div>
+        )}
 
         {/* toolbar */}
         <div className="an-toolbar">
           <NameChip chain={chain} onRename={name => setChain(c => ({ ...c, name, saved: false }))} extra={job && failedStep !== null ? <span className="chip red" style={{ height: 20, fontSize: 10, padding: '0 6px' }} title={`job ${job.job_id}`}>#{job.db_run_id ?? job.job_id} failed</span> : null} />
-          <span className="an-popwrap">
+          <Popwrap open={pop === 'source'} onClose={() => setPop(null)}>
             <SourceChip source={source} onClick={() => setPop(p => p === 'source' ? null : 'source')} />
             {pop === 'source' && (
               <div className="an-pop left" style={{ width: 380 }} data-testid="source-popover">
@@ -308,27 +356,27 @@ export function ChainPage() {
                 <div className="an-pop-item btnlike" onClick={() => navigate('explore/corpus')}>→ Pick in Explore</div>
               </div>
             )}
-          </span>
+          </Popwrap>
           <SurrogateToggle />
           <EstimateChip text={est.text} kind={est.kind} />
           <span className="spacer" />
-          <span className="an-popwrap">
+          <Popwrap open={pop === 'history'} onClose={() => setPop(null)}>
             <button className={`btn${pop === 'history' ? ' primary' : ''}`} onClick={() => setPop(p => p === 'history' ? null : 'history')} data-testid="history-button">⟲ History</button>
             {pop === 'history' && <HistoryPopover source={source} onApply={applyHistory} onClose={() => setPop(null)} />}
-          </span>
-          <span className="an-popwrap">
+          </Popwrap>
+          <Popwrap open={pop === 'import'} onClose={() => setPop(null)}>
             <button className={`btn${pop === 'import' ? ' primary' : ''}`} onClick={() => setPop(p => p === 'import' ? null : 'import')} data-testid="import-button">⤓ Import</button>
             {pop === 'import' && <TemplatesPopover onPick={importTemplate} onClose={() => setPop(null)} />}
-          </span>
+          </Popwrap>
           <button className="btn" onClick={saveAsTemplate} data-testid="save-template" disabled={!n}>▢ Save template</button>
           {running ? <button className="btn danger" onClick={cancel} data-testid="cancel-button">■ Cancel</button>
-            : <button className="btn primary" onClick={run} disabled={!canRun} data-testid="run-button" title={!source ? 'no source' : invalid ? 'fix the red junction first' : !n ? 'add a stage' : undefined}>{runLabel}</button>}
+            : <button className="btn primary" onClick={run} disabled={!canRun} data-testid="run-button" title={runTitle}>{runLabel}</button>}
         </div>
 
         <CrosshairProvider value={{ t: cross, setT: setCross }}>
           {/* source row */}
           {source ? (
-            <ChainRow testIndex={0} num={null} title="Source" badge="source-cached" badgeTitle="the span is loaded from the channel's .npy on disk" signature="— → Signal"
+            <ChainRow testIndex={0} num={null} title="Source" badge={locked ? 'blocked' : 'source-cached'} badgeText={locked ? 'held out' : undefined} badgeTitle={locked ? 'the held-out recording is never loaded (D6)' : "the span is loaded from the channel's .npy on disk"} signature="— → Signal"
               caption={`${source.label === 'example span' ? 'example span' : 'signal span from Explore'} · ${fmtDuration(t1 - t0)} · ${source.fs} Hz`} captionTitle={`${source.source_file} · ${source.channel_name} · samples ${source.start_idx}–${source.end_idx}`} t0={t0} t1={t1}
               plot={(x, w, h) => sourcePayload ? <SourcePlot p={sourcePayload} x={x} w={w} h={h} throwTest={throwTest} /> : null}
               replace={locked ? (
@@ -380,8 +428,8 @@ export function ChainPage() {
           </div>
           <div className="acts">
             <button className="btn" onClick={doExport} disabled={job?.status !== 'completed'} data-testid="export-run" title={job?.status === 'completed' ? 'write a JSON report of this run' : 'needs a completed run'}>⤒ Export run</button>
-            <button className="btn" disabled title="sends the terminal SpanSet into a new chain · out of slice scope">→ Analyse events</button>
-            <button className="btn primary" disabled title="out of slice scope">→ Pass {nSpans ?? ''} to Review</button>
+            <button className="btn" disabled aria-disabled="true" title="sends the terminal SpanSet into a new chain · out of slice scope">→ Analyse events</button>
+            <button className="btn primary" disabled aria-disabled="true" title={nSpans === null ? 'needs a completed run with a SpanSet terminal · out of slice scope' : 'hands the spans to a Review queue · out of slice scope'}>→ Pass {nSpans ?? ''} to Review</button>
           </div>
         </div>
       </div></div>

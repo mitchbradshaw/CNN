@@ -1,7 +1,8 @@
 /* Parameter controls generated from AdapterCard.params (spec §6.8): segmented for ≤4
    choices, select for more, range + number for bounded numerics, checkbox for bools,
-   text otherwise. "= recommended" marks a value equal to the adapter default; the
-   description sits behind an info icon (P9). */
+   text otherwise. "= default" marks a value equal to the adapter default; "= recommended"
+   is printed only for a value the adapter's recommend hook actually produced (none are served
+   by this slice — critique r1); the description sits behind an info icon (P9). */
 import type { AdapterCard, ParamSpec } from '../api'
 
 export interface ParamsPanelProps {
@@ -9,6 +10,7 @@ export interface ParamsPanelProps {
   params: Record<string, unknown>
   onChange: (name: string, value: unknown) => void
   disabled?: boolean
+  recommended?: Record<string, unknown>   // values a served recommend hook produced (none in this slice)
 }
 
 const eq = (a: unknown, b: unknown) => a === b || (typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-9) || String(a) === String(b)
@@ -25,12 +27,14 @@ export function fmtParam(v: unknown): string {
   return v === '' ? '—' : String(v)
 }
 
-export function ParamsPanel({ adapter, params, onChange, disabled }: ParamsPanelProps) {
+export function ParamsPanel({ adapter, params, onChange, disabled, recommended }: ParamsPanelProps) {
   return (
     <div className="pp-grid">
       {adapter.params.map(spec => {
         const value = params[spec.name] ?? spec.default
-        const rec = eq(value, spec.default)
+        const isDefault = eq(value, spec.default)
+        const recVal = recommended && spec.name in recommended ? recommended[spec.name] : undefined
+        const rec = recVal !== undefined && eq(value, recVal)
         const numeric = spec.type === 'int' || spec.type === 'float'
         const bounded = numeric && spec.min !== null && spec.max !== null
         const wide = bounded || (spec.choices && spec.choices.length > 4) || spec.type === 'str'
@@ -69,7 +73,9 @@ export function ParamsPanel({ adapter, params, onChange, disabled }: ParamsPanel
               {numeric && <span className="val">{fmtParam(value)}</span>}
             </div>
             <div className="pp-ctl">{ctl}</div>
-            <div className={`pp-rec${rec ? '' : ' no'}`}>{rec ? '= recommended' : `default ${fmtParam(spec.default)}`}</div>
+            <div className={`pp-rec${rec || isDefault ? '' : ' no'}`} data-testid={`param-rec-${spec.name}`}>
+              {rec ? '= recommended' : recVal !== undefined ? `rec ${fmtParam(recVal)}` : isDefault ? `= default${adapter.has_recommend ? ' · recommended: not computed' : ''}` : `default ${fmtParam(spec.default)}`}
+            </div>
           </div>
         )
       })}

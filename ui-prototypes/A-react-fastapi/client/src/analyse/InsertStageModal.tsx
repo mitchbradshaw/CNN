@@ -1,8 +1,9 @@
 /* Insert a stage (frame chain-2, spec §6.4): leads with the type contract as three pills,
    then a grid of every registered block — incompatible ones stay visible and disabled with
    their reason — and a detail panel for the selected block. */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, compatibleAt, validateChain, validateParams, TYPE_LABEL, type AdapterCard, type Compatible, type Step } from '../api'
+import { useDismiss } from '../shell/useDismiss'
 import type { SourceSpan } from '../state'
 import { Glyph } from './glyphs'
 import { fmtParam } from './ParamsPanel'
@@ -26,6 +27,10 @@ export function InsertStageModal({ steps, position, adapters, source, onClose, o
   const [selected, setSelected] = useState<string | null>(null)
   const [estimates, setEstimates] = useState<Record<string, number | null>>({})
   const [busy, setBusy] = useState(false)
+  // Escape closes (critique r1); the ref is the backdrop, which covers the viewport, so the pointer-outside
+  // branch never fires — the backdrop's own onClick handles the click, without a click-through on close
+  const backdrop = useRef<HTMLDivElement>(null)
+  useDismiss(backdrop, onClose)
 
   useEffect(() => {
     let alive = true
@@ -91,12 +96,12 @@ export function InsertStageModal({ steps, position, adapters, source, onClose, o
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal ins" onClick={e => e.stopPropagation()} data-testid="insert-modal">
+    <div className="modal-backdrop" onClick={onClose} ref={backdrop}>
+      <div className="modal ins" onClick={e => e.stopPropagation()} data-testid="insert-modal" role="dialog" aria-modal="true" aria-labelledby="ins-title">
         <div className="ins-head">
-          <h2>＋ Insert a stage</h2>
+          <h2 id="ins-title">＋ Insert a stage</h2>
           <span className="sub">{atEnd ? 'at the end of the chain' : `between ${prevName} and ${nextName}`}</span>
-          <button className="icon-btn x" onClick={onClose} title="close">✕</button>
+          <button className="icon-btn x" onClick={onClose} title="close (Esc)" aria-label="close">✕</button>
         </div>
         <div className="ins-ribbon">
           <span>chain</span>
@@ -118,7 +123,7 @@ export function InsertStageModal({ steps, position, adapters, source, onClose, o
           <span className="count" data-testid="modal-fit-count">{compat ? `${compat.n_fit} of ${compat.n_total} blocks fit` : '…'}</span>
         </div>
         <div className="ins-controls">
-          <input className="input" placeholder="search blocks" value={q} onChange={e => setQ(e.target.value)} data-testid="modal-search" />
+          <input className="input" placeholder="search blocks" value={q} onChange={e => setQ(e.target.value)} data-testid="modal-search" autoFocus aria-label="search blocks" />
           <div className="seg">{CATS.map(c => <button key={c} className={cat === c ? 'on' : ''} onClick={() => setCat(c)}>{c}</button>)}</div>
           <button className={`btn sm${sortFits ? '' : ' ghost'}`} onClick={() => setSortFits(s => !s)} title="fitting blocks first">sort {sortFits ? 'fits first' : 'by registry'}</button>
           <span style={{ flex: 1 }} />

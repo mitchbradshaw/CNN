@@ -252,13 +252,16 @@ function GroupingR({ p, ctx }: { p: GroupingPayload; ctx: RenderCtx }) {
 
 /* ---------- model ---------- */
 function ModelR({ p }: { p: ModelPayload }) {
-  const c = p.card
+  const c = p.card ?? {}
   const base = p.path.split(/[\\/]/).pop() ?? p.path
   const acc = typeof c.holdout_accuracy === 'number' ? (c.holdout_accuracy as number).toFixed(2) : '—'
+  const hasCard = Object.keys(c).length > 0
   return (
     <div className="bp-model" style={{ padding: '6px 12px' }} data-render="model">
       <div><b>{base}</b> <span className="muted">· {p.exists ? `${((p.size_bytes ?? 0) / 1024).toFixed(0)} kB on disk` : 'file missing'}</span></div>
-      <div>holdout accuracy <b>{acc}</b> · classes {String(c.n_classes ?? '—')} · windows {String(c.n_windows ?? '—')} · features kept {String(c.n_features_kept ?? '—')} of {String(c.n_features_in ?? '—')} · train/holdout {String(c.n_train ?? '—')}/{String(c.n_holdout ?? '—')}</div>
+      {hasCard
+        ? <div>holdout accuracy <b>{acc}</b> · classes {String(c.n_classes ?? '—')} · windows {String(c.n_windows ?? '—')} · features kept {String(c.n_features_kept ?? '—')} of {String(c.n_features_in ?? '—')} · train/holdout {String(c.n_train ?? '—')}/{String(c.n_holdout ?? '—')}</div>
+        : <div className="muted" data-testid="model-no-meta">model metadata not served for this run · the card comes from the adapter's meta (kept in a sidecar since critique r1)</div>}
       <div className="muted" style={{ fontSize: 10.5 }}>a model has no natural plot · Models judges it against a label-shuffle null</div>
     </div>
   )

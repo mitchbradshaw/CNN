@@ -1,7 +1,7 @@
 /* Analyse › block page (frames chain-3, chain-7, chain-7b): the PROCESS for one block —
    what it looked at, what it computed, the output — beside a generated parameters panel.
    Editing a parameter marks this block and everything downstream stale (P5, §6.8). */
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, saveTemplate, type EncodingSymbolicPayload, type EnvelopeSeries, type Payload, type ScoresPayload, type SignalPayload, type SpansetPayload, type WindowsetPayload, type GroupingPayload, type ModelPayload } from '../api'
 import { EnvelopePath, SpanBands, TimeAxis, YLabels } from '../charts/primitives'
 import { clamp, makeX, makeY, polylinePath, type XScale } from '../charts/scale'
@@ -14,8 +14,8 @@ import { paramCaption } from './captions'
 import { ParamsPanel, fmtParam } from './ParamsPanel'
 import { GhostPath, motifLabels, renderByType, SYM3 } from './Renderer'
 import { deriveRows, fmtTiming, jobForSource } from './rowState'
-import { markStale, startRun, useAnalyseStore } from './store'
-import { EstimateChip, NameChip, SourceChip, SurrogateToggle, t0Of, t1Of, useSourceEnvelope } from './toolbar'
+import { cancelCurrent, markStale, startRun, stepElapsed, syncToSource, useAnalyseStore } from './store'
+import { EstimateChip, isHeldOut, NameChip, RunErrorCard, SourceChip, SurrogateToggle, t0Of, t1Of, useSourceEnvelope } from './toolbar'
 import { pad2, stepName, useAdapters } from './useAdapters'
 import { spanOf, useValidation } from './useValidation'
 
@@ -34,11 +34,20 @@ export function BlockPage({ index }: { index: number }) {
   const { env } = useSourceEnvelope(source)
   const rows = useMemo(() => deriveRows(steps, job, payloads, st.staleFrom, val.v), [steps, job, payloads, st.staleFrom, val.v])
   const [busy, setBusy] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
   const ad = step ? adapters.byName.get(stepName(step)) : undefined
   const title = ad?.page_name ?? step?.algorithm ?? '?'
   const t0 = source ? t0Of(source) : 0
   const t1 = source ? t1Of(source) : 1
   const running = job?.status === 'running' || job?.status === 'queued'
+  const locked = isHeldOut(source)
+  const over = val.v?.over_ceiling ?? []
+  const overTitle = over.length ? `stage ${pad2(over[0] + 1)} exceeds its local ceiling (${adapters.byName.get(stepName(steps[over[0]]))?.max_span_samples?.toLocaleString() ?? '?'} samples) · shorten the span or use HPC (out of slice scope)` : null
+  const canRun = !!source && !running && !busy && !locked && !over.length
+  const runTitle = !source ? 'no source' : locked ? 'the held-out recording cannot be run' : running ? 'a run is in progress' : overTitle ?? undefined
+  // a source change forgets a job (and stale index) that belongs to another recording/span (critique r1)
+  const sourceKey = source ? `${source.recording_id}:${source.start_idx}:${source.end_idx}` : ''
+  useEffect(() => { syncToSource(source); setRefused(null) }, [sourceKey])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const setParam = (name: string, value: unknown) => {
     setChain(c => ({ ...c, saved: false, steps: c.steps.map((s, k) => k === index ? { ...s, params: { ...s.params, [name]: value } } : s) }))
@@ -50,12 +59,15 @@ export function BlockPage({ index }: { index: number }) {
     markStale(index)
     toast.push({ text: `${pad2(index + 1)} ${title} reverted to the adapter defaults` })
   }
+  // stays on the block page (frames chain-3 / 7b): the ribbon chip and the process card show the run,
+  // and the payload refreshes in place when the run ends — the module store keeps streaming (critique r1)
   const rerun = async () => {
     if (!source || busy) return
     setBusy(true)
-    try { const snap = await startRun(source.recording_id, spanOf(source), steps, 1200); setChain(c => ({ ...c, lastRunJobId: snap.job_id })); navigate('analyse/chain') }
-    catch (e) { toast.push({ kind: 'error', text: `run refused · ${errText(e)}` }) } finally { setBusy(false) }
+    try { const snap = await startRun(source.recording_id, spanOf(source), steps, 1200); setRefused(null); setChain(c => ({ ...c, lastRunJobId: snap.job_id })) }
+    catch (e) { setRefused(e instanceof ApiError ? e.message : String(e)); toast.push({ kind: 'error', text: `run refused · ${errText(e)}` }) } finally { setBusy(false) }
   }
+  const cancel = async () => { try { const note = await cancelCurrent(); toast.push({ text: `cancel requested · ${note ?? 'no run'}` }) } catch (e) { toast.push({ kind: 'error', text: errText(e) }) } }
   const saveAsTemplate = async () => {
     const name = window.prompt('Template name', chain.name)
     if (!name) return
@@ -82,12 +94,16 @@ export function BlockPage({ index }: { index: number }) {
     return sourceEnvelope
   })()
   const perStep = val.v?.estimate?.per_step_s ?? null
-  const rerunFrom = st.staleFrom !== null ? st.staleFrom : index
+  const staleFrom = job ? st.staleFrom : null      // nothing is stale relative to another source's job
+  const rerunFrom = staleFrom !== null ? staleFrom : index
   const cost = perStep ? perStep.slice(rerunFrom).reduce((a, b) => a + b, 0) : null
   const costText = cost === null ? '—' : cost < 0.05 ? '<0.1 s' : cost < 10 ? `${cost.toFixed(1)} s` : fmtDuration(cost)
-  const stale = st.staleFrom !== null && st.staleFrom <= index
+  const stale = staleFrom !== null && staleFrom <= index
   const stat = statTiles(row.payload)
   const name = stepName(step)
+  const curStep = job?.current_step ?? 0
+  const runningHere = running && row.status === 'running'
+  const runNote = running ? (row.status === 'running' ? `${title} · computing · ${stepElapsed(index).toFixed(1)} s` : row.status === 'waiting' ? `waits for ${pad2(curStep + 1)} · ${pad2(index + 1)} runs after it` : row.status === 'cached' ? `${pad2(index + 1)} done · ${pad2(curStep + 1)} running` : `${pad2(curStep + 1)} running`) : ''
 
   return (
     <>
@@ -98,11 +114,14 @@ export function BlockPage({ index }: { index: number }) {
           <NameChip chain={chain} onRename={n => setChain(c => ({ ...c, name: n, saved: false }))} />
           <SourceChip source={source} />
           <SurrogateToggle />
-          <EstimateChip text={running ? `${pad2((job?.current_step ?? 0) + 1)} running` : `≈ ${costText} · ${pad2(rerunFrom + 1)} → ${pad2(steps.length)}${stale ? ' recompute' : ''}`} kind={running ? 'blue' : 'amber'} />
+          <EstimateChip text={running ? `${pad2(curStep + 1)} running · ${stepElapsed(curStep).toFixed(1)} s` : `≈ ${costText} · ${pad2(rerunFrom + 1)} → ${pad2(steps.length)}${stale ? ' recompute' : ''}${over.length ? ` · ${over.length} over the local ceiling` : ''}`} kind={running ? 'blue' : over.length ? 'red' : 'amber'} />
           <span className="spacer" />
           <button className="btn" onClick={saveAsTemplate} data-testid="save-template">▢ Save template</button>
-          <button className="btn primary" onClick={rerun} disabled={!source || running || busy} data-testid="run-button">↻ Re-run from {pad2(rerunFrom + 1)}</button>
+          {running ? <button className="btn danger" onClick={cancel} data-testid="cancel-button">■ Cancel</button>
+            : <button className="btn primary" onClick={rerun} disabled={!canRun} data-testid="run-button" title={runTitle}>↻ Re-run from {pad2(rerunFrom + 1)}</button>}
         </div>
+        {st.run.error && <RunErrorCard error={st.run.error} kind={st.run.errorKind} />}
+        {refused && <div className="error-card" style={{ padding: '8px 12px' }} data-testid="run-refused-card"><h3>run refused by the bridge (422)</h3><div className="mono small">{refused}</div></div>}
 
         {/* ribbon */}
         <div className="card bp-ribbon" data-testid="block-ribbon">
@@ -114,7 +133,7 @@ export function BlockPage({ index }: { index: number }) {
               <span key={i} style={{ display: 'contents' }}>
                 <span className="sep">›</span>
                 <button className={`bp-chip${i === index ? ' on' : ''}`} onClick={() => navigate(`analyse/block/${i}`)} data-testid={`ribbon-${i}`}>
-                  <div className="t"><span className="num">{pad2(i + 1)}</span> {a?.page_name ?? s.algorithm} <span className={`badge ${r.status === 'waiting' ? 'pending' : r.status}`}>{r.status}</span></div>
+                  <div className="t"><span className="num">{pad2(i + 1)}</span> {a?.page_name ?? s.algorithm} <span className={`badge ${r.status === 'waiting' ? 'pending' : r.status}`} data-testid={`ribbon-badge-${i}`}>{r.status === 'running' ? `running · ${stepElapsed(i).toFixed(1)} s` : r.status}</span></div>
                   <div className="sg">{a?.signature ?? name}</div>
                 </button>
               </span>
@@ -125,7 +144,12 @@ export function BlockPage({ index }: { index: number }) {
         </div>
 
         <div className="bp-main">
-          <div className="card card-pad" data-testid="block-process">
+          <div className="card card-pad bp-process" data-testid="block-process" data-running={running ? '1' : undefined}>
+            {running && (
+              <div className="bp-run-veil" data-testid="block-running">
+                <div className="an-progress"><div className="bar" /><div className="txt">{runNote}{runningHere && job?.steps[index]?.cached_predicted ? ' · predicted cache hit' : ''}</div><div className="note">the result refreshes here when the run ends · cancel takes effect before the next step</div></div>
+              </div>
+            )}
             <div className="bp-card-title"><span className="mono muted">{pad2(index + 1)}</span><h3>{title}</h3><span className="sg">{ad?.signature ?? name}</span>
               <span className="sg" style={{ marginLeft: 'auto' }}>{source ? `${fmtHours(t0)}–${fmtHours(t1)} of ${source.channel_name}` : 'no source'}{row.status === 'cached' && row.timing !== null ? ` · ${fmtTiming(row.timing)} core` : ''}</span></div>
             {!source && <div className="muted mono small">no source — the process view needs a span. Use the example span from the chain page.</div>}
@@ -154,6 +178,20 @@ export function BlockPage({ index }: { index: number }) {
               {stat.length > 0 && <div className="bp-tiles" data-testid="stat-tiles">{stat.map(t => <div className="bp-tile" key={t.k}><div className="k" title={t.k}>{t.k}</div><div className={`v${t.red ? ' red' : ''}`}>{t.v}</div></div>)}</div>}
               {row.payload && <div className="bp-info">{row.payload.summary}{stale ? ' · from the last run · stale' : ''}</div>}
             </div>
+            {name === 'detection.threshold' && (
+              <>
+                <SpansVsCut scores={upstream?.type === 'scores' ? upstream as ScoresPayload : null} threshold={Number(step.params.threshold ?? 0)} onThreshold={v => setParam('threshold', v)} resultN={row.payload?.type === 'spanset' ? (row.payload as SpansetPayload).n : null} stale={stale} />
+                <div className="card bp-next" data-testid="next-card">
+                  <div className="row"><span className="b">Next · SpanSet allows</span><span className="muted mono small" style={{ marginLeft: 'auto' }}>hand-offs</span></div>
+                  <div className="s">{row.payload?.type === 'spanset' ? `${(row.payload as SpansetPayload).n} spans from the last run${stale ? ' · stale' : ''}` : 'no SpanSet yet · re-run to produce one'} · a SpanSet terminal makes this chain a detection template</div>
+                  <div className="acts">
+                    <button className="btn" onClick={saveAsTemplate} data-testid="next-save-template">▢ Save template</button>
+                    <button className="btn" disabled aria-disabled="true" title="sends the terminal SpanSet into a new chain · out of slice scope">→ Analyse events</button>
+                    <button className="btn primary" disabled aria-disabled="true" title={row.payload?.type === 'spanset' ? 'hands the spans to a Review queue · out of slice scope' : 'needs a completed run · out of slice scope'}>→ Pass {row.payload?.type === 'spanset' ? (row.payload as SpansetPayload).n : ''} to Review</button>
+                  </div>
+                </div>
+              </>
+            )}
             <div className="card bp-null" data-testid="null-card">
               <div className="row"><span className="b">This parameter against the null</span><span className="muted mono small" style={{ marginLeft: 'auto' }}>ⓘ</span></div>
               <div className="e">null sweeps are out of slice scope — surrogate runs are not part of this prototype{ad?.input_kind === 'signal' ? '' : ' · this block declares no signal null'}</div>
@@ -162,11 +200,12 @@ export function BlockPage({ index }: { index: number }) {
         </div>
 
         <div className="card bp-foot" data-testid="block-footer">
-          {st.staleFrom !== null ? <span className="st"><span className="dot" /> Unapplied changes</span> : <span className="st">No unapplied changes</span>}
-          <span className="sub">{st.staleFrom !== null ? `${pad2(st.staleFrom + 1)} and later are stale · re-running costs ≈ ${costText}` : job?.status === 'completed' ? `every stage is cached from job ${job.job_id}` : 'edit a parameter and the block goes stale'}</span>
+          {running ? <span className="st"><span className="dot" style={{ background: 'var(--blue)' }} /> Running {pad2(curStep + 1)} of {pad2(job?.n_steps ?? steps.length)}</span> : staleFrom !== null ? <span className="st"><span className="dot" /> Unapplied changes</span> : <span className="st">No unapplied changes</span>}
+          <span className="sub">{running ? 'stages land as they finish · this page updates in place' : staleFrom !== null ? `${pad2(staleFrom + 1)} and later are stale · re-running costs ≈ ${costText}` : job?.status === 'completed' ? `every stage is cached from job ${job.job_id} · db run #${job.db_run_id ?? '—'} · no null` : job?.status === 'failed' ? `run ${job.db_run_id ? `#${job.db_run_id}` : `job ${job.job_id}`} failed at ${pad2((job.error?.step ?? 0) + 1)}` : 'edit a parameter and the block goes stale'}</span>
           <div className="acts">
-            <button className="btn" onClick={revert} disabled={!ad || running} data-testid="revert-defaults">↶ Revert to defaults</button>
-            <button className="btn primary" onClick={rerun} disabled={!source || running || busy}>↻ Re-run from {pad2(rerunFrom + 1)}</button>
+            <button className="btn" onClick={revert} disabled={!ad || running} data-testid="revert-defaults" title={running ? 'wait for the run' : 'reset every parameter of this block to the adapter defaults'}>↶ Revert to defaults</button>
+            {running ? <button className="btn danger" onClick={cancel}>■ Cancel</button>
+              : <button className="btn primary" onClick={rerun} disabled={!canRun} title={runTitle} data-testid="footer-rerun">↻ Re-run from {pad2(rerunFrom + 1)}</button>}
           </div>
         </div>
       </div></div>
@@ -207,7 +246,7 @@ function Strip({ label, sub, height, t0, t1, children, axis, testid }: { label: 
 const Veil = ({ on }: { on: boolean }) => on ? <span className="an-stale-pill" style={{ top: 4 }}>⏱ last run shown · stale</span> : null
 
 /** A draggable horizontal cut line (pointer capture on a wide invisible grab rect). */
-function DragLineH({ y, value, onChange, width, label, colour = 'var(--red)', testid }: { y: XScale; value: number; onChange: (v: number) => void; width: number; label: string; colour?: string; testid?: string }) {
+function DragLineH({ y, value, onChange, width, label, colour = 'var(--amber)', testid }: { y: XScale; value: number; onChange: (v: number) => void; width: number; label: string; colour?: string; testid?: string }) {
   const drag = useRef(false)
   const py = clamp(y(value), 0, y.range()[0])
   const [lo, hi] = [Math.min(...y.domain()), Math.max(...y.domain())]
@@ -230,7 +269,7 @@ function DragLineH({ y, value, onChange, width, label, colour = 'var(--red)', te
   )
 }
 /** A draggable vertical cut line for value-axis plots (histograms). */
-function DragLineV({ x, value, onChange, height, label, colour = 'var(--red)', testid }: { x: XScale; value: number; onChange: (v: number) => void; height: number; label: string; colour?: string; testid?: string }) {
+function DragLineV({ x, value, onChange, height, label, colour = 'var(--amber)', testid }: { x: XScale; value: number; onChange: (v: number) => void; height: number; label: string; colour?: string; testid?: string }) {
   const drag = useRef(false)
   const px = clamp(x(value), 0, x.range()[1])
   const [lo, hi] = x.domain()
@@ -314,7 +353,7 @@ function ThresholdProcess({ scores, result, threshold, onThreshold, stale, t0, t
           ) : <div className="muted mono small">{result ? '0 spans — nothing crossed the threshold' : 'no result yet'}</div>}
         </div>
       </div>
-      <div className="bp-legend"><span><i style={{ background: 'var(--band-selected)' }} />above the cut (live)</span><span><i style={{ background: 'var(--band-detected)' }} />spans (last run)</span><span><i style={{ background: 'var(--red)' }} />threshold · a parameter</span></div>
+      <div className="bp-legend"><span><i style={{ background: 'var(--band-selected)' }} />above the cut (live)</span><span><i style={{ background: 'var(--band-detected)' }} />spans (last run)</span><span><i style={{ background: 'var(--amber)' }} />threshold · a parameter (amber = cut)</span></div>
     </>
   )
 }
@@ -388,10 +427,22 @@ function SignalOwnScale({ env, x, h }: { env: EnvelopeSeries; x: XScale; h: numb
 }
 
 /* ---------------- Signal → Encoding: dSAX ---------------- */
+function dsaxTiles(enc: EncodingSymbolicPayload | null): { k: string; v: string }[] {
+  if (!enc || enc.alphabet_size !== 3) return []
+  const n = enc.symbols.length
+  const c = [0, 0, 0]
+  for (const s of enc.symbols) if (s >= 0 && s < 3) c[s]++
+  const pct = n ? Math.round(100 * c[1] / n) : 0
+  return [{ k: 'segments', v: n.toLocaleString() }, { k: 'down (d)', v: String(c[0]) }, { k: 'same', v: String(c[1]) }, { k: 'up (u)', v: String(c[2]) }, { k: '% SAME', v: `${pct} %` }]
+}
 function DsaxProcess({ signal, enc, stale, t0, t1, trend }: { signal: EnvelopeSeries | null; enc: EncodingSymbolicPayload | null; stale: boolean; t0: number; t1: number; trend: string }) {
   const sps = enc?.seconds_per_symbol ?? null
   const paa = enc?.paa ?? null
   const deltas = paa ? paa.slice(1).map((v, i) => v - paa[i]) : null
+  const tiles = dsaxTiles(enc)
+  // the strip caption never contradicts the badge: a result without PAA/cutlines says so (the bridge keeps
+  // adapter meta in a sidecar since critique r1, so a cached re-run still carries them)
+  const noMeta = enc ? (!paa ? 'PAA not served for this result · re-run this stage to compute it' : !sps ? 'seconds per symbol not served for this result' : null) : 'run the chain to see the learned cutlines'
   return (
     <>
       <Strip label="signal + PAA" sub={sps ? `${fmtParam(sps)} s segments` : 'segments'} height={110} t0={t0} t1={t1} testid="dsax-signal">
@@ -405,7 +456,7 @@ function DsaxProcess({ signal, enc, stale, t0, t1, trend }: { signal: EnvelopeSe
       </Strip>
       <Strip label="Δ per segment + cutlines" sub={enc?.cutline_domain ? `${enc.cutline_domain} domain` : 'rise per segment'} height={90} t0={t0} t1={t1} testid="dsax-cutlines">
         {(x, w, h) => {
-          if (!deltas || !sps || !enc) return <text x={4} y={14} fill="var(--muted)">run the chain to see the learned cutlines</text>
+          if (!deltas || !sps || !enc) return <text x={4} y={14} fill="var(--muted)" data-testid="dsax-nometa">{noMeta}</text>
           const cuts = enc.cutlines ?? []
           const ext = Math.max(...deltas.map(Math.abs), ...cuts.map(Math.abs), 1e-9)
           const y = makeY(-ext, ext, h, 6, 6)
@@ -414,7 +465,8 @@ function DsaxProcess({ signal, enc, stale, t0, t1, trend }: { signal: EnvelopeSe
             <>
               <line x1={0} x2={w} y1={y(0)} y2={y(0)} stroke="var(--border)" />
               {deltas.map((d, i) => <rect key={i} x={x(enc.t0_s + (i + 1) * sps)} y={Math.min(y(0), y(d))} width={cw} height={Math.abs(y(d) - y(0))} fill={enc.alphabet_size === 3 ? SYM3[enc.symbols[i + 1] ?? 1] : 'var(--blue)'} opacity={0.8} />)}
-              {cuts.map((c, i) => <g key={i}><line x1={0} x2={w} y1={y(c)} y2={y(c)} stroke="var(--red)" strokeDasharray="4 3" /><text x={w - 4} y={y(c) - 3} textAnchor="end" fill="var(--red)">{c > 0 ? '+' : ''}{c.toExponential(2)} · learned · not a parameter</text></g>)}
+              {cuts.map((c, i) => <g key={i} data-testid="dsax-cutline"><line x1={0} x2={w} y1={y(c)} y2={y(c)} stroke="var(--red)" strokeDasharray="4 3" /><text x={c >= 0 ? w - 4 : 4} y={c >= 0 ? y(c) - 3 : y(c) + 10} textAnchor={c >= 0 ? 'end' : 'start'} fill="var(--red)" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>{c > 0 ? '+' : ''}{c.toExponential(2)} · learned · not a parameter</text></g>)}
+              {!cuts.length && <text x={4} y={14} fill="var(--muted)">cutlines not served for this result · the Δ bars are drawn from the PAA</text>}
               <text x={4} y={h - 4} fill="var(--muted-2)">Δ PAA between consecutive segments — approximates the adapter's {trend} estimator</text>
             </>
           )
@@ -424,7 +476,51 @@ function DsaxProcess({ signal, enc, stale, t0, t1, trend }: { signal: EnvelopeSe
         {(x, w, h) => enc ? <g>{renderByType(enc, { x, width: w, height: h, ghost: null, t0, t1 })}{stale && <rect x={0} y={0} width={w} height={h} fill="rgba(255,255,255,0.55)" />}</g> : <text x={4} y={14} fill="var(--muted)">no encoding yet</text>}
       </Strip>
       <div className="bp-legend"><span><i style={{ background: SYM3[0] }} />down</span><span><i style={{ background: SYM3[1] }} />same</span><span><i style={{ background: SYM3[2] }} />up</span><span><i style={{ background: 'var(--blue-600)' }} />PAA mean · own scale</span><span><i style={{ background: 'var(--red)' }} />cutlines · learned</span>{enc?.representatives && <span className="muted">representatives {enc.representatives.map(v => v.toExponential(1)).join(' / ')}</span>}</div>
+      {tiles.length > 0 && <div className="bp-tiles" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginLeft: 76 }} data-testid="dsax-tiles">{tiles.map(t => <div className="bp-tile" key={t.k}><div className="k" title={t.k}>{t.k}</div><div className="v">{t.v}</div></div>)}</div>}
     </>
+  )
+}
+
+/* ---------------- Spans vs cut (frame chain-7b right column) ---------------- */
+/** Span count for ~40 cut values across the score range, from the same decimated envelope the histogram uses;
+ *  the current cut is marked. The null curve is not computable in this slice and says so. */
+function SpansVsCut({ scores, threshold, onThreshold, resultN, stale }: { scores: ScoresPayload | null; threshold: number; onThreshold: (v: number) => void; resultN: number | null; stale: boolean }) {
+  const [ref, size] = useSize<HTMLDivElement>()
+  const w = Math.max(10, size.width); const h = 120
+  const curve = useMemo(() => {
+    if (!scores) return null
+    const r = scores.value_range ?? [0, 1]
+    const lo = Math.min(0, r[0]), hi = r[1]
+    if (!(hi > lo)) return null
+    const cuts: number[] = []; const counts: number[] = []
+    for (let k = 0; k <= 40; k++) { const c = lo + (hi - lo) * k / 40; cuts.push(c); counts.push(runsAbove(scores.envelope, c).length) }
+    return { cuts, counts, lo, hi }
+  }, [scores])
+  const nowN = scores ? runsAbove(scores.envelope, threshold).length : null
+  return (
+    <div className="card bp-curve" data-testid="spans-vs-cut">
+      <div className="row"><span className="b">Spans vs cut</span><span className="muted mono small" style={{ marginLeft: 'auto' }}>{curve ? '41 cut values · decimated envelope' : 'needs the upstream Scores'}</span></div>
+      <div className="plot-surface sur" ref={ref} style={{ height: h }}>
+        {size.width > 0 && curve && (() => {
+          const x = makeX(curve.lo, curve.hi, w, 6, 6)
+          const y = makeY(0, Math.max(1, ...curve.counts), h - 18, 6, 0)
+          return (
+            <svg width={w} height={h}>
+              <path d={polylinePath(curve.cuts, curve.counts, x, y)} fill="none" stroke="var(--blue)" strokeWidth={1.4} />
+              <line x1={4} x2={w - 4} y1={h - 26} y2={h - 26} stroke="var(--muted-2)" strokeDasharray="3 3" />
+              <text x={w / 2} y={h - 30} textAnchor="middle" fill="var(--muted-2)">null curve · not in this slice</text>
+              <YLabels y={y} values={[Math.max(1, ...curve.counts), 0]} digits={0} />
+              <text x={4} y={h - 4} fill="var(--muted-2)">{curve.lo.toFixed(1)}</text>
+              <text x={w - 4} y={h - 4} textAnchor="end" fill="var(--muted-2)">{curve.hi.toFixed(1)} · cut value</text>
+              {nowN !== null && <circle cx={x(threshold)} cy={y(nowN)} r={3.5} fill="var(--amber)" stroke="#fff" strokeWidth={1} />}
+              <DragLineV x={x} value={threshold} onChange={onThreshold} height={h - 18} label={`cut ${fmtParam(threshold)} → ${nowN ?? '—'}`} testid="spans-vs-cut-line" />
+            </svg>
+          )
+        })()}
+        {size.width > 0 && !curve && <div className="an-plot-empty">run the chain so the upstream Scores are loaded</div>}
+      </div>
+      <div className="muted mono small" style={{ marginTop: 6 }}>{nowN !== null ? `≈ ${nowN} span${nowN === 1 ? '' : 's'} at the current cut (approximate)` : '—'}{resultN !== null ? ` · last run ${resultN}${stale ? ' · stale' : ''}` : ''} · drag the line to move the cut</div>
+    </div>
   )
 }
 function PaaSteps({ paa, t0, sps, x, h }: { paa: number[]; t0: number; sps: number; x: XScale; h: number }) {

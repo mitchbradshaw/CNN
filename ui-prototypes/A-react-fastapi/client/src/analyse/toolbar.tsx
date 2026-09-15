@@ -1,10 +1,17 @@
 /* Toolbar pieces shared by the chain page and the block page: name chip, source chip,
    estimate chip, the example span, and the source-envelope hook. */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, getWindow, type WindowData } from '../api'
+import { useDismiss } from '../shell/useDismiss'
 import { fmtHours, type ChainDraft, type SourceSpan } from '../state'
+import { retryNow, type RunErrorKind } from './store'
 
 export const EXAMPLE_SOURCE: SourceSpan = { recording_id: 4, channel_name: 'CH4_A2', source_file: 'M2_aug_concat_fs1.mat', fs: 1, start_idx: 995040, end_idx: 1002240, label: 'example span' }
+
+/** The held-out recording (spec §0 D6, Working.config.HELD_OUT_RECORDING_FILE; /api/recordings marks it held_out).
+ *  Its data is never requested — the pages show the locked card without asking the bridge (critique r1). */
+export const HELD_OUT_FILE = 'M4_aug_concat_fs1.mat'
+export const isHeldOut = (s: SourceSpan | null) => !!s && s.source_file === HELD_OUT_FILE
 
 export const t0Of = (s: SourceSpan) => s.start_idx / s.fs
 export const t1Of = (s: SourceSpan) => s.end_idx / s.fs
@@ -37,12 +44,33 @@ export function EstimateChip({ text, kind }: { text: string; kind: 'amber' | 'bl
   return <span className={`an-est ${kind}`} data-testid="estimate-chip">{text}</span>
 }
 
+/** Null runs are not part of this slice: the toggle renders OFF and disabled so the default chain never claims
+ *  a surrogate it does not run (critique r1 — the 200× was the placeholder canon value, not a live setting). */
 export function SurrogateToggle() {
   return (
-    <span className="an-toggle-wrap" title="null runs are out of slice scope">
-      <span className="toggle on" style={{ opacity: 0.7 }}><span className="knob" /> surrogate 200×</span>
+    <span className="an-toggle-wrap" title="surrogate null runs · out of slice scope" data-testid="surrogate-toggle">
+      <button className="toggle" disabled aria-disabled="true" title="surrogate null runs · out of slice scope" style={{ border: 0, background: 'transparent', opacity: 0.6, cursor: 'not-allowed', padding: 0 }}><span className="knob" /> surrogate · not in this slice</button>
     </span>
   )
+}
+
+/** One card for the run store's error, titled by kind (critique r1: the re-attach title was used for every failure). */
+export function RunErrorCard({ error, kind }: { error: string; kind: RunErrorKind | null }) {
+  const title = kind === 'contact' ? 'lost contact with the bridge · retrying' : kind === 'stream' ? 'run stream interrupted · polling the bridge' : 'last run could not be re-attached'
+  return (
+    <div className="error-card" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 12 }} data-testid="run-error-card" data-kind={kind ?? 'attach'}>
+      <div style={{ minWidth: 0, flex: 1 }}><h3>{title}</h3><div className="mono small">{error}</div></div>
+      {kind === 'contact' && <button className="btn" onClick={retryNow} data-testid="retry-contact">↻ Retry now</button>}
+    </div>
+  )
+}
+
+/** A popover anchor that closes on Escape and on a pointer-down outside it (shell/useDismiss). The toggle
+ *  button lives inside the wrapper so its own click is never "outside". */
+export function Popwrap({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useDismiss(ref, onClose, open)
+  return <span className="an-popwrap" ref={ref}>{children}</span>
 }
 
 /** The source row's envelope from GET /api/channels/{id}/window (decimated to ≤ 2·px points). */
@@ -55,6 +83,7 @@ export function useSourceEnvelope(source: SourceSpan | null, px = 1200): { env: 
     if (!source) { setEnv(null); setStatus(null); return }
     let alive = true
     setError(null); setStatus(null); setEnv(null)
+    if (isHeldOut(source)) { setStatus(423); setError(`held out · ${source.source_file} is refused by every workspace (D6) — no data request is made`); return }
     getWindow(source.recording_id, t0Of(source), t1Of(source), px).then(w => { if (alive) { setEnv(w); setStatus(200) } })
       .catch(e => { if (alive) { setStatus(e instanceof ApiError ? e.status : 0); setError(e instanceof ApiError ? `${e.status === 423 ? 'held out · ' : ''}${e.message}${e.traceback ? '\n' + e.traceback : ''}` : String(e)) } })
     return () => { alive = false }

@@ -70,6 +70,31 @@ export function markStale(index: number) {
 }
 export function clearStale() { if (state.staleFrom !== null) { saveStale(null); set({ staleFrom: null }) } }
 
+/* ---- undo (critique r1: Ctrl/Cmd+Z restores the last deleted stage) ----
+   Module-level so the stack survives Chain ↔ Block navigation; the chain draft itself lives in state.tsx. */
+export interface UndoEntry { steps: Step[]; staleIndex: number; label: string }
+const undoStack: UndoEntry[] = []
+export function pushUndo(e: UndoEntry) { undoStack.push(e); if (undoStack.length > 20) undoStack.shift() }
+export function popUndo(): UndoEntry | null { return undoStack.pop() ?? null }
+/** The toast's Undo button restores its own entry; drop it so Ctrl+Z does not replay it. */
+export function dropUndo(e: UndoEntry) { const i = undoStack.indexOf(e); if (i >= 0) undoStack.splice(i, 1) }
+export function undoDepth() { return undoStack.length }
+
+/** The store's job belongs to this source (recording + sample span) — the only case its results are shown. */
+export function jobMatchesSource(source: { recording_id: number; start_idx: number; end_idx: number } | null): boolean {
+  const job = state.run.job
+  if (!job || !source) return false
+  const r = job.recipe
+  if (r.recording_id !== source.recording_id) return false
+  if (r.span && (r.span[0] !== source.start_idx || r.span[1] !== source.end_idx)) return false
+  return true
+}
+/** Called by both Analyse pages on a source change (critique r1: the stale index and the last job leaked
+ *  across sources). A job for another recording/span is forgotten and nothing is stale for the new source. */
+export function syncToSource(source: { recording_id: number; start_idx: number; end_idx: number } | null) {
+  if (state.run.job && !jobMatchesSource(source)) { resetRun(); clearStale() }
+}
+
 /* ---- helpers ---- */
 const isRunning = (j: JobSnapshot | null | undefined) => !!j && (j.status === 'running' || j.status === 'queued')
 type FetchFailed = ErrorPayload & { fetch_failed?: boolean }

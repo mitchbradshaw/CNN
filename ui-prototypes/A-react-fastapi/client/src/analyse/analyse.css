@@ -38,14 +38,18 @@
 
 /* ---------- rows ---------- */
 .an-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px; padding: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); position: relative; }
-.an-row.failed, .an-row.invalid { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+.an-row.failed, .an-row.invalid, .an-row.error { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+.badge.error { background: var(--red-100); color: #b3262b; }
 .an-row-left { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.an-row-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; font-family: var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* title and caption wrap to two lines in the 210 px panel; the full text stays in the title attribute (critique r1) */
+.an-row-title { display: flex; align-items: flex-start; gap: 6px; font-size: 13.5px; font-weight: 600; font-family: var(--font-ui); line-height: 1.25; min-width: 0; }
+.an-row-title .ttl { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-width: 0; }
+.an-row-title .num, .an-row-title .grip { line-height: 17px; flex: none; }
 .an-row-title .num { font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .an-row-title .grip { color: var(--muted-2); font-size: 12px; letter-spacing: -2px; cursor: grab; }
 .an-row-meta { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
 .an-row-meta .timing { color: var(--muted-2); font-size: 10.5px; }
-.an-row-caption { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-row-caption { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .an-row-icons { display: flex; gap: 2px; margin-top: auto; padding-top: 4px; }
 .an-plot { position: relative; height: 92px; }
 .an-plot > svg, .an-plot > canvas { display: block; }
@@ -59,11 +63,11 @@
 @keyframes an-indet { from { left: -35%; } to { left: 100%; } }
 .an-progress .txt { font-family: var(--font-mono); font-size: 11px; color: var(--blue-600); }
 .an-progress .note { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
-.an-fail { border: 1.5px solid var(--red); background: #fff7f7; border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; min-height: 92px; }
+.an-fail { border: 1.5px solid var(--red); background: #fff7f7; border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: start; min-height: 92px; }
 .an-fail .t { font-weight: 600; font-size: 13px; color: #b3262b; margin-bottom: 2px; }
-.an-fail .m { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-fail .m { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
 .an-fail .s { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
-.an-fail .acts { display: flex; gap: 8px; }
+.an-fail .acts { display: flex; gap: 8px; align-self: start; }
 .an-hpc { border: 1px solid #ffd9a8; background: var(--amber-100); border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; min-height: 92px; }
 .an-hpc .t { font-family: var(--font-mono); font-size: 12px; color: #a05e00; font-weight: 600; }
 .an-hpc .s { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-top: 3px; }
@@ -112,7 +116,7 @@
 .ins-grid-wrap { overflow: auto; min-height: 0; padding-right: 4px; }
 .ins-group { font-size: 12px; font-weight: 600; margin: 4px 0 8px; display: flex; gap: 8px; align-items: baseline; }
 .ins-group span { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); font-weight: 400; }
-.ins-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ins-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .ins-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--card); cursor: pointer; display: flex; flex-direction: column; gap: 6px; min-width: 0; text-align: left; font: inherit; color: inherit; }
 .ins-card:hover { border-color: var(--border-strong); }
 .ins-card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; background: #f4f9ff; }
@@ -121,12 +125,13 @@
 .ins-card .nm { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ins-card .sg { font-family: var(--font-mono); font-size: 10.5px; color: var(--blue-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ins-card.nofit .sg { color: var(--muted); }
-.ins-card .chips { display: flex; gap: 6px; }
+.ins-card .chips { display: flex; gap: 4px 6px; flex-wrap: wrap; }
 .ins-card .chips span { font-family: var(--font-mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--grey-100); color: var(--text-2); }
 .ins-card .chips span.g { background: var(--green-100); color: #15794f; }
-.ins-card .fit { font-family: var(--font-mono); font-size: 10.5px; color: #15794f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the reason is load-bearing (spec §6.4): it wraps instead of ellipsising (critique r1) */
+.ins-card .fit { font-family: var(--font-mono); font-size: 10.5px; color: #15794f; white-space: normal; line-height: 1.3; overflow-wrap: anywhere; }
 .ins-card .fit.no { color: #b3262b; }
-.ins-card .broken { font-family: var(--font-mono); font-size: 10px; color: #a05e00; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-card .broken { font-family: var(--font-mono); font-size: 10px; color: #a05e00; white-space: normal; line-height: 1.3; overflow-wrap: anywhere; }
 .ins-detail { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--bg); overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .ins-detail h3 { margin: 0; font-size: 15px; }
 .ins-detail .sg { font-family: var(--font-mono); font-size: 11.5px; color: var(--blue-600); }
@@ -195,6 +200,7 @@
 .pp-ctl input[type=number] { width: 84px; }
 .pp-ctl input[type=text] { width: 100%; }
 .pp-ctl select { width: 100%; }
+.pp-ctl .seg { flex-wrap: wrap; }
 .pp-rec { font-family: var(--font-mono); font-size: 10.5px; color: #15794f; }
 .pp-rec.no { color: var(--muted-2); }
 .pp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
@@ -220,3 +226,15 @@
 .an-toolbar > * { flex: none; }
 .an-toolbar .spacer { flex: 1 1 0; min-width: 0; }
 .an-toolbar .an-popwrap:has(> .an-source), .an-toolbar .an-source { flex: 0 1 auto; min-width: 140px; overflow: hidden; }
+
+/* block page: running state over the process card (a re-run stays on the block page — critique r1) */
+.bp-process { position: relative; }
+.bp-process[data-running] { min-height: 200px; }
+.bp-run-veil { position: absolute; inset: 0; top: 38px; background: rgba(255,255,255,0.88); border-radius: 0 0 var(--radius) var(--radius); z-index: 3; }
+.bp-run-veil .an-progress { pointer-events: auto; }
+/* spans-vs-cut curve and the hand-off card (frame chain-7b right column) */
+.bp-curve { padding: 12px 14px; }
+.bp-curve .sur { margin-top: 6px; }
+.bp-next { padding: 12px 14px; }
+.bp-next .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.bp-next .s { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; }

@@ -10,14 +10,15 @@ import { makeX, makeY } from '../charts/scale'
 import { fmtDuration } from '../state'
 import { ErrorCard } from './ErrorCard'
 import { MvLabels } from './MvLabels'
-import { envelopeOk, fmtInt, fmtMs, fmtRangeH, MALFORMED_WINDOW, viewportHourTicks, vRange, type Motif } from './util'
+import { envelopeOk, fmtInt, fmtMs, fmtRangeH, MALFORMED_WINDOW, mvDigits, viewportHourTicks, vRange, type Motif } from './util'
 import type { Viewport } from './useViewport'
 
 const H = 150, TOP = 18, AXIS_H = 20
 /** Past this CSS scale the kept path is a stretched/squashed sliver, not a preview: show the skeleton instead (critique r1). */
 const MAX_STRETCH = 8
-/** Left gutter kept clear of the y labels ("−0.235 mV" at x=4) so the motif label never overprints them. */
-const LABEL_GUTTER = 64
+/** Left gutter kept clear of the y labels ("−0.2016 mV" at x=4, 10 px mono ≈ 6.2 px/glyph) so the motif label
+ *  never overprints them; widens with the label's digit count, never below the critique's 64 px. */
+const labelGutter = (lo: number, hi: number) => Math.max(64, 12 + (mvDigits(lo, hi) + 7) * 6.2)
 
 export interface Band { start_s: number; end_s: number; kind: BandKind; id: string; title: string; motif: Motif }
 
@@ -91,7 +92,8 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
 
   const st = vp.lastStat
   const ticks = viewportHourTicks(a, b)
-  const dim = vp.fetching   // stale numbers (previous view) read as live otherwise
+  // stale numbers (previous view) read as live otherwise: grey from the moment the view moves, not only once the debounced fetch starts
+  const dim = vp.fetching || (!!win && (win.view[0] !== a || win.view[1] !== b))
 
   return (
     <div className="card ex-tier" data-testid="signal-span-card">
@@ -125,7 +127,7 @@ export function SpanView({ ch, vp, plotRef, width, bands, selected, onBandClick,
             </g>
             {selected && selected.end_s > a && selected.start_s < b && (
               // starts at the band, but never inside the y-label gutter (critique r1: MOTIF_744 overprinted "−0.23 mV")
-              <text x={Math.max(LABEL_GUTTER, x(selected.start_s) + 4)} y={TOP + 12} style={{ fill: 'var(--amber)', fontWeight: 600 }} pointerEvents="none" data-testid="motif-label">MOTIF_{selected.id}</text>
+              <text x={Math.max(labelGutter(range[0], range[1]), x(selected.start_s) + 4)} y={TOP + 12} style={{ fill: 'var(--amber)', fontWeight: 600 }} pointerEvents="none" data-testid="motif-label">MOTIF_{selected.id}</text>
             )}
             {win && envOk && !stale ? (
               <g transform={transform} data-testid="envelope-group" data-transformed={transform ? '1' : '0'}>

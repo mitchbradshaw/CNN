@@ -112,7 +112,7 @@ export interface RunEvent { event: 'hello' | 'step_start' | 'step_done' | 'run_e
 export interface DbRun {
   id: number; config_id: number; recording_id: number; span_start: number; span_end: number; started_at: string; status: string
   finished_at: string | null; duration_s: number | null; error_text: string | null; current_step: number | null; name: string | null
-  steps: string[]; recipe: { recording_id: number; span: [number, number] | null; steps: Step[] } | null; step_timings: Record<string, number> | null; n_detections: number
+  steps: string[]; recipe: { recording_id: number; span: [number, number] | null; steps: Step[] } | null; step_timings: Record<string, number> | null; n_detections: number; cancelled?: boolean
 }
 
 export const startRun = (recording_id: number, span: [number, number] | null, steps: Step[], px = 1200) =>

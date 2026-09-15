@@ -29,7 +29,38 @@ every decision: `DECISIONS.md`. Checklist: `CHECKLIST.md`.
 
 ## 2. Why A ranked first (and what building taught)
 
-(filled at close-out — see DECISIONS.md §2 for the pre-build ranking)
+**Pre-build ranking** (DECISIONS.md §2): React + TypeScript + d3-in-SVG over a FastAPI bridge first,
+Panel + Bokeh second (the incumbent, which #12 says must win or lose on evidence), Dash/NiceGUI as
+a possible third, desktop Qt and webview wrappers dropped (the spec is written as a web app and no
+web output path exists). The discriminators that decided it: the pages are a *bespoke* web design
+(chips, badges, modals, a card grid, a nav rail, one shared time axis with drag handles and a
+crosshair), loud failure has to be structural rather than configured, and agentic throughput is
+the heaviest criterion.
+
+**What building A taught.**
+- The frames were reproducible 1:1 in hand-written SVG + CSS with no library in the way; the two
+  builders needed zero and one compile-fix iterations over 3,600 lines, and every interaction the
+  pages ask for (draggable handles and cut lines, per-viewport re-decimation with a CSS-transform
+  bridge, symbol strips, image canvases, a shared axis crosshair) took less time than the
+  *state* semantics (which badge, whose result is this). That is evidence that the stack is not
+  where the difficulty of this UI lives.
+- Loud failure came for free: a thrown render error is a red card in place of the row (plus a
+  console error the test gate catches); a server exception is a 500 with the traceback in the
+  body and the log. Nothing rendered blank in three critics' attempts to make it.
+- The bridge cost was real but bounded: ~1,660 lines of Python, of which the seven-type
+  serialiser is 270 and the run manager 246; the thread → event-loop → SSE path, cancel,
+  reload-replay and a cache-hit meta sidecar were all designed and verified in one night. The
+  first critique found the SSE path fragile under a network blip — fixed with a polling fallback,
+  which is exactly the kind of transport work the audit said only a spike could cost.
+- The core's shape, not the frontend, set most limits: per-step (not within-step) progress,
+  cancel only between steps, learned (not parameterised) SAX cutlines, no null declaration on
+  adapters, a 70× pessimistic MP estimate, `Encoding` being terminal, and adapters that write
+  files from inside their run bodies. Those are recorded in §5 and are identical for any stack.
+- Orchestration friction outweighed stack friction: the account's usage limit cut off both
+  fixer agents once and the reader phase once; Vite 8 binding `::1`, React 19 dropping the
+  global `JSX` namespace, and Windows `cp1252` consoles were the only toolchain surprises.
+
+**B is judged in §3 and §4 after its build**; the closing recommendation is in §7.
 
 ## 3. Evidence gathered while building, per stack
 
@@ -188,4 +219,18 @@ reload-mid-run).
 
 ## 7. Open questions and recommended next step
 
-(filled at close-out)
+(finalised at close-out; the items below are the ones already known after A)
+
+Open questions for you:
+1. **The stray joblib in the real `DATA/derived/models`** (§4, P0): delete it by hand, or keep it?
+   It is one additive 14 kB file from a read-only reader that executed the classifier adapter.
+2. **Time axis convention.** Spec §0 says hours since recording start; frame chain-1 prints
+   seconds for a 50 s span at t = 0. A uses hours with span-adaptive decimals everywhere. Confirm.
+3. **SAX cutlines.** §6.8 asks for draggable cutlines on the Encoding page, but the adapters learn
+   them and expose no parameter. Should the adapters grow an explicit `cutlines` override
+   parameter (core change), or should the page keep them read-only ("learned") as A does?
+4. **Over-ceiling stages.** A refuses to run a chain with a stage over its local ceiling
+   (P4/P24 say "pause and hand to HPC"); implementing the pause needs the manifest-inbox flow,
+   which is out of slice scope. Confirm refusal is the right interim.
+5. **Progress granularity.** Only `window_matrix` reports within-step progress. If the running
+   frame's "64 % · 0.2 s left" matters, adapters need to accept `on_progress`.
