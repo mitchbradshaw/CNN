@@ -1,0 +1,420 @@
+{
+  "failures": [],
+  "browser_errors": [],
+  "evidence": {
+    "heatmap": {
+      "file": "M2_aug_concat_fs1.mat",
+      "bins": 57,
+      "rows": 16,
+      "rects": 912,
+      "distinct_colours": 5,
+      "colour_by": "both",
+      "matching": 11340,
+      "channels": 16,
+      "compute_ms": 108.95860000164248,
+      "selected": "CH4_A2"
+    },
+    "heatmap_ink": {
+      "x": 84,
+      "y": 124.28125,
+      "w": 1034,
+      "h": 562,
+      "distinct": 519
+    },
+    "bottom_bar": "CH4_A2\n698 annotations \u00b7 0 detections \u00b7 \u2014 disagree \u00b7 21 % reviewed",
+    "signal_canvases": [
+      [
+        92,
+        275
+      ],
+      [
+        92,
+        14
+      ],
+      [
+        40,
+        67
+      ],
+      [
+        40,
+        1
+      ],
+      [
+        250,
+        236
+      ],
+      [
+        250,
+        1
+      ]
+    ],
+    "zoom_stats_browser": [
+      {
+        "seq": 3,
+        "t0_h": 114.74346793349167,
+        "t1_h": 595.4101346001584,
+        "px": 1263,
+        "n_points": 2526,
+        "decimate_ms": 13.428699981886894,
+        "server_ms": 21.869300020625815,
+        "round_trip_ms": 41
+      },
+      {
+        "seq": 4,
+        "t0_h": 191.23911322248614,
+        "t1_h": 511.6835576669306,
+        "px": 1263,
+        "n_points": 2526,
+        "decimate_ms": 9.317499992903322,
+        "server_ms": 16.5687000262551,
+        "round_trip_ms": 26.399999976158142
+      },
+      {
+        "seq": 5,
+        "t0_h": 242.23621008181578,
+        "t1_h": 455.8658397114454,
+        "px": 1263,
+        "n_points": 2526,
+        "decimate_ms": 5.215399985900149,
+        "server_ms": 11.669600004097447,
+        "round_trip_ms": 22.19999998807907
+      },
+      {
+        "seq": 6,
+        "t0_h": 276.2342746547022,
+        "t1_h": 418.6540277411219,
+        "px": 1263,
+        "n_points": 2526,
+        "decimate_ms": 6.140199984656647,
+        "server_ms": 13.8128999969922,
+        "round_trip_ms": 25
+      },
+      {
+        "seq": 7,
+        "t0_h": 298.7812363605077,
+        "t1_h": 393.72773841812085,
+        "px": 1257,
+        "n_points": 2514,
+        "decimate_ms": 4.5273000141605735,
+        "server_ms": 13.013699994189665,
+        "round_trip_ms": 23.80000001192093
+      },
+      {
+        "seq": 8,
+        "t0_h": 313.812544164378,
+        "t1_h": 377.1102122027868,
+        "px": 1257,
+        "n_points": 2506,
+        "decimate_ms": 1.658199995290488,
+        "server_ms": 7.124900002963841,
+        "round_trip_ms": 18.299999982118607
+      },
+      {
+        "seq": 9,
+        "t0_h": 323.83341603362487,
+        "t1_h": 366.03186139256405,
+        "px": 1257,
+        "n_points": 2512,
+        "decimate_ms": 1.7213999817613512,
+        "server_ms": 7.026700011920184,
+        "round_trip_ms": 17.099999994039536
+      },
+      {
+        "seq": 10,
+        "t0_h": 330.51399727978946,
+        "t1_h": 358.6462941857489,
+        "px": 1257,
+        "n_points": 2502,
+        "decimate_ms": 0.9763999842107296,
+        "server_ms": 8.690699993167073,
+        "round_trip_ms": 20.5
+      },
+      {
+        "seq": 11,
+        "t0_h": 334.96771811056584,
+        "t1_h": 353.7225827145388,
+        "px": 1257,
+        "n_points": 2502,
+        "decimate_ms": 0.8999000128824264,
+        "server_ms": 9.273000003304332,
+        "round_trip_ms": 20.700000017881393
+      },
+      {
+        "seq": 12,
+        "t0_h": 337.9368653310835,
+        "t1_h": 350.44010840039874,
+        "px": 1257,
+        "n_points": 2502,
+        "decimate_ms": 0.37620001239702106,
+        "server_ms": 5.704700015485287,
+        "round_trip_ms": 15.099999994039536
+      },
+      {
+        "seq": 13,
+        "t0_h": 339.91629681142854,
+        "t1_h": 348.2517921909721,
+        "px": 1257,
+        "n_points": 2502,
+        "decimate_ms": 0.3389999910723418,
+        "server_ms": 5.316099995980039,
+        "round_trip_ms": 15
+      },
+      {
+        "seq": 14,
+        "t0_h": 341.2359177983252,
+        "t1_h": 346.79291471802094,
+        "px": 1257,
+        "n_points": 2502,
+        "decimate_ms": 0.4683000151999295,
+        "server_ms": 7.455099985236302,
+        "round_trip_ms": 17.900000005960464
+      }
+    ],
+    "zoom_round_trip_ms": {
+      "n": 12,
+      "min": 15,
+      "median": 20.7,
+      "max": 41
+    },
+    "zoom_decimate_ms": {
+      "min": 0.34,
+      "median": 1.72,
+      "max": 13.43
+    },
+    "zoom_span_h": [
+      480.67,
+      5.557
+    ],
+    "sent_source": {
+      "recording_id": 4,
+      "channel_name": "CH4_A2",
+      "source_file": "M2_aug_concat_fs1.mat",
+      "fs": 1.0,
+      "start_idx": 1220697,
+      "end_idx": 1240703,
+      "label": "span from Explore"
+    },
+    "modal": {
+      "cards": 22,
+      "disabled": 17,
+      "fit": "5 of 22 blocks fit"
+    },
+    "run_round_trip_s": 1.57,
+    "run_rows_debug": [
+      {
+        "type": "signal",
+        "ghost_points": 0,
+        "points": 2354,
+        "index": -1,
+        "status": "cached"
+      },
+      {
+        "type": "signal",
+        "ghost_points": 2354,
+        "points": 2354,
+        "index": 0,
+        "status": "cached",
+        "badge": "cached",
+        "timing": 0.010466814041137695
+      },
+      {
+        "type": "scores",
+        "points": 2400,
+        "marks": 4,
+        "index": 1,
+        "status": "cached",
+        "badge": "cached",
+        "timing": 0.3736546039581299
+      },
+      {
+        "type": "spanset",
+        "ghost_points": 2354,
+        "bands": 56,
+        "index": 2,
+        "status": "cached",
+        "badge": "cached",
+        "timing": 0.0003108978271484375
+      }
+    ],
+    "first_run_timings": {
+      "0": 0.010466814041137695,
+      "1": 0.3736546039581299,
+      "2": 0.0003108978271484375
+    },
+    "badges_after_run": [
+      "cached \u00b7 <0.1 s",
+      "cached \u00b7 0.4 s",
+      "cached \u00b7 <0.1 s"
+    ],
+    "row_canvas_ink": [
+      156,
+      263,
+      442,
+      213
+    ],
+    "threshold_drag": {
+      "before": 8.0,
+      "after": 6.128,
+      "stale_from": 2,
+      "geometry": {
+        "y_start": -0.6472679749131203,
+        "y_end": 9.629838220775127,
+        "x_start": 339.0825,
+        "x_end": 344.63972222222225,
+        "handle_x": 344.4730055555556,
+        "handle_y": 8.0,
+        "border_right": 12,
+        "border_top": 6,
+        "inner_width": 928,
+        "inner_height": 247,
+        "outer_width": 984,
+        "outer_height": 280
+      }
+    },
+    "suffix_rerun_timings": {
+      "0": 0.0,
+      "1": 0.0,
+      "2": 0.00045943260192871094
+    },
+    "badges_after_rerun": [
+      "cached \u00b7 0 s",
+      "cached \u00b7 0 s",
+      "cached \u00b7 <0.1 s"
+    ],
+    "export": {
+      "path": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\exports\\run-2.json",
+      "job_id": 2,
+      "bytes": 163906
+    },
+    "failed_header": "AnalyseChainbuild here \u00b7 open a block to tune it\n\ud83d\udd0d Search spans, runs, families\nCtrl K\n\u25cf 1 need you\n\ud83d\udd12 M4 held out",
+    "failed_rows": [
+      {
+        "type": "signal",
+        "ghost_points": 0,
+        "points": 2354,
+        "index": -1,
+        "status": "cached"
+      },
+      {
+        "type": "signal",
+        "ghost_points": 2354,
+        "points": 2354,
+        "index": 0,
+        "status": "cached",
+        "badge": "cached",
+        "timing": 0.01180990002467297
+      },
+      {
+        "type": "failed",
+        "index": 1,
+        "status": "failed",
+        "badge": "failed",
+        "timing": 0.017371299996739253
+      },
+      {
+        "type": "blocked",
+        "index": 2,
+        "status": "blocked",
+        "badge": "blocked",
+        "timing": null
+      }
+    ],
+    "cancel_span_h": 22.23,
+    "running_rows": [
+      [
+        -1,
+        "cached"
+      ],
+      [
+        0,
+        "cached"
+      ],
+      [
+        1,
+        "running"
+      ],
+      [
+        2,
+        "waiting"
+      ]
+    ],
+    "cancel_clicked_label": "\u25a0 Cancel",
+    "cancel_result": {
+      "status": "cancelled",
+      "rows": [
+        [
+          -1,
+          "cached"
+        ],
+        [
+          0,
+          "cached"
+        ],
+        [
+          1,
+          "cached"
+        ],
+        [
+          2,
+          "cancelled"
+        ]
+      ]
+    },
+    "throw_caught_console": [],
+    "throw_uncaught": {
+      "render_error_cards": 0,
+      "url": "http://127.0.0.1:8766/#analyse/chain?throw=1&uncaught=1",
+      "corpus_still_shown": true,
+      "body_text_head": "cancel requested \u00b7 the core checks it before the next step",
+      "console": []
+    },
+    "server_log_error_lines": [
+      "2026-09-15 19:33:45,333 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (20006 samples).",
+      "2026-09-15 19:34:03,584 ERROR protoB: render error in Source row renderer",
+      "Traceback (most recent call last):",
+      "2026-09-15 19:34:09,675 ERROR tornado.application: Exception in callback functools.partial(<bound method IOLoop._discard_future_result of <tornado.platform.asyncio.AsyncIOMainLoop object at 0x0000024398348980>>, <Task finished name='Task-3044' coro=<ServerSession.with_document_locked() done, defined at C:\\Users\\mmebr\\AppData\\Roaming\\Python\\Python313\\site-packages\\bokeh\\server\\session.py:77> exception=RuntimeError(\"deliberate render failure (?throw=1) inside the first row's renderer\")>)",
+      "Traceback (most recent call last):"
+    ],
+    "server_log_deliberate_block": [
+      "    raise RuntimeError(\"deliberate render failure (?throw=1) inside the first row's renderer\")",
+      "RuntimeError: deliberate render failure (?throw=1) inside the first row's renderer",
+      "2026-09-15 19:34:09,675 ERROR tornado.application: Exception in callback functools.partial(<bound method IOLoop._discard_future_result of <tornado.platform.asyncio.AsyncIOMainLoop object at 0x0000024398348980>>, <Task finished name='Task-3044' coro=<ServerSession.with_document_locked() done, defined at C:\\Users\\mmebr\\AppData\\Roaming\\Python\\Python313\\site-packages\\bokeh\\server\\session.py:77> exception=RuntimeError(\"deliberate render failure (?throw=1) inside the first row's renderer\")>)",
+      "    raise RuntimeError(\"deliberate render failure (?throw=1) inside the first row's renderer\")",
+      "RuntimeError: deliberate render failure (?throw=1) inside the first row's renderer"
+    ]
+  },
+  "screenshots": [
+    "01-explore-1-corpus.png",
+    "02-explore-1-corpus-colour-by.png",
+    "03-explore-1-corpus-selected.png",
+    "04-explore-2-signal.png",
+    "05-explore-2-signal-zoomed.png",
+    "06-explore-2-signal-motif.png",
+    "07-explore-m4-held-out.png",
+    "08-chain-1-chain-before-run.png",
+    "09-chain-2-insert-stage.png",
+    "10-chain-1-chain-completed.png",
+    "11-chain-7b-block-threshold.png",
+    "12-chain-7b-block-threshold-dragged.png",
+    "13-chain-1-chain-suffix-rerun.png",
+    "14-chain-1b-run-history.png",
+    "15-chain-1e-invalid-junction.png",
+    "16-chain-1f-failed-block.png",
+    "17-chain-1d-running.png",
+    "18-chain-cancelled.png",
+    "19-loud-failure-render-error.png",
+    "20-loud-failure-uncaught.png"
+  ],
+  "runtime": {
+    "repo_root": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto",
+    "real_db": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\DATA\\db\\annotations.sqlite",
+    "db_copy": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\annotations.sqlite",
+    "step_cache_root": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\step_cache",
+    "results_dir": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\results",
+    "models_dir": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\models",
+    "log_path": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\server.log",
+    "meta_dir": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto\\ui-prototypes\\B-panel\\runtime\\20260915-193236\\meta",
+    "held_out_file": "M4_aug_concat_fs1.mat",
+    "cwd": "C:\\Users\\mmebr\\Documents\\CNN-ui-proto"
+  }
+}

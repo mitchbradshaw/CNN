@@ -60,7 +60,9 @@ def insert_modal(view, position: int):
     search = pn.widgets.TextInput(placeholder="search blocks", width=260, css_classes=["sel-mono"], margin=(0, 6))
     tabs = pn.widgets.RadioButtonGroup(options=CATS, value="all", css_classes=["seg"], margin=(0, 6))
     show_inc = pn.widgets.Checkbox(name="show incompatible", value=True, css_classes=["chk"], margin=(8, 6))
-    grid = pn.GridBox(ncols=4, sizing_mode="stretch_width", margin=0, height=520, scroll=True)
+    # FRICTION: GridBox(height=…, scroll=True) still painted its last row over the footer; a scrolling Column around it clips
+    grid = pn.GridBox(ncols=4, sizing_mode="stretch_width", margin=0)
+    grid_scroll = pn.Column(grid, height=500, scroll=True, sizing_mode="stretch_width", margin=0)
     detail = pn.pane.HTML("", width=300, margin=(0, 0, 0, 12), styles={"border": "1px solid #e5e7eb", "border-radius": "10px", "padding": "12px",
                                                                        "background": "#fafbfc", "min-height": "420px"})
     selected = {"name": next((n for n, r in rows.items() if r["ok"]), None)}
@@ -154,7 +156,7 @@ def insert_modal(view, position: int):
         f'<span class="chip grey">{esc(next_label + " requires " + emits) if next_label else "end · changes the terminal type"}</span>'
         f'<span style="margin-left:auto;font-weight:600" data-testid="modal-fit-count">{comp["n_fit"]} of {comp["n_total"]} blocks fit</span></div></div>',
         sizing_mode="stretch_width", margin=0)
-    body = pn.Row(pn.Column(pn.Row(search, tabs, show_inc, margin=(0, 0, 6, 0)), grid, sizing_mode="stretch_width", margin=0), detail,
+    body = pn.Row(pn.Column(pn.Row(search, tabs, show_inc, margin=(0, 0, 6, 0)), grid_scroll, sizing_mode="stretch_width", margin=0), detail,
                   sizing_mode="stretch_width", margin=0)
     foot = pn.Row(pn.pane.HTML(f'<div class="mono small muted" style="padding-top:8px">{comp["n_total"]} blocks in the registry · a new technique is one adapter file</div>'),
                   pn.layout.HSpacer(), cancel, insert, insert_open, sizing_mode="stretch_width", margin=(10, 0, 0, 0))

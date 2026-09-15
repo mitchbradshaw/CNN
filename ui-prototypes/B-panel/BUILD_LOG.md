@@ -56,3 +56,69 @@ writes into A's runtime folder; the adapter-path assertion still runs). Read-onl
   completed rows painted (signal+ghost, scores with M/D marks, spanset bands), no console errors; modal opens.
 - Friction: `pn.Modal` needs `pn.extension('modal')` (warning otherwise); Panel has no clickable rich card — the modal
   cards are multi-line Button labels (`white-space: pre-line` via `:host(.card-btn)`), so no bold name, no chips.
+
+## 5. Block page — Threshold to spans with the draggable cut (~19:25)
+- Works: `blockpage.py` — ‹ full chain, chips, chain ribbon (Buttons, this block highlighted, each navigates),
+  "Scores with the cut" (upstream Scores envelope + orange `Span` + a one-point `ColumnDataSource` handle edited by
+  `PointDrawTool(add=False, drag=True, num_objects=1)`; a CustomJS moves the line/histogram cut/label, Python's
+  `on_change('data')` snaps the handle's x back, writes `params.threshold`, syncs the FloatInput and marks 03 stale),
+  last-run spans strip on the shared axis, envelope preview count, histogram with the same cut, spans table;
+  Parameters generated from `chain.catalog()` specs (Select / Int|FloatSlider when both bounds / Int|FloatInput / Checkbox
+  / TextInput, "= default" marker); honest null card; footer "Unapplied changes · N" / Revert / ↻ Re-run from 0N that
+  stays on the page (periodic poll, rebuilds the process card when the job ends). Generic blocks show their output
+  through the same renderer seam at 260 px.
+- Verified (smoke run 1): Playwright drag of the handle (pixel position computed from `/b/debug` geometry — the
+  browser syncs `inner_width/inner_height` back to Python) wrote threshold 8.0 → 6.128, statuses
+  ['cached','cached','stale'], footer "Unapplied changes · 1"; Re-run from the block page → step_timings
+  {0: 0.0, 1: 0.0, 2: 0.0005}; back on the chain page badges ['cached · 0 s', 'cached · 0 s', 'cached · <0.1 s'].
+- Friction: PointDrawTool drags x and y — a vertical-only drag needs a server round trip to snap x back; its data change
+  reaches Python only on release, so the parameter/stale state lags the line (the line itself follows via CustomJS).
+
+## 6. Chain states verified in the browser (smoke run 1, ~19:25)
+- Insert modal at position 1: 22 cards, 17 disabled with reasons, "5 of 22 blocks fit". Run: badges cached, seam drew
+  signal/signal/scores/spanset. History popover opens. Delete 02 → red junction pill, Run disabled "1 invalid junction",
+  Undo restores. window_min = 500 on 02 → error card "02 Matrix profile failed … ValueError: window (m=30000 samples)
+  must be shorter than the span (20006 samples) · adapter detection.matrix_profile · recipe 4e1c90ba · db run #44",
+  03 blocked, header "● 1 need you", toolbar "↻ Retry from 02", footer "No result … nothing was written to detections".
+- Gaps found: cancel test finished before the Cancel click (11 h span MP too fast) → smoke now widens to ~22 h and clicks
+  Cancel ~450 ms after Run; row-canvas ink check must group Bokeh's stacked canvas layers (upper layers are transparent).
+
+## 7. smoke.py — green (runs 2 and 3, ~19:28 / ~19:32): 20 screenshots, 0 failures, 44 checks
+- Gates: console/page errors + failed requests (0), canvas ink through shadow DOM (heatmap 519 distinct colours;
+  chain rows [156, 263, 442, 213] after grouping Bokeh's stacked canvas layers), Python-side renderer counts from
+  `/b/debug` (heatmap 912 rects; seam drew signal/signal/scores/spanset), server.log tracebacks (only the deliberate
+  ones and the provoked failed run).
+- Measurements (run 3): zoom over the full 721 h, 12 wheel steps 480.7 h → 5.56 h, ~2,500 pts per viewport:
+  server decimate min 0.39 / median 2.18 / max 12.67 ms; server total 5.8–21 ms; **browser round trip min 14.9 /
+  median 23.2 / max 41.6 ms** (slowest at the widest viewports). Run round trip (click → footer "last run", MP on
+  the sent 5.56 h span, JIT warm) 1.29 s; step timings {0: 0.0004, 1: 0.316, 2: 0.0011}. Suffix re-run from the block
+  page {0: 0.0, 1: 0.0, 2: 0.0005} → badges "cached · 0 s". Cancel on a 22.2 h span (80,020 samples, under MP's 80,527
+  ceiling) clicked while 02 was running → job cancelled, 02 cached (3.2 s), 03 "cancelled · this step never started".
+- Screenshots: screenshots/01…20 (names = frames), smoke-result.json.
+
+## 8. Loud-failure measurement (~19:29)
+- `?throw=1` (row-level catch present): the Source row shows a red error card with the traceback; browser console
+  clean; server.log "ERROR protoB: render error in Source row renderer" + traceback. (screenshot 19)
+- `?throw=1&uncaught=1` (the flag re-raises past BOTH the row catch and main.py's catch — equivalent to deleting them)
+  navigating from Corpus: the browser keeps showing **Corpus** while the URL says `#analyse/chain` and the rail
+  highlights Analyse; **zero console errors, no page error**; server.log: "ERROR: panel.reactive - Callback failed for
+  object named 'Location…' changing properties {'hash': …}" + traceback, then "ERROR tornado.application: Exception in
+  callback … ServerSession.with_document_locked … RuntimeError('deliberate render failure …')" + traceback. (screenshot 20)
+- Literal check as the brief asked: main.py's try/except temporarily commented out (backup, edit, restart, measure,
+  restore; `cmp` against the backup = identical): same result from navigation
+  (`screenshots/loud-failure-main-try-commented/navigate-from-corpus.png`); a fresh load straight onto the deep link
+  shows the "loading…" placeholder forever with Analyse highlighted, console only Bokeh's normal info lines
+  (`…/fresh-deep-link.png`). Verdict: without an explicit try/except + error card, a Python exception in a Panel
+  callback is invisible in the browser — the historical silent-failure class, reproduced on Panel 1.9.3.
+
+## 9. Export + wrap-up (~19:36)
+- Export run (Could): writes `runtime/<stamp>/exports/run-<job>.json`; smoke run 4 green (0 failures) with the export
+  check added. Modal: GridBox(height, scroll) did not clip its last row over the footer → wrapped in a scrolling Column
+  (verified by a modal-only probe, 22 cards / 17 disabled, screenshot 09 refreshed); chain row "waits for 0N" now
+  tracks the running step; running badge no longer carries a frozen elapsed (the bar text does).
+- `find DATA/ -newermt "2026-09-15 18:30" -type f` → nothing. B's server on 8766 killed. A's 8765 untouched.
+- LOC: app/ 2,951 + smoke.py 428 + run_app.py 88. Dispatch seam `renderer.render` 14 lines; `_scores` 22, `_spanset`
+  16, `_signal` 12, `_encoding` 46; renderer.py 211 non-blank lines for all seven types.
+- Not done: Cross-channel (inert, by design); tier-1 grips are Bokeh's RangeTool box (no grooved blue grips);
+  motif overlay/family medoid (no families in DB); modal cards cannot carry bold names/chips; per-row stale veil is a CSS
+  opacity on the pane; the History popover floats in flow under the toolbar (no anchored popover primitive).

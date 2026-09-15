@@ -33,6 +33,12 @@ def snapshot(rt) -> dict:
         cache = {k: v for k, v in pn.state.cache.items() if k in ("zoom_stats", "heatmap", "rows", "events", "block", "signal", "last_export")}
     out = dict(cache)
     out["runtime"] = rt.describe()
+    bv = pn.state.cache.get("block_fig")
+    if bv is not None:
+        try:
+            out["block_geometry"] = bv.geometry()
+        except Exception as e:  # pragma: no cover
+            out["block_geometry_error"] = str(e)
     try:
         from .main import get_manager
         m = get_manager(rt)

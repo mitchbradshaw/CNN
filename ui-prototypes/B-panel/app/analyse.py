@@ -45,8 +45,6 @@ def badge_html(row: dict, testid: str) -> str:
     if st == "cached" and t is not None:
         txt += f" · {RS.fmt_timing(t)}"
         title = (f"core step time {t:.3f} s" + (" — 0.0 is the core's own prefix-cache hit signal" if t == 0 else "")) if row.get("timing_is_core") else f"wall {t:.3f} s"
-    elif st == "running" and row.get("started_at"):
-        txt += f" · {time.time() - row['started_at']:.1f} s"
     return f'<span class="badge {cls}" data-testid="{testid}" title="{esc(title)}">{esc(txt)}</span>'
 
 
@@ -205,7 +203,7 @@ class ChainView:
         elif job is not None and job.status == "failed" and stale is None:
             k = (job.error or {}).get("step") or 0
             self.run_btn.name, self.run_btn.disabled = f"↻ Retry from {k + 1:02d}", False
-            reason = f"failed at {k + 1:02d}" + (f" · 01–{k:02d} cached" if k else "")
+            reason = f"failed at {k + 1:02d}" + ((" · 01 cached" if k == 1 else f" · 01–{k:02d} cached") if k else "")
         elif stale is not None and job is not None:
             self.run_btn.name, self.run_btn.disabled = f"↻ Re-run from {stale + 1:02d}", False
         else:
@@ -384,7 +382,7 @@ class ChainView:
             info["type"] = "running"
             return pane
         if st == "waiting":
-            k = job.current_step if job is not None and job.current_step is not None else i - 1
+            k = job.current_step if job is not None and job.current_step is not None and job.current_step < i else i - 1
             info["type"] = "waiting"
             return pn.pane.HTML(f'<div class="waits" style="height:{ROW_H - 12}px" data-testid="waits-{i + 1}">⌛ waits for {k + 1:02d} · last result hidden</div>',
                                 sizing_mode="stretch_width", margin=0)
@@ -514,7 +512,7 @@ class ChainView:
             payload = row["payload"]
             sig = (i, RS.step_name(step), json.dumps(step.get("params"), sort_keys=True, default=str), row["status"],
                    id(payload), row.get("timing"), row.get("invalid_reason"), row.get("over_ceiling"),
-                   job.id if job is not None else None, len(self.steps))
+                   job.id if job is not None else None, len(self.steps), job.current_step if job is not None else None)
             cached = self.row_cache.get(("step", i))
             if cached is None or cached[0] != sig or row["status"] == "running":
                 if cached is not None and cached[0] == sig and row["status"] == "running":
@@ -562,6 +560,7 @@ class ChainView:
 
     def update_footer(self, v, rows, job):
         chip, kind = RS.terminal_wording(v.get("terminal_kind"), v.get("terminal_label"))
+        self.handoff2.name = "→ Pass to Review"
         n_invalid = sum(1 for j in v.get("junctions", []) if not j["ok"])
         if n_invalid:
             line = '<b>Chain is invalid</b><div class="mono small muted">fix the red junction · validation runs on every edit</div>'

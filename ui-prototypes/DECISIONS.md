@@ -369,3 +369,9 @@ P2 edits directly (block-page copy, axis end labels, computed-vs-cached wording,
 run label, null chips, symbol key, chip contrast, recommend wording, row render-failure reset key,
 dialog focus trap, estimate wording) plus REPORT §5 corrections. Smoke test green again (0 failures,
 19 screenshots). Per the brief, A stops here; remaining P2s are listed in REPORT §4.
+
+## 12. User instruction (2026-09-15, in chat): one critique round for B only
+
+"just do one round of critique on prototype B. i am already impressed with A." So: B gets a single
+three-critic round, its most severe findings are fixed once, and then B stops. No further work on A.
+No prototype C.
