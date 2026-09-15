@@ -314,3 +314,49 @@ agents by directory; **both were cut off by the account's session usage limit af
 Analyse fixer had finished only the store's liveness/polling fallback). They were relaunched from
 the on-disk state with "read your directory's diff first". Recorded as orchestration friction:
 a wall-clock usage cap, not the stack, was the largest single delay of the night.
+
+## 9. Sequencing decision — B's build started during A's round 2 (2026-09-15 ~14:35)
+
+The brief says B comes only once A is complete through its critique rounds. A is complete on
+every Must/Should item and has been through round 1 + fixes; round 2 is a bounded re-check whose
+fixes are small by rule ("fix again, then stop"). The account's usage limit has now cut off
+subagents three times (readers once, fixers once, round-2 critics once — the critics' 11 minutes
+of work were lost entirely), so I judged that starting B's single long builder in parallel with the
+bounded round 2 reduces the risk of ending the night with no B at all, without taking anything
+from A. Round 2 was also made lighter (medium effort, ~40 tool calls, re-check scope) so a cutoff
+is less likely to waste it again. If this is judged a deviation from the brief, it is a deliberate
+one and the reason is here.
+
+## 10. The pytest gate (run 2026-09-15 17:29–17:36 local) — result and a real-data finding
+
+**Result: 1296 passed, 41 failed** (`pytest -n auto`, 406 s). The failures are **not caused by
+the prototypes**: `git diff --stat main -- Working Adapters UI tests scripts pytest.ini
+environment.yml` is empty, and pytest only collects `tests/`. Two failure kinds, both present on
+`main` @ 208e72c:
+- A test/code contract mismatch: `tests/test_ui_responsiveness.py::_empty_grid` calls
+  `LibraryGrid(conn)` but `UI/workspaces/library/grid.py:74-76` expects an `app` exposing `.conn`
+  (`AttributeError: 'sqlite3.Connection' object has no attribute 'conn'`) — the library-grid,
+  library-detail, motif-browser and responsiveness tests.
+- Windows file locks at teardown: `PermissionError [WinError 32]` removing a temp `.npy` / `.sqlite`
+  that is still memory-mapped or open (`test_library_grid`, `test_materialize_arbitrary_file`),
+  reproduced serially, so not an xdist artefact.
+
+**Real-data finding — the suite writes into `DATA/` through the junction.** The brief prescribes
+a junction from the worktree's `DATA` to the real `DATA` and asks for `pytest` in the worktree; the
+repo's tests assume a worktree-local fixture `DATA/` (CLAUDE.md: "Your worktree has its own DATA/
+fixture database; it is not the real one"). With the junction those assumptions no longer hold.
+Files the suite wrote during its run (mtimes 17:34–17:36, all inside the run window):
+- `DATA/derived/step_cache/{0111ee82…/0/features.parquet, 0111ee82…/0/windowset.npz,
+  0a00dbd3…/0/scores.npz, 2a42e965…/0/scores.npz, bf50caf2…/0/scores.npz}` — **re-written with
+  identical sizes** (content-addressed prefix-hash directories, so almost certainly identical bytes;
+  mtimes changed). `tests/test_step_cache.py` is the writer.
+- `DATA/derived/encodings/UNITTEST_encoding_view{,_dsax}/CH00/…` — 5 new `.txt` files
+  (`tests/test_encoding_view.py`, `tests/test_encoding_view_dsax.py`).
+- `DATA/derived/models/catalogue_classifier_{16750c76…, 31895944…, 3d7fd04e…, ad10caae…}.joblib`
+  new, and `…f918586712c715e2.joblib` (existing since 4 Sep) **overwritten** (same size).
+- `DATA/db/annotations.sqlite` is **unchanged** (mtime and size identical to the start snapshot).
+
+None of these were deleted (rule 5). They are listed for the user. Consequence for the brief's own
+rule 7: the suite **must not be re-run in a worktree whose DATA is a junction to the real data**;
+I have not re-run it, and the closing DATA check reports these files as UNEXPECTED rather than
+accepting them silently.
