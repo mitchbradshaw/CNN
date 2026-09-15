@@ -61,3 +61,21 @@ mismatch and Windows `WinError 32` file locks at teardown (the lock failures in 
 set comparison was not possible; instead every failure was classified, and none is attributable to this
 night because no collected file changed. The failure list is `webui/PYTEST_GATE_TASK1.txt`.
 `test_materialize_arbitrary_file` failed in the baseline and passed here — a lock flake, not a fix.
+
+### 1.7 Old worktree: junction removed, worktree and branch left for you
+Before touching the old worktree I listed every reparse point in it (only `CNN-ui-proto\DATA`, a junction
+to the real `DATA/`) and every process whose command line mentions it (none; the only listener on 8765 was
+my own bridge). I removed the link with `cmd /c rmdir` (no `/s`) and confirmed
+`DATA/db/annotations.sqlite` still exists with its mtime (2026-09-13 11:02:54 UTC) and size unchanged.
+**`git worktree remove --force C:/Users/mmebr/Documents/CNN-ui-proto` was then blocked by this session's
+permission classifier**, and the non-force form refuses because the worktree holds untracked files
+(`.venv`, `node_modules`, runtime DB copies). I did not work around it. The worktree directory and the
+branch `proto/ui-stack-slices` (fully merged into `main`) are still there; with the junction gone, removing
+them can no longer reach the real data. To finish:
+`git worktree remove --force C:/Users/mmebr/Documents/CNN-ui-proto` then `git branch -d proto/ui-stack-slices`.
+
+### 1.8 Tracker writes after the carry-forward file
+The brief orders 1e (close the tickets) before 1f (write `docs/wayfinder/fog-of-war.md`). The resolution
+comments on the signal-reduction, UI_CONTEXT-corrections and frontend↔core tickets must cite sections of
+that file, so I wrote and pushed it first and posted every comment afterwards, so no comment links a file
+that is not on `main` yet.
