@@ -3,29 +3,28 @@
 Branch `proto/ui-stack-slices`, worktree `C:/Users/mmebr/Documents/CNN-ui-proto`. Running log with
 every decision: `DECISIONS.md`. Checklist: `CHECKLIST.md`.
 
-> DRAFT — sections 1, 2, 4 and the B column are completed at close-out.
 
 ## 1. Summary table
 
 | Prototype | Stack | Start (one command) | URL |
 |---|---|---|---|
 | **A** | React 19 + TypeScript + Vite 8 + d3 (SVG) · FastAPI/uvicorn bridge in a project-local venv | `ui-prototypes/A-react-fastapi/start.ps1` (Git Bash: `./start.sh`) | http://127.0.0.1:8765 |
-| **B** | Panel 1.9.3 + Bokeh 3.9.2, in-process (reuses A's service modules) | `ui-prototypes/B-panel/start.ps1` | http://127.0.0.1:8766 |
+| **B** | Panel 1.9.3 + Bokeh 3.9.2, in-process (reuses A's service modules read-only) | `ui-prototypes/B-panel/start.ps1` (Git Bash: `./start.sh`) | http://127.0.0.1:8766 |
 
 | Checklist item | A | B |
 |---|---|---|
-| 1 Shell (rail + header; Explore/Analyse live, others inert) | done | |
-| 2 Explore › Corpus (real heatmap, colour-by, selection → bottom bar, Open) | done | |
-| 3 Explore › Signal (721 h pan/zoom, per-viewport decimation, tinted bands, send span) | done | |
-| 4a Composition (source row from the span; insert modal with real adapters, disabled with reasons) | done | |
-| 4b Rows on a shared axis, badges, one-line summaries | done | |
-| 4c One dispatch seam over all seven types; awkward types real | done — Scores, Encoding (symbolic), WindowSet, Grouping, Model all run for real; Encoding image runs only on spans ≤ 5000 samples (core cap) | |
-| 4d Run against the untouched core on the DB copy; live per-row progress; cancel; running/failed/invalid states | done (progress is per step — the core reports no within-step fraction) | |
-| 4e Suffix re-run shows prefix rows `cached · 0 s` | done (core `step_timings` 0.0 on the prefix) | |
-| 5 Block page with a draggable control bound to a parameter | done — Threshold-to-spans page: draggable threshold over the score series and histogram; marks downstream stale. (SAX cutlines are learned by the adapters, not parameters — see §5) | |
-| 6 Run history popover; Save template | done (history from the DB copy + live jobs; templates saved to the DB copy) | |
-| 7 Export run (simple report) | partial — JSON export of recipe + timings + payloads under `runtime/<stamp>/exports/`; no rendered figures | |
-| 8 Cross-channel view | missing (button present, inert, labelled out of scope) | |
+| 1 Shell (rail + header; Explore/Analyse live, others inert) | done | done |
+| 2 Explore › Corpus (real heatmap, colour-by, selection → bottom bar, Open) | done | done |
+| 3 Explore › Signal (721 h pan/zoom, per-viewport decimation, tinted bands, send span) | done | done — the span box is Bokeh's RangeTool overlay, without the frame's grooved grips |
+| 4a Composition (source row from the span; insert modal with real adapters, disabled with reasons) | done | done — modal cards are multi-line button labels (no rich card in Panel) |
+| 4b Rows on a shared axis, badges, one-line summaries | done | done (one shared `Range1d` + one crosshair `Span`) |
+| 4c One dispatch seam over all seven types; awkward types real | done — Scores, Encoding (symbolic), WindowSet, Grouping, Model all run for real; Encoding image runs only on spans ≤ 5000 samples (core cap) | done — same seven-type payloads; `renderer.render` dispatches to seven Bokeh renderers |
+| 4d Run against the untouched core on the DB copy; live per-row progress; cancel; running/failed/invalid states | done (progress is per step — the core reports no within-step fraction) | done — in-process thread, page polls the job every 200 ms |
+| 4e Suffix re-run shows prefix rows `cached · 0 s` | done (core `step_timings` 0.0 on the prefix) | done |
+| 5 Block page with a draggable control bound to a parameter | done — Threshold-to-spans page: draggable threshold over the score series and histogram; marks downstream stale. (SAX cutlines are learned by the adapters, not parameters — see §5) | done — `PointDrawTool` cut; x snaps back via a server round trip, data reaches Python on release |
+| 6 Run history popover; Save template | done (history from the DB copy + live jobs; templates saved to the DB copy) | done — popovers render in page flow, not anchored |
+| 7 Export run (simple report) | partial — JSON export of recipe + timings + payloads under `runtime/<stamp>/exports/`; no rendered figures | partial — same JSON export |
+| 8 Cross-channel view | missing (button present, inert, labelled out of scope) | missing (inert) |
 
 ## 2. Why A ranked first (and what building taught)
 
@@ -60,7 +59,20 @@ the heaviest criterion.
   fixer agents once and the reader phase once; Vite 8 binding `::1`, React 19 dropping the
   global `JSX` namespace, and Windows `cp1252` consoles were the only toolchain surprises.
 
-**B is judged in §3 and §4 after its build**; the closing recommendation is in §7.
+**What building B changed.** Nothing in B's build or critique overturned the ranking; three
+things sharpened it.
+- *Loud failure is the separator the audit predicted, and it is now measured, not asserted.* On
+  Panel 1.9.3 an exception in a callback leaves the previous page on screen with a clean console and
+  a line in `server.log`; B reproduced it deliberately, and its critic then hit the same class by
+  accident (a Bokeh image row that failed in the browser while Python reported it drawn). In A the
+  equivalent is a red card and a console error that fails the test gate.
+- *The frames are a bespoke web design.* Every place B had to approximate a designed component with
+  a widget (cards, grips, draggable lines, popovers, the font) is a visible departure; A drew them
+  directly. B's builder hit three silent Bokeh behaviours on the way.
+- *B's real advantages are real but smaller than they looked:* no bridge to write (A's bridge was
+  ~1,660 lines, but it is now written and critiqued twice), in-process cancel, no build step, and a
+  shared axis that is one object. Zoom and interaction latency do not separate the stacks: both are
+  interactive (A median round trip 9–20 ms, B 23 ms).
 
 ## 3. Evidence gathered while building, per stack
 
@@ -137,9 +149,61 @@ the detrended output is ±0.003 mV, so "input ghosted behind" cannot share the r
 became labelled approximations or explicit empty states. The one design/stack tension: the
 canonical time axis (spec §0, hours since start) versus the frames' seconds on a 50 s example.
 
-### B — Panel + Bokeh
+### B — Panel 1.9.3 + Bokeh 3.9.2 (in-process)
 
-(filled after B is built)
+Built by one agent (two sessions after a stall) in ~70 minutes of agent time. B imports A's service
+layer unchanged, so the comparison isolates the frontend. Its own runtime dir is `B-panel/runtime/`.
+
+**Zoom latency on the full 721 h channel.** 12 wheel steps from 480.7 h down to 5.6 h, about 2,500
+points per viewport. Server decimation min 0.39 / median 2.18 / max 12.7 ms; server total 5.8–21 ms;
+browser round trip (range leaves the browser until the matching data lands) **min 14.9 / median 23.2 /
+max 41.6 ms**. A measured median 9–20 ms on the same kind of sequence. Both are interactive; B pays an
+extra websocket hop per viewport, and has no immediate CSS-transform bridge during a gesture.
+
+**Run and progress round trip.** Click to "last run" 1.29 s on a 5.6 h span (MP 0.32 s core). Progress
+is a 200 ms `add_periodic_callback` poll of the in-process job object; no transport to design. Suffix
+re-run after dragging the threshold 8.0 → 6.128: step_timings {0: 0.0, 1: 0.0, 2: 0.0005}, badges
+`cached · 0 s` on the prefix. Cancel is the same cooperative `threading.Event`.
+
+**What a thrown render error looked like — the decisive measurement.** With B's own catch
+(`?throw=1`) the row shows a red error card and the log carries the traceback, but the **browser
+console stays clean**, so a console-error gate cannot see it. Without the catch (`?throw=1&uncaught=1`,
+and separately with `main.py`'s `try/except` literally commented out and then restored): navigating
+from Corpus leaves **the Corpus page on screen while the URL says `#analyse/chain`** and the rail
+highlights Analyse; a fresh deep link shows "loading…" forever. **Zero console errors, no page error.**
+The only trace is `server.log` (`panel.reactive - Callback failed for object named Location…` and a
+tornado `Exception in callback` with the traceback). This is the historical silent-pane failure
+class, reproduced on Panel 1.9.3 with no HoloViews involved: every failure must be caught and drawn by
+hand, and a test gate must read the server log, because the browser never learns of it.
+
+**Install and build friction.** None to install; no build step; the loop is restart + reload (~20
+restarts at a few seconds each). The friction is elsewhere — the builder's log names three **silent**
+Bokeh behaviours it hit: a `ColumnDataSource` that no renderer references is not serialised to the
+browser, so writes to it vanish and its `js_on_change` never fires, with no error (cost three
+restarts); `source.stream()` does not fire `js_on_change('data')`; and any exception in a Panel callback,
+including the hash router, leaves the previous page on screen. Plus: the browser hash reaches the
+server after `onload`, which clobbered every deep link until handled; every widget style needs
+`:host(.cls)` rules because `css_classes` land on shadow hosts; no clickable rich card; `stretch_width`
+cards in a `Row` made a 5,464 px page; `fig.inner_width` raises until the browser lays out;
+`RangeTool` stopped being a `GestureTool` in 3.9; `PointDrawTool` drags in both axes, so a vertical cut
+needs a server round trip to snap x; Bokeh stacks transparent canvas layers per figure, so naive
+"did it paint" checks report blank on healthy plots; `pn.state.cache` is invisible to Playwright, so a
+read-only tornado debug route was added for the smoke test.
+
+**Lines of code.**
+
+| part | lines |
+|---|---|
+| B's own app (`app/*.py`) | 2,935 (analyse 604, signalview 485, blockpage 409, explore 269, runstate 259, renderer 246, main 177, modal 167, charts 127, theme 97, shell 64, debug 44) |
+| — dispatch seam `render()` | 14 lines; per type: signal 14 · scores 24 · spanset 18 · encoding 48 · windowset 20 · grouping 20 · model 16 |
+| service layer | 0 new (A's `server/` imported unchanged) |
+| smoke test | 434 |
+| adding an eighth type touches | A's `serialize.py` (shared) and B's `renderer.py` (one function + one dict entry) |
+
+**Where the stack fought the design.** The frames' custom surfaces: the span box has no grooved
+grips (RangeTool's overlay), modal cards cannot be rich (button labels), popovers render in page
+flow, checkbox labels would not take the mono font, and the draggable cut needs a server round trip.
+The shared time axis and the crosshair were easier than in A (one `Range1d`, one `Span`).
 
 ## 4. Critique rounds
 
@@ -192,6 +256,47 @@ chain rows; adding an eighth type still touches four files and the block page st
 adapter name inside one 550-line file; Explore does not warn that a dragged span exceeds the default
 chain's local ceiling (Analyse does); full keyboard operability of the heatmap and cut line; per-card
 estimates in the insert modal; motif pairs from the core.
+
+### B — round 1 (the only round, per your instruction; three critics; 2 P0, 8 P1, ~20 P2)
+
+**Verdicts.** Backend: "mostly sound" — core untouched, writes only to B's runtime copy (0 files under
+DATA/ or Results/ newer than 19:00), prefix cache really hit (suffix re-run timings 0.0 / 0.0 / 0.0002),
+per-viewport re-fetch through the same envelope, M4 refused, failures reported honestly. Fidelity:
+"B has the frames' structure right and gets the details wrong in the places where Panel/Bokeh widgets
+had to stand in for designed components". Robustness: the Must flow works and every Panel round trip
+was fast (modal open 270 ms, drag to parameter 73 ms, cached re-run 768 ms, viewport re-fetch
+10–30 ms, heatmap first paint 1.14 s), "robustness is where it falls short, and the reason is the stack
+itself".
+
+**P0.** (1) The built-in gramian template's image row throws inside Bokeh's JavaScript and blanks every
+chain row except Source, while the Python side (`/b/debug`) reports the image as drawn — the silent-pane
+class, reached by an ordinary template the smoke test did not run. (2) The Cancel button lags the job
+by up to one 200 ms poll; clicking a stale "■ Cancel" after completion silently starts a duplicate run
+that writes detections (reproduced twice).
+
+**P1.** Exceptions outside B's two hand-written try/excepts reach only `server.log` (step-row and
+block-page renderers, the run poll, the viewport fetch, widget callbacks); a reload or a second tab
+loses the sent span, the run link and its results because state lives in the Panel session; freshly
+computed steps are badged "cached"; wheel zoom collapses the viewport to 0 s; a zero-length span is
+accepted as the source with Run enabled; the "shared" time axis drifts 32 px from the rows although
+they share one `Range1d`; all 22 insert-modal cards overflow and clip their reasons; the RangeTool span
+box is 3.7 px wide with no grips and a move-drag makes a new selection.
+
+**Stack evidence the three lenses agreed on.**
+- *Loud failure.* In Panel a server-side exception becomes a log line and the old DOM stays; the browser
+  console stays clean, so a Playwright console gate cannot see it. B is loud only where its author
+  wrapped the code by hand; "forgot one wrapper" is a silent failure. In A the same mistake is a red
+  card plus a console error that fails the gate. And B's P0 image bug shows the second face of it: the
+  Python side can succeed while Bokeh fails in the browser.
+- *Fidelity.* Every designed component (rich clickable card, grip handle, draggable line, dot-beside-
+  checkbox, floating toast, anchored popover, the Inter font) had to be approximated from a widget or a
+  Bokeh tool, and each visibly departs from its frame. A drew all of them directly.
+- *State.* The Panel session is the unit of state; A keeps the draft in the client and re-attaches to
+  runs by id, so A survives reloads and B does not without extra work.
+- *In B's favour.* No transport to design (0 new service-layer lines), in-process cancel, no build step,
+  and a shared axis that is conceptually one object.
+
+**Fix pass.** (in progress — see below)
 
 ## 5. Deviations from the pages/spec, with justification
 
@@ -251,13 +356,40 @@ estimates in the insert modal; motif pairs from the core.
 | 18-chain-cancelled.png | chain-1d after Cancel |
 | 19-loud-failure-render-error.png | (evidence) thrown render error |
 
+`ui-prototypes/B-panel/screenshots/` uses the same numbering (01–18 pair to the same frames as A's),
+plus `19-loud-failure-render-error.png` (B's caught `?throw=1` card), `20-loud-failure-uncaught.png`
+(Corpus still painted while the URL is `#analyse/chain`, console clean) and
+`loud-failure-main-try-commented/{navigate-from-corpus,fresh-deep-link}.png` (the same with the router's
+try/except literally commented out). Compare A's and B's same-numbered screenshots side by side.
+
 The builders' own walkthrough screenshots (dev servers) are under `screenshots/dev-explore/`
 and `screenshots/dev-analyse/` (includes dsax, windows_model, templates, run-log modal,
 reload-mid-run).
 
 ## 7. Open questions and recommended next step
 
-(finalised at close-out; the items below are the ones already known after A)
+**Recommendation: build on A — React + TypeScript (Vite) with SVG charts drawn directly on d3
+scales, over a thin FastAPI bridge to the untouched core.** Runner-up: **Panel + Bokeh (B)**, which
+lost on loud failure (silent by default, loud only where every callback is wrapped by hand), on
+fidelity to the designed pages, and on state that does not survive a reload; it would win only if
+avoiding a second toolchain (Node) outweighed those, which #12's weighting says it does not.
+
+What A's evidence says to carry into the build ticket:
+- Keep the **one serialiser per interchange type on the server and one renderer switch on the
+  client**; it held for all seven types and survived two critique rounds.
+- The bridge is the part that needs its own tests: SSE with a polling fallback, cancel between
+  steps, reload re-attach, the meta sidecar for cache-restored steps, the held-out guard on every
+  route. A's `server/` is a usable starting point, not a spike to discard.
+- Plotting: d3 scales + hand-written SVG was fast to build and fully faithful at these densities
+  (≤ ~3k points per path). Publication export was out of scope; #12 still has to decide it
+  (the SVG is exportable, but matplotlib parity was not tested).
+- Toolchain consequence for #12's sign-off: Node 25 + npm for the client (project-local
+  `node_modules`), FastAPI + uvicorn for the bridge (a project-local venv worked alongside the conda
+  env without conflicts).
+
+Next step: take this to #12 as the decision record (an ADR is warranted), then open the three
+downstream tickets #12 names — how the frontend reaches the core (A's bridge is the proposal),
+where the new tree lives, and its test gates (A's Playwright smoke pattern is the proposal).
 
 Open questions for you:
 1. **Files written into the real `DATA/` during the night — none deleted, all yours to decide.**

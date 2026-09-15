@@ -375,3 +375,20 @@ dialog focus trap, estimate wording) plus REPORT §5 corrections. Smoke test gre
 "just do one round of critique on prototype B. i am already impressed with A." So: B gets a single
 three-critic round, its most severe findings are fixed once, and then B stops. No further work on A.
 No prototype C.
+
+## 13. B critique round 1 (the only round) → one fix pass
+
+Three critics, 2026-09-15 ~19:40–20:00. Headline findings (full JSON in the session scratchpad):
+- **P0** gramian image row throws in Bokeh JS ("expected a 2D array") and blanks every chain row while
+  `/b/debug` says the image was drawn — the historical silent-pane class, hit by an ordinary template.
+- **P0** a stale "■ Cancel" (the 200 ms poll lags the job) clicked after completion starts a duplicate run.
+- **P1** loud failure is manual in Panel: exceptions outside B's two try/excepts reach only
+  `server.log` (row renderers, block page, run poll, viewport fetch, widget callbacks), console clean.
+- **P1** reload or a second tab loses the sent span, the run link and results (state lives in the Panel
+  session); computed steps badged "cached"; wheel zoom collapses to 0 s; a zero-length span is
+  accepted with Run enabled; the "shared" axis drifts 32 px from the rows; modal cards overflow;
+  the RangeTool span box has no grips and a move-drag makes a new selection.
+- Stack evidence from all three lenses is recorded in REPORT §4.
+
+One fixer agent applies P0 → P1 → cheap P2, keeps the smoke test green (adding the four built-in
+templates so the image path is exercised), then B stops.
