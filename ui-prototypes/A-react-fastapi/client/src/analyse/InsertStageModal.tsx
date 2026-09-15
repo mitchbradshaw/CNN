@@ -88,7 +88,7 @@ export function InsertStageModal({ steps, position, adapters, source, onClose, o
     return (
       <button className={`ins-card${ok ? '' : ' nofit'}${selected === a.name ? ' selected' : ''}`} onClick={() => ok && setSelected(a.name)} disabled={!ok} data-testid={`modal-card-${a.name}`} title={ok ? a.description : row?.reason}>
         <div className="hd"><Glyph adapter={a} /><div style={{ minWidth: 0 }}><div className="nm">{a.page_name}</div><div className="sg">{a.signature}</div></div></div>
-        <div className="chips"><span>{estText(a)}</span><span className={a.input_kind === 'signal' ? 'g' : ''}>{a.input_kind === 'signal' ? 'has null' : 'no null'}</span>{a.side_inputs.length > 0 && <span className="purple" style={{ background: 'var(--purple-100)', color: '#6a3ecf' }}>needs {a.side_inputs.map(s => s.name).join(', ')}</span>}</div>
+        <div className="chips"><span>{estText(a)}</span><span title="the core's null is a paired surrogate run, not a per-adapter declaration · surrogate runs are out of slice scope">null · not declared</span>{a.side_inputs.length > 0 && <span className="purple" style={{ background: 'var(--purple-100)', color: '#6a3ecf' }}>needs {a.side_inputs.map(s => s.name).join(', ')}</span>}</div>
         <div className={`fit${ok ? '' : ' no'}`}>{ok ? '✓ fits here' : `⊘ ${row?.reason ?? 'not evaluated'}`}</div>
         {a.known_broken && <div className="broken" title={a.known_broken}>⚠ known broken · {a.known_broken}</div>}
       </button>

@@ -252,6 +252,8 @@ class RunManager:
                     s["status"] = "cancelled"
             job.status = "cancelled"
             job.finished_at = time.time()
+            first_cancelled = next((s["index"] for s in job.steps if s["status"] == "cancelled"), i)
+            i = first_cancelled   # critique r2: name the stage that was stopped, not the last one that finished
             job.error = {"step": i, "message": str(e), "type": "RecipeCancelled"}
             self._emit(job, {"event": "run_end", "status": "cancelled", "step": i, "message": str(e),
                              "db_run_id": job.db_run_id, "elapsed_s": time.perf_counter() - t0})

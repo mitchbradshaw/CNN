@@ -360,3 +360,12 @@ None of these were deleted (rule 5). They are listed for the user. Consequence f
 rule 7: the suite **must not be re-run in a worktree whose DATA is a junction to the real data**;
 I have not re-run it, and the closing DATA check reports these files as UNEXPECTED rather than
 accepting them silently.
+
+## 11. Critique round 2 → final fixes for A (stop rule applied)
+
+Round 2 completed on the third launch (bounded re-check, incremental progress file). No P0/P1 in A's
+product; the two P0s are the real-data write inventory (`REAL_DATA_WRITES.md`). I applied 23 small
+P2 edits directly (block-page copy, axis end labels, computed-vs-cached wording, cancelled step index,
+run label, null chips, symbol key, chip contrast, recommend wording, row render-failure reset key,
+dialog focus trap, estimate wording) plus REPORT §5 corrections. Smoke test green again (0 failures,
+19 screenshots). Per the brief, A stops here; remaining P2s are listed in REPORT §4.

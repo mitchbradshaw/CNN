@@ -153,9 +153,45 @@ canonical time axis (spec §0, hours since start) versus the frames' seconds on 
 
 **P2 (30) — fixed unless noted.** db_run_id on failed/cancelled runs; cancelled runs shown as failed in history; params normalised before hashing; captions/failed message ellipsised; Ctrl+Z undo; Escape/dialog role/focus; threshold line red→amber; 'Spans vs cut' + hand-offs cards on the threshold page; per-adapter glyphs (were keyed on signature only); dSAX cutline strip empty after a cached run; '= recommended' meant '= default'; degenerate 'disagree' count; 'N need you' counted every failed job in the server; first tick label half off-surface; linear heatmap ramp collapsed by one hot cell; motif label overprinting y labels; 'overlay F-03 medoid' placeholder leak; empty Model card; toast killed before painting; badge/plot disagreement on an undrawable payload; Explore had no per-tier error boundary; estimate chip ignored the cache prediction; elapsed counter restarted after reload; TYPE_LABEL duplicated server/client; read endpoints accepted inverted windows; fit-from-deep-zoom stretched path for one round trip; **left open:** full keyboard operability of handles/heatmap/cut line (partial: handles + span svg only), per-card estimates in the insert modal (needs a hypothetical-recipe endpoint), motif *pairs* from the core.
 
-### A — round 2
+### The pytest gate (rule 7)
 
-(filled after round 2)
+`pytest -n auto` in the worktree: **1296 passed, 41 failed** in 406 s. The failures are
+pre-existing on `main` @ 208e72c, not caused by the prototypes: every tested tree is byte-identical
+to `main` (`git diff --stat main -- Working Adapters UI tests scripts` is empty) and pytest only
+collects `tests/`. They are a test/code contract mismatch (`LibraryGrid(conn)` in the tests versus
+`LibraryGrid(app)` in `UI/workspaces/library/grid.py`) and Windows file locks at teardown
+(`PermissionError [WinError 32]` on still-mapped temp `.npy`/`.sqlite`, reproduced serially). The
+run also wrote into the real DATA through the junction (§7, question 1), so it was not re-run.
+
+### A — round 2 (bounded re-check; the first two launches were killed by usage limits)
+
+**Verdicts.** Fidelity: every round-1 fidelity finding fixed or partly fixed in the live app, no
+P0/P1, no placeholder leakage (`708` appears only as CH1_A1's real count). Backend: every round-1
+backend finding fixed *in the running server*; core untouched; cache hits real (prefix timings 0.0,
+restored Scores keep `m` via the sidecar); peaks exact at 721 h and 60 s; seven types dispatched;
+M4 423 on every route. Robustness: every forced error visible, never blank; reload mid-run
+re-attaches on the server clock; zoom over 721 h median round trip 9.4 ms (min 6.1 / max 69.1 over
+23 fetches, paint median 12 ms).
+
+**P0 (2, both real-data writes, neither fixable by deletion under rule 5).** The round-1 stray joblib
+is still present (documented), and the **repo's own pytest suite wrote into the real DATA** through
+the junction (DECISIONS §10; `REAL_DATA_WRITES.md` lists every file with size and hash).
+
+**Fixed after round 2 (P2).** Literal "0N" in block-page copy; stale REPORT §5 (D-A3 reworded,
+meta-sidecar noted, D-A13/D-A14 added); chain and block axes print their t0/t1 ends; a computed step
+reads "computed · now cached" and the chip says "N computed · M from the step cache" instead of "all
+cached"; a cancelled run names the step that never started; the block page says "▶ Run chain" when
+nothing has run for the source; inferred "has null" chips removed; the dSAX in-plot key no longer
+covers the strip; the amber threshold chip is legible; the recommend header no longer claims values
+it does not have; a row render failure keeps its "render failed" badge until a new result arrives
+(round 1 had fixed this only for the source row); Tab is trapped inside dialogs; estimates read "≤ N
+core est.".
+
+**Left open (stop rule).** Y-axis labels and matrix-profile motif chips still overprint traces in
+chain rows; adding an eighth type still touches four files and the block page still dispatches on the
+adapter name inside one 550-line file; Explore does not warn that a dragged span exceeds the default
+chain's local ceiling (Analyse does); full keyboard operability of the heatmap and cut line; per-card
+estimates in the insert modal; motif pairs from the core.
 
 ## 5. Deviations from the pages/spec, with justification
 
@@ -163,7 +199,7 @@ canonical time axis (spec §0, hours since start) versus the frames' seconds on 
 |---|---|---|---|
 | D-A1 | The default chain is Baseline removal (detrend) → Matrix profile → Threshold-to-spans, not baseline → noise floor → symbolic encoding → drop detection | `Encoding` is terminal in the registry: no adapter consumes it, so "Encoding → SpanSet" cannot exist. The brief says compose the closest real chain. dSAX, window-matrix/cluster/classifier and gramian chains are built-in templates so all seven types run | §6.1, chain-1 |
 | D-A2 | The draggable control is the **threshold** on the Threshold-to-spans page, not SAX cutlines | SAX cutlines are *learned* by the adapters (Lloyd-Max / Mean-Shift / KDE) and surfaced in `meta.details`, not parameters; drawing them is honest but dragging them would assert a parameter the core does not have. The dSAX page draws the learned cutlines dashed and labelled "learned · not a parameter" | §6.8 row `Signal → Encoding`; chain-3 |
-| D-A3 | Surrogate toggle is on-by-default but inert; "This parameter against the null" is an explicit empty state | Null runs are out of slice scope; the core's null is a paired `preprocessing.surrogate` run, not a per-adapter declaration | §6.8 null column; chain-3 |
+| D-A3 | Surrogate toggle is rendered OFF and disabled ("surrogate · not in this slice"), footers say "no null", the insert modal shows "null · not declared" rather than inferring one, and "This parameter against the null" is an explicit empty state | Null runs are out of slice scope; the core's null is a paired `preprocessing.surrogate` run, not a per-adapter declaration | §6.8 null column; chain-2, chain-3 |
 | D-A4 | Progress is per step with an elapsed timer, never a percentage | `execute_recipe` reports `on_progress(i, n, …)` before each step and `on_step_result` after; no within-step fraction (except window_matrix's own callback) | chain-1d "64 % · 0.2 s left" |
 | D-A5 | Cancel takes effect between steps | The core polls `should_cancel` once before each step | chain-1d Cancel |
 | D-A6 | Header chips are real counts ("N need you" = failed jobs this session; "Jobs · N" = running jobs); the frames' "3 need you", "6 runs · 4 methods", "708 / 1284" are not copied | "Nothing claims more than it knows" (§3); real data wins | shell-header, explore-1/2 |
@@ -173,9 +209,11 @@ canonical time axis (spec §0, hours since start) versus the frames' seconds on 
 | D-A10 | Inert controls are visible and titled "out of slice scope" (Cross-channel, Review actions, medoid overlay, bypass/duplicate/reorder, SLURM/upload, Analyse events, Pass to Review) | Brief: other workspaces visible but inert; keep the shape, do not fake behaviour | various |
 | D-A11 | Save span / tags / note are client-side stubs that write nothing | Explore never writes verdicts (P6); no annotation write path exists in this prototype at all | §5.2 |
 | D-A12 | Insert modal shows an estimate only for the selected card ("est. at run" on the others) | The core estimates a *recipe*, not a block; per-card estimates would need 22 hypothetical validations | chain-2 "≈ 0.2 s" per card |
+| D-A13 | A stage over its local ceiling disables Run (with the reason) and the bridge refuses the run with 422; it does not pause at that stage and hand off to HPC | Pausing needs the manifest-inbox / SLURM flow, out of slice scope; running it locally fails at once | §12 P4, P24; §9.6; chain-1g |
+| D-A14 | Estimates are shown as "≤ N core est." | `estimate_recipe_seconds` is a calibrated upper bound; measured 70–230× above actual on short spans, so "≈" would mislead | chain-1 "≈ 0.6 s" |
 
 **Backend gaps wrapped or stubbed** (none required editing the core):
-- No public read API for step outputs → payloads are built in `on_step_result` and kept in server memory per job; a cache-restored value loses `AdapterResult.meta` (SAX cutlines, MP indices), so those details exist only for steps that ran in this server's lifetime.
+- No public read API for step outputs → payloads are built in `on_step_result` and kept in server memory per job. A cache-restored step loses `AdapterResult.meta` (SAX cutlines, MP window, model card) in the core; the bridge keeps a JSON meta sidecar per prefix hash at first compute and restores it on a hit, so cached re-runs show the same detail.
 - `validate_recipe_steps` reports only the first bad junction, and treats an unknown adapter as valid → `server/chain.py` walks every junction with `check_step_compatibility` and reports unknown blocks as invalid.
 - `UI/analyse/chain_state.py` cannot be imported headless through its package (pulls Panel) and has no insert-at-position check → not reused (DECISIONS §4).
 - Step cache only writes steps > 1.0 s → `STEP_CACHE_WRITE_THRESHOLD_S` set to 0.0 in the redirected runtime.
@@ -222,8 +260,16 @@ reload-mid-run).
 (finalised at close-out; the items below are the ones already known after A)
 
 Open questions for you:
-1. **The stray joblib in the real `DATA/derived/models`** (§4, P0): delete it by hand, or keep it?
-   It is one additive 14 kB file from a read-only reader that executed the classifier adapter.
+1. **Files written into the real `DATA/` during the night — none deleted, all yours to decide.**
+   - `DATA/derived/models/catalogue_classifier_153815b9dea451b2.joblib` (14 kB): written by a
+     read-only *reader* subagent that executed the classifier adapter directly (§4, P0).
+   - Written by **the repo's own pytest suite** when I ran it as the brief's rule 7 asked, because
+     the worktree's `DATA` is a junction to the real data while the tests assume a local fixture
+     `DATA/`: 5 step-cache files re-written with identical sizes, 5 `UNITTEST_encoding_view*` text
+     files, 4 new classifier joblibs and one existing one (`…f918586712c715e2`) overwritten.
+     Exact list in DECISIONS.md §10. `annotations.sqlite` is unchanged.
+   - Worth a ticket: the brief's junction-plus-pytest combination is unsafe for this repo; either
+     tests redirect `STEP_CACHE_ROOT`/`MODEL_ROOT`/`ENCODING_ROOT`, or worktrees get a copied DATA.
 2. **Time axis convention.** Spec §0 says hours since recording start; frame chain-1 prints
    seconds for a 50 s span at t = 0. A uses hours with span-adaptive decimals everywhere. Confirm.
 3. **SAX cutlines.** §6.8 asks for draggable cutlines on the Encoding page, but the adapters learn

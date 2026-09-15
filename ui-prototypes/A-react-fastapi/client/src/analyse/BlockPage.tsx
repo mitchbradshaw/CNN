@@ -118,7 +118,7 @@ export function BlockPage({ index }: { index: number }) {
           <span className="spacer" />
           <button className="btn" onClick={saveAsTemplate} data-testid="save-template">▢ Save template</button>
           {running ? <button className="btn danger" onClick={cancel} data-testid="cancel-button">■ Cancel</button>
-            : <button className="btn primary" onClick={rerun} disabled={!canRun} data-testid="run-button" title={runTitle}>↻ Re-run from {pad2(rerunFrom + 1)}</button>}
+            : <button className="btn primary" onClick={rerun} disabled={!canRun} data-testid="run-button" title={runTitle}>{job ? `↻ Re-run from ${pad2(rerunFrom + 1)}` : '▶ Run chain'}</button>}
         </div>
         {st.run.error && <RunErrorCard error={st.run.error} kind={st.run.errorKind} />}
         {refused && <div className="error-card" style={{ padding: '8px 12px' }} data-testid="run-refused-card"><h3>run refused by the bridge (422)</h3><div className="mono small">{refused}</div></div>}
@@ -173,7 +173,7 @@ export function BlockPage({ index }: { index: number }) {
           <div className="stack">
             <div className="card card-pad pp" data-testid="params-panel">
               <div className="pp-head"><h3>Parameters</h3><span className="muted mono small">{ad ? `${ad.params.length} declared` : ''}</span>
-                {ad?.has_recommend && <span className="rec" title="this adapter declares a recommend hook for the span · the values it would recommend are not served by this slice">▏can recommend for this span</span>}</div>
+                {ad?.has_recommend && <span className="muted small" title="this adapter declares a recommend hook · the values it would recommend are not computed in this slice">recommend hook declared · not computed in this slice</span>}</div>
               {ad ? <ParamsPanel adapter={ad} params={step.params} onChange={setParam} disabled={running} /> : <div className="muted mono small">adapter {name} is not in the registry</div>}
               {stat.length > 0 && <div className="bp-tiles" data-testid="stat-tiles">{stat.map(t => <div className="bp-tile" key={t.k}><div className="k" title={t.k}>{t.k}</div><div className={`v${t.red ? ' red' : ''}`}>{t.v}</div></div>)}</div>}
               {row.payload && <div className="bp-info">{row.payload.summary}{stale ? ' · from the last run · stale' : ''}</div>}
@@ -205,7 +205,7 @@ export function BlockPage({ index }: { index: number }) {
           <div className="acts">
             <button className="btn" onClick={revert} disabled={!ad || running} data-testid="revert-defaults" title={running ? 'wait for the run' : 'reset every parameter of this block to the adapter defaults'}>↶ Revert to defaults</button>
             {running ? <button className="btn danger" onClick={cancel}>■ Cancel</button>
-              : <button className="btn primary" onClick={rerun} disabled={!canRun} title={runTitle} data-testid="footer-rerun">↻ Re-run from {pad2(rerunFrom + 1)}</button>}
+              : <button className="btn primary" onClick={rerun} disabled={!canRun} title={runTitle} data-testid="footer-rerun">{job ? `↻ Re-run from ${pad2(rerunFrom + 1)}` : '▶ Run chain'}</button>}
           </div>
         </div>
       </div></div>
@@ -238,7 +238,7 @@ function Strip({ label, sub, height, t0, t1, children, axis, testid }: { label: 
     <div className="bp-strip" data-testid={testid}>
       <div className="lbl"><b>{label}</b>{sub}</div>
       <div className="sur plot-surface" ref={ref} style={{ height: h }}>
-        {size.width > 0 && <svg width={w} height={h}>{children(x, w, height)}{axis && <TimeAxis x={x} y={height + 2} t0={t0} t1={t1} n={7} />}</svg>}
+        {size.width > 0 && <svg width={w} height={h}>{children(x, w, height)}{axis && <TimeAxis x={x} y={height + 2} t0={t0} t1={t1} n={7} ends />}</svg>}
       </div>
     </div>
   )
@@ -259,8 +259,8 @@ function DragLineH({ y, value, onChange, width, label, colour = 'var(--amber)', 
   return (
     <g data-testid={testid}>
       <line x1={0} x2={width} y1={py} y2={py} stroke={colour} strokeWidth={1.5} />
-      <rect x={width - 136} y={py + 3} width={132} height={14} rx={3} fill={colour} />
-      <text x={width - 70} y={py + 13} textAnchor="middle" fill="#fff" style={{ fontSize: 10 }}>{label} · drag</text>
+      <rect x={width - 136} y={py + 3} width={132} height={14} rx={3} fill="var(--amber-100)" stroke={colour} />
+      <text x={width - 70} y={py + 13} textAnchor="middle" fill="#8a4b00" style={{ fontSize: 10 }}>{label} · drag</text>
       <rect x={0} y={py - 7} width={width} height={14} fill="transparent" style={{ cursor: 'ns-resize' }}
         onPointerDown={e => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId) }}
         onPointerMove={move}
@@ -307,7 +307,7 @@ function runsAbove(env: EnvelopeSeries, thr: number): { start_s: number; end_s: 
 
 /* ---------------- Scores → SpanSet: threshold ---------------- */
 function ThresholdProcess({ scores, result, threshold, onThreshold, stale, t0, t1 }: { scores: ScoresPayload | null; result: SpansetPayload | null; threshold: number; onThreshold: (v: number) => void; stale: boolean; t0: number; t1: number }) {
-  if (!scores) return <div className="muted mono small">the upstream Scores are not loaded — run the chain so 0{'N'} Matrix profile has a result, then drag the cut here</div>
+  if (!scores) return <div className="muted mono small">the upstream Scores are not loaded — run the chain so the upstream Matrix profile stage has a result, then drag the cut here</div>
   const r = scores.value_range ?? [0, 1]
   const above = runsAbove(scores.envelope, threshold)
   const hist = scores.histogram
@@ -473,7 +473,7 @@ function DsaxProcess({ signal, enc, stale, t0, t1, trend }: { signal: EnvelopeSe
         }}
       </Strip>
       <Strip label={`dSAX k ${enc?.alphabet_size ?? '?'}`} sub={enc ? `${enc.n_symbols} symbols` : ''} height={40} t0={t0} t1={t1} axis testid="dsax-strip">
-        {(x, w, h) => enc ? <g>{renderByType(enc, { x, width: w, height: h, ghost: null, t0, t1 })}{stale && <rect x={0} y={0} width={w} height={h} fill="rgba(255,255,255,0.55)" />}</g> : <text x={4} y={14} fill="var(--muted)">no encoding yet</text>}
+        {(x, w, h) => enc ? <g>{renderByType(enc, { x, width: w, height: h, ghost: null, t0, t1, hideKey: true })}{stale && <rect x={0} y={0} width={w} height={h} fill="rgba(255,255,255,0.55)" />}</g> : <text x={4} y={14} fill="var(--muted)">no encoding yet</text>}
       </Strip>
       <div className="bp-legend"><span><i style={{ background: SYM3[0] }} />down</span><span><i style={{ background: SYM3[1] }} />same</span><span><i style={{ background: SYM3[2] }} />up</span><span><i style={{ background: 'var(--blue-600)' }} />PAA mean · own scale</span><span><i style={{ background: 'var(--red)' }} />cutlines · learned</span>{enc?.representatives && <span className="muted">representatives {enc.representatives.map(v => v.toExponential(1)).join(' / ')}</span>}</div>
       {tiles.length > 0 && <div className="bp-tiles" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginLeft: 76 }} data-testid="dsax-tiles">{tiles.map(t => <div className="bp-tile" key={t.k}><div className="k" title={t.k}>{t.k}</div><div className="v">{t.v}</div></div>)}</div>}
@@ -519,7 +519,7 @@ function SpansVsCut({ scores, threshold, onThreshold, resultN, stale }: { scores
         })()}
         {size.width > 0 && !curve && <div className="an-plot-empty">run the chain so the upstream Scores are loaded</div>}
       </div>
-      <div className="muted mono small" style={{ marginTop: 6 }}>{nowN !== null ? `≈ ${nowN} span${nowN === 1 ? '' : 's'} at the current cut (approximate)` : '—'}{resultN !== null ? ` · last run ${resultN}${stale ? ' · stale' : ''}` : ''} · drag the line to move the cut</div>
+      <div className="muted mono small" style={{ marginTop: 6 }}>{nowN !== null ? `≈ ${nowN} span${nowN === 1 ? '' : 's'} at the current cut (approximate)` : '—'}{resultN !== null ? ` · last run ${resultN}${stale ? ' · stale' : ''}` : ''} · the cut can be dragged once the upstream scores are loaded</div>
     </div>
   )
 }
@@ -544,7 +544,7 @@ function GenericProcess({ payload, ghost, stale, t0, t1, caption }: { payload: P
         {size.width > 0 && (payload ? renderByType(payload, { x, width: w, height: h, ghost, t0, t1 }) : <div className="an-plot-empty">no result yet · run the chain</div>)}
         {stale && payload && <><div className="an-plot-veil" /><Veil on /></>}
       </div>
-      <div style={{ paddingTop: 2 }}><svg width="100%" height={20}><TimeAxis x={x} y={2} t0={t0} t1={t1} n={7} /></svg></div>
+      <div style={{ paddingTop: 2 }}><svg width="100%" height={20}><TimeAxis x={x} y={2} t0={t0} t1={t1} n={7} ends /></svg></div>
     </>
   )
 }

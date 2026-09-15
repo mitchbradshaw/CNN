@@ -16,9 +16,9 @@
         "t1": 1002240,
         "px": 1304,
         "n_points": 2400,
-        "decimate_ms": 0.301499996567145,
-        "round_trip_ms": 7.0999999940395355,
-        "paint_ms": 13.700000017881393
+        "decimate_ms": 0.41629999759607017,
+        "round_trip_ms": 8.199999988079071,
+        "paint_ms": 9.399999976158142
       },
       {
         "seq": 2,
@@ -26,9 +26,9 @@
         "t1": 1001316.3874163145,
         "px": 1304,
         "n_points": 2576,
-        "decimate_ms": 0.5038999952375889,
-        "round_trip_ms": 10.900000005960464,
-        "paint_ms": 8.800000011920929
+        "decimate_ms": 0.39010000182315707,
+        "round_trip_ms": 10.200000017881393,
+        "paint_ms": 9.900000005960464
       },
       {
         "seq": 3,
@@ -36,9 +36,9 @@
         "t1": 1000655.9753122295,
         "px": 1304,
         "n_points": 2456,
-        "decimate_ms": 0.37220001104287803,
-        "round_trip_ms": 8.5,
-        "paint_ms": 11.299999982118607
+        "decimate_ms": 0.37319998955354095,
+        "round_trip_ms": 7.0999999940395355,
+        "paint_ms": 10.599999994039536
       },
       {
         "seq": 4,
@@ -46,9 +46,9 @@
         "t1": 1000183.7598455653,
         "px": 1304,
         "n_points": 1756,
-        "decimate_ms": 0.301499996567145,
-        "round_trip_ms": 10.099999994039536,
-        "paint_ms": 14
+        "decimate_ms": 0.4692000220529735,
+        "round_trip_ms": 10.600000023841858,
+        "paint_ms": 10.5
       },
       {
         "seq": 5,
@@ -56,9 +56,9 @@
         "t1": 999846.1109054906,
         "px": 1304,
         "n_points": 1883,
-        "decimate_ms": 0.2869000018108636,
-        "round_trip_ms": 7.300000011920929,
-        "paint_ms": 11.699999988079071
+        "decimate_ms": 0.3671000013127923,
+        "round_trip_ms": 10.400000005960464,
+        "paint_ms": 14.599999994039536
       },
       {
         "seq": 6,
@@ -66,9 +66,9 @@
         "t1": 999604.6812726601,
         "px": 1304,
         "n_points": 1347,
-        "decimate_ms": 0.2825999981723726,
-        "round_trip_ms": 8.400000005960464,
-        "paint_ms": 18
+        "decimate_ms": 0.35960000241175294,
+        "round_trip_ms": 10.599999994039536,
+        "paint_ms": 9.800000011920929
       },
       {
         "seq": 7,
@@ -76,9 +76,9 @@
         "t1": 999432.0514767669,
         "px": 1304,
         "n_points": 964,
-        "decimate_ms": 0.2069000038318336,
-        "round_trip_ms": 6.700000017881393,
-        "paint_ms": 12
+        "decimate_ms": 0.19770002108998597,
+        "round_trip_ms": 7.699999988079071,
+        "paint_ms": 16.30000001192093
       },
       {
         "seq": 8,
@@ -86,9 +86,9 @@
         "t1": 999308.6157324438,
         "px": 1304,
         "n_points": 689,
-        "decimate_ms": 0.1244999875780195,
-        "round_trip_ms": 6.600000023841858,
-        "paint_ms": 14
+        "decimate_ms": 0.2046000154223293,
+        "round_trip_ms": 8.099999994039536,
+        "paint_ms": 13.5
       },
       {
         "seq": 9,
@@ -96,9 +96,9 @@
         "t1": 999220.3552852954,
         "px": 1304,
         "n_points": 493,
-        "decimate_ms": 0.12179999612271786,
-        "round_trip_ms": 6.399999976158142,
-        "paint_ms": 13.399999976158142
+        "decimate_ms": 0.1134999911300838,
+        "round_trip_ms": 7.700000017881393,
+        "paint_ms": 13.5
       },
       {
         "seq": 10,
@@ -106,21 +106,21 @@
         "t1": 999295.8099973138,
         "px": 1304,
         "n_points": 493,
-        "decimate_ms": 0.13290002243593335,
-        "round_trip_ms": 6.200000017881393,
-        "paint_ms": 12.299999982118607
+        "decimate_ms": 0.1354999840259552,
+        "round_trip_ms": 7.800000011920929,
+        "paint_ms": 12
       }
     ],
     "zoom_round_trip_ms": {
-      "min": 6.200000017881393,
-      "max": 10.900000005960464,
-      "median": 7.300000011920929
+      "min": 7.0999999940395355,
+      "max": 10.600000023841858,
+      "median": 8.199999988079071
     },
-    "run_wall_s": 31.91,
+    "run_wall_s": 31.78,
     "badges_after_run": [
-      "cached",
-      "cached",
-      "cached"
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached"
     ],
     "row_plots": [
       "path",
@@ -128,14 +128,14 @@
       "path"
     ],
     "badges_after_edit": [
-      "cached",
-      "cached",
+      "computed \u00b7 now cached",
+      "computed \u00b7 now cached",
       "stale"
     ],
     "badges_after_rerun": [
       "cached \u00b7 0 s",
       "cached \u00b7 0 s",
-      "cached"
+      "computed \u00b7 now cached"
     ],
     "badge_titles_after_rerun": [
       "restored from the prefix cache (core step time 0.0 s)",
@@ -143,7 +143,7 @@
       "core step time 0.000 s"
     ],
     "server_log_error_lines": [
-      "2026-09-15 10:07:10,947 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
+      "2026-09-15 18:46:02,548 ERROR proto.runs: run 3 failed at step 1: ValueError: window (m=30000 samples) must be shorter than the span (750 samples)."
     ]
   },
   "screenshots": [

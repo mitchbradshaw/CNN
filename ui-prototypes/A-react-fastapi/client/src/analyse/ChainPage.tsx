@@ -174,7 +174,7 @@ export function ChainPage() {
   const prefixCached = (i: number) => { for (let k = 0; k <= i; k++) if (!val.v?.cache?.[k]?.cached) return false; return true }
   const allCachedFrom = (from: number) => n > from && Array.from({ length: n - from }, (_, k) => prefixCached(from + k)).every(Boolean)
   const estFrom = (from: number) => perStep ? perStep.slice(from).reduce((a, b, k) => a + (prefixCached(from + k) ? 0 : b), 0) : null
-  const fmtEst = (s: number | null) => s === null ? '≈ —' : s < 0.05 ? '≈ <0.1 s' : `≈ ${fmtDuration(s)}`
+  const fmtEst = (s: number | null) => s === null ? '≈ —' : s < 0.05 ? '≈ <0.1 s' : `≤ ${fmtDuration(s)} core est.`   // estimate_recipe_seconds is a calibrated upper bound, measured 70–230× high on short spans
   let est: { text: string; kind: 'amber' | 'blue' | 'red' | 'green' }
   if (running && job) {
     const cur = job.current_step ?? 0
@@ -183,7 +183,7 @@ export function ChainPage() {
   else if (failedStep !== null && st.staleFrom === null) est = { text: `failed at ${pad2(failedStep + 1)} · ${failedStep > 1 ? `01–${pad2(failedStep)} cached` : failedStep === 1 ? '01 cached' : 'nothing cached'}`, kind: 'red' }
   else if (!source) est = { text: 'no source · nothing to estimate', kind: 'amber' }
   else if (stale !== null) est = allCachedFrom(stale) ? { text: '≈ <0.1 s · all in the step cache', kind: 'green' } : { text: `${fmtEst(estFrom(stale))} · ${pad2(stale + 1)} → ${pad2(n)}`, kind: 'amber' }
-  else if (job?.status === 'completed') est = { text: `${fmtEst(0)} · all cached`, kind: 'green' }
+  else if (job?.status === 'completed') { const tv = Object.values(job.step_timings ?? {}); const fromCache = tv.filter(v => v === 0).length; est = { text: fromCache === tv.length ? '≈ <0.1 s · all from the step cache' : `${tv.length - fromCache} computed · ${fromCache} from the step cache`, kind: 'green' } }
   else if (allCachedFrom(0)) est = { text: '≈ <0.1 s · all in the step cache', kind: 'green' }
   else est = { text: `${fmtEst(estFrom(0))} · 01 → ${pad2(n)}`, kind: 'amber' }
   if (over.length && !running) est = { ...est, text: `${est.text} · ${over.length} over the local ceiling`, kind: 'red' }
@@ -227,7 +227,7 @@ export function ChainPage() {
     const jstep = job && sameStep(job.recipe.steps[i], step) ? job.steps[i] : undefined
     const caption = r.payload?.summary ?? (r.hasResult ? '' : null) ?? (jstep?.summary && r.status !== 'new' ? jstep.summary : paramCaption(step, ad))
     const timing = (r.status === 'cached' && r.timing !== null && r.timing !== 0) ? fmtTiming(r.timing) : null
-    const badgeText = r.status === 'cached' && r.timing === 0 ? 'cached · 0 s' : r.status === 'waiting' ? '⌛ waiting' : undefined
+    const badgeText = r.status === 'cached' && r.timing === 0 ? 'cached · 0 s' : r.status === 'cached' && r.timing !== null && r.timing !== 0 ? 'computed · now cached' : r.status === 'waiting' ? '⌛ waiting' : undefined
     const badgeTitle = r.status === 'cached' ? (r.timing === 0 ? 'restored from the prefix cache (core step time 0.0 s)' : r.timing !== null ? `core step time ${r.timing.toFixed(3)} s` : 'predicted from the prefix cache · run to load the result') : r.status === 'stale' ? 'a parameter or an upstream stage changed since this result' : undefined
     const ghost = ghostFor(i)
     const elapsed = r.status === 'running' ? stepElapsed(i) : 0
@@ -295,7 +295,7 @@ export function ChainPage() {
       )
     }
     return (
-      <ChainRow key={`step-${i}`} testIndex={i + 1} rowClass={r.status === 'failed' || r.status === 'invalid' ? r.status : ''} num={pad2(i + 1)} title={title} badge={r.status} badgeText={badgeText} badgeTitle={badgeTitle} timingText={timing}
+      <ChainRow key={`step-${i}`} testIndex={i + 1} rowClass={r.status === 'failed' || r.status === 'invalid' ? r.status : ''} num={pad2(i + 1)} title={title} badge={r.status} badgeText={badgeText} badgeTitle={badgeTitle} timingText={timing} resetKey={`${job?.job_id ?? 'none'}-${i}`}
         signature={sig} caption={caption} t0={t0} t1={t1} plot={plot} overlay={overlay} replace={replace}
         onSettings={() => navigate(`analyse/block/${i}`)} onDelete={running ? undefined : () => deleteStep(i)} />
     )
@@ -452,7 +452,7 @@ function FooterAxis({ t0, t1, enabled }: { t0: number; t1: number; enabled: bool
   return (
     <div className="an-axis" data-testid="footer-axis">
       <span className="lbl">all rows share this time axis</span>
-      <div ref={ref} style={{ height: 22 }}>{enabled && size.width > 0 && <svg width={w} height={22}><TimeAxis x={x} y={2} t0={t0} t1={t1} n={7} /></svg>}</div>
+      <div ref={ref} style={{ height: 22 }}>{enabled && size.width > 0 && <svg width={w} height={22}><TimeAxis x={x} y={2} t0={t0} t1={t1} n={7} ends /></svg>}</div>
     </div>
   )
 }

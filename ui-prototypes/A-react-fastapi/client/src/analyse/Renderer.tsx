@@ -15,6 +15,7 @@ export interface RenderCtx {
   x: XScale; width: number; height: number
   ghost?: EnvelopeSeries | null      // the nearest upstream signal, drawn behind in grey
   t0: number; t1: number
+  hideKey?: boolean                  // block pages carry the key in their own legend row
   throwForTest?: boolean             // ?throw=1: prove the ErrorBoundary catches a renderer throw
 }
 
@@ -138,9 +139,9 @@ function SymbolicR({ p, ctx }: { p: EncodingSymbolicPayload; ctx: RenderCtx }) {
           </g>
         )
       })}
-      <text x={ctx.width - 6} y={ctx.height - 5} textAnchor="end" fill="var(--muted)" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>
+      {!ctx.hideKey && <text x={ctx.width - 6} y={ctx.height - 5} textAnchor="end" fill="var(--muted)" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>
         {p.alphabet_size === 3 ? 'amber down · grey same · blue up' : `alphabet ${p.alphabet_size} · categorical`}{p.capped ? ' · capped' : ''}
-      </text>
+      </text>}
     </svg>
   )
 }

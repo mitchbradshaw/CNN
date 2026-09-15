@@ -28,6 +28,7 @@ export interface ChainRowProps {
   overlay?: ReactNode                // over the plot: progress, waiting, stale pill, veil
   onSettings?: () => void
   onDelete?: () => void
+  resetKey?: string                  // a new result (job/step) clears a lifted render failure
   inertIcons?: boolean               // bypass / duplicate (inert everywhere)
 }
 
@@ -46,7 +47,7 @@ export function ChainRow(p: ChainRowProps) {
   // a renderer throw is lifted out of the ErrorBoundary into the row's own badge and border (critique r1:
   // a green "cached" badge sat beside a red "failed to render" card); a new result clears it
   const [renderFailed, setRenderFailed] = useState<string | null>(null)
-  useEffect(() => { setRenderFailed(null) }, [p.badge, p.caption, p.badgeText])
+  useEffect(() => { setRenderFailed(null) }, [p.resetKey])   // critique r2: keyed on the result, not on badge/caption text
   const badge = renderFailed ? 'error' : p.badge
   const badgeText = renderFailed ? 'render failed' : p.badge === 'error' ? 'payload error' : p.badgeText ?? (p.badge === 'source-cached' ? 'cached' : p.badge)
   const badgeTitle = renderFailed ? `the renderer threw: ${renderFailed}` : p.badge === 'error' ? 'the bridge could not serialise this result, or its fetch failed — see the card' : p.badgeTitle
@@ -76,7 +77,7 @@ export function ChainRow(p: ChainRowProps) {
         <div data-testid={`row-plot-${p.testIndex}`}>{p.replace}</div>
       ) : (
         <div className="plot-surface an-plot" ref={ref} data-testid={`row-plot-${p.testIndex}`}>
-          <ErrorBoundary label={label} onError={e => setRenderFailed(e.message)}>
+          <ErrorBoundary key={p.resetKey ?? 'row'} label={label} onError={e => setRenderFailed(e.message)}>
             {size.width > 0 && p.plot(x, w, PLOT_H)}
           </ErrorBoundary>
           {p.overlay}
